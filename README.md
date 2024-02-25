@@ -137,6 +137,6 @@ Charm is released under the <a href="LICENSE.md">MIT License</a>.
 
 <div align="center">
 
-[![MIT License](https://img.shields.io/badge/license-mit-f4dbd6?style=for-the-badge&labelColor=302d41)](LICENSE.md)
+[![MIT License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE.md)
 
 </div>
