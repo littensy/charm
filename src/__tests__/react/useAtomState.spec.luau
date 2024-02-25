@@ -1,0 +1,27 @@
+local atom = require(script.Parent.Parent.Parent.atom)
+local useAtomState = require(script.Parent.Parent.Parent.react.useAtomState)
+local renderHook = require(script.Parent.helpers.renderHook)
+
+return function()
+	it("tracks atom state", function()
+		local source = atom(0)
+		local hook = renderHook(function()
+			return useAtomState(source)
+		end)
+		expect(hook.result).to.equal(0)
+		source(1)
+		expect(hook.result).to.equal(1)
+	end)
+
+	it("receives a selector", function()
+		local source = atom(0)
+		local hook = renderHook(function()
+			return useAtomState(source, function(value)
+				return 2 * value
+			end)
+		end)
+		expect(hook.result).to.equal(0)
+		source(1)
+		expect(hook.result).to.equal(2)
+	end)
+end

@@ -1,0 +1,58 @@
+{
+	"name": "@rbxts/charm",
+	"version": "0.1.0",
+	"description": "Atomic state management for Roblox",
+	"scripts": {
+		"lint": "sh bin/check.sh",
+		"wally": "sh bin/install.sh"
+	},
+	"main": "src/init.lua",
+	"types": "src/index.d.ts",
+	"keywords": [
+		"roblox",
+		"typescript",
+		"roblox-ts",
+		"state"
+	],
+	"author": "littensy",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/littensy/charm"
+	},
+	"bugs": {
+		"url": "https://github.com/littensy/charm/issues"
+	},
+	"homepage": "https://github.com/littensy/charm",
+	"files": [
+		"src",
+		"default.project.json",
+		"images/logo.png",
+		"!src/**/*.spec.ts"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"devDependencies": {
+		"@rbxts/compiler-types": "^2.3.0-types.0",
+		"@rbxts/react": "^0.3.1",
+		"@rbxts/types": "^1.0.754",
+		"@typescript-eslint/eslint-plugin": "^7.0.2",
+		"@typescript-eslint/parser": "^7.0.2",
+		"eslint": "^8.56.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-prettier": "^5.1.3",
+		"eslint-plugin-roblox-ts": "^0.0.36",
+		"prettier": "^3.2.5",
+		"roblox-ts": "2.3.0-dev-ac7800f",
+		"typescript": "^5.3.3"
+	},
+	"peerDependencies": {
+		"@rbxts/react": "*"
+	},
+	"peerDependenciesMeta": {
+		"@rbxts/react": {
+			"optional": true
+		}
+	}
+}

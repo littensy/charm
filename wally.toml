@@ -1,0 +1,20 @@
+[package]
+name = "littensy/charm"
+description = "Atomic state management for Roblox"
+version = "0.1.0"
+license = "MIT"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+exclude = ["**"]
+include = ["src", "src/**", "default.project.json", "wally.toml", "LICENSE.md"]
+
+[place]
+shared-packages = "game.ReplicatedStorage.Packages"
+
+[dependencies]
+React = "jsdotlua/react@17.1.0"
+ReactRoblox = "jsdotlua/react-roblox@17.1.0"
+Promise = "evaera/promise@4.0.0"
+
+[dev-dependencies]
+TestEZ = "roblox/testez@0.4.1"

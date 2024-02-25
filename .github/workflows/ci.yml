@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8.15.4
+
+      - name: Install Aftman
+        uses: ok-nick/setup-aftman@v0.4.2
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+          pnpm wally
+
+      - name: Check code quality
+        run: pnpm lint
+
+      - name: Run ESLint
+        run: pnpm eslint
+
+      - name: Build model
+        run: rojo build -o charm.rbxm

@@ -1,0 +1,7 @@
+/node_modules
+/Packages
+/DevPackages
+/sourcemap.json
+*.tsbuildinfo
+*.tgz
+.DS_Store

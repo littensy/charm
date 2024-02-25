@@ -1,0 +1,20 @@
+{
+	"name": "charm-dev",
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Packages": {
+				"$path": "Packages",
+				"ReactLua": { "$path": "Packages" },
+				"charm": { "$path": "src" }
+			},
+			"DevPackages": { "$path": "DevPackages" }
+		},
+		"TestService": {
+			"$className": "TestService",
+			"$properties": { "ExecuteWithStudioRun": true },
+			"spec": { "$path": "bin/spec.server.luau" }
+		}
+	}
+}

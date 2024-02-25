@@ -1,0 +1,5 @@
+std = "roblox+testez"
+
+[lints]
+global_usage = "allow"
+shadowing = "allow"
