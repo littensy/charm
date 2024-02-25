@@ -55,9 +55,10 @@ local function split<Item, Key>(
 
 		for key, item in previousItems do
 			local id = if keyExtractor then keyExtractor(item) else key
+			local atom = atoms[id]
 
-			if itemsByKeys[id] == nil then
-				atoms[id]:unmount()
+			if itemsByKeys[id] == nil and atom then
+				atom:unmount()
 				atoms[id] = nil
 			end
 		end

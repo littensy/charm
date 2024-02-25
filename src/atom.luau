@@ -17,7 +17,7 @@ export type Atom<T> = (() -> T) & ((state: T | ((T) -> T)) -> ()) & {
 	get: ((self: Atom<T>) -> T) & (<Result>(self: Atom<T>, selector: (T) -> Result) -> Result),
 	set: (self: Atom<T>, state: T | ((T) -> T)) -> (),
 	memo: (self: Atom<T>, equalityFn: (previous: T, current: T) -> boolean) -> Atom<T>,
-	writable: (self: Atom<T>, setter: ((update: T, previous: T) -> T?) & (update: T, previous: T) -> ()) -> Atom<T>,
+	writable: (self: Atom<T>, onSet: ((update: T, previous: T) -> T?) & (update: T, previous: T) -> ()) -> Atom<T>,
 	readonly: (self: Atom<T>) -> ReadonlyAtom<T>,
 	named: (self: Atom<T>, label: string) -> Atom<T>,
 	unmount: (self: Atom<T>) -> (),
@@ -26,9 +26,8 @@ export type Atom<T> = (() -> T) & ((state: T | ((T) -> T)) -> ()) & {
 export type ReadonlyAtom<T> = (() -> T) & {
 	get: ((self: ReadonlyAtom<T>) -> T) & (<Result>(self: ReadonlyAtom<T>, selector: (T) -> Result) -> Result),
 	memo: (self: ReadonlyAtom<T>, equalityFn: (previous: T, current: T) -> boolean) -> ReadonlyAtom<T>,
-	writable: ((self: Atom<T>) -> Atom<T>) & (
-		(self: Atom<T>, setter: ((update: T, previous: T) -> T?) & (update: T, previous: T) -> ()) -> Atom<T>
-	),
+	writable: ((self: Atom<T>) -> Atom<T>)
+		& ((self: Atom<T>, onSet: ((update: T, previous: T) -> T?) & (update: T, previous: T) -> ()) -> Atom<T>),
 	readonly: (self: ReadonlyAtom<T>) -> ReadonlyAtom<T>,
 	named: (self: ReadonlyAtom<T>, label: string) -> ReadonlyAtom<T>,
 	unmount: (self: ReadonlyAtom<T>) -> (),
@@ -97,8 +96,8 @@ local function atom<State>(state: State): Atom<State>
 		return self
 	end
 
-	function atom:writable(setterFn: ((State, State) -> State?)?): Atom<State>
-		setter = setterFn
+	function atom:writable(onSet: ((State, State) -> State?)?): Atom<State>
+		setter = onSet
 		return self
 	end
 

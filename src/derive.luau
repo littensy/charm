@@ -16,7 +16,6 @@ local function derive<Result>(...): ReadonlyAtom<Result>
 	local atoms: { Atom<unknown> } = { ... }
 	local combiner: (...unknown) -> Result = table.remove(atoms) :: any
 	local size = #atoms
-
 	local dependencies: { unknown } = {}
 
 	for index, atom in atoms do

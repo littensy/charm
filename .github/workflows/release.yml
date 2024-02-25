@@ -2,8 +2,7 @@ name: Release
 
 on:
   release:
-    types:
-      - published
+    types: [published]
 
 jobs:
   release:
@@ -20,10 +19,7 @@ jobs:
       - name: Build model
         run: rojo build -o charm.rbxm
 
-      - name: Upload release
-        uses: softprops/action-gh-release@v2
-        if: ${{ github.event.release }}
+      - uses: AButler/upload-release-assets@v3.0
         with:
-          files: charm.rbxm
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: "charm.rbxm"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}

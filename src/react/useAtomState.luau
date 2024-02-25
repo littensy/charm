@@ -6,7 +6,7 @@ type Atom<T> = atom.Atom<T>
 type UseAtomState =
 	(<State>(atom: Atom<State>) -> State)
 	& (<State, Result>(atom: Atom<State>, ((State) -> Result)?) -> State | Result)
-	& <State, Result>(atom: Atom<State>, selector: (State) -> Result) -> Result
+	& (<State, Result>(atom: Atom<State>, selector: (State) -> Result) -> Result)
 
 local function useAtomState<State>(atom: Atom<State>, selector: ((State) -> State)?): State
 	local state, setState = React.useState(function()

@@ -3,7 +3,7 @@ type Atom<T> = atom.Atom<T>
 
 local reference = require(script.Parent.utils.reference)
 
-local function subscribe<State>(atom: Atom<State>, callback: (state: State, lastState: State) -> ()): (() -> (), () -> ())
+local function subscribe<State>(atom: Atom<State>, callback: (state: State, previous: State) -> ()): (() -> (), () -> ())
 	local pending: thread? = nil
 	local state = atom:get()
 
