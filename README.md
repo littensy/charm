@@ -83,6 +83,18 @@ Charm = "littensy/charm@VERSION"
 
 ### `useSetAtom(atom)`
 
+---
+
+### `sync.client(options)`
+
+### `Client.sync(payload)`
+
+### `sync.server(options)`
+
+### `Server.onSync(callback)`
+
+### `Server.hydrate(player)`
+
 ## 🚀 Examples
 
 ### Counter atom
