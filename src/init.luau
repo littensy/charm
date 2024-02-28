@@ -9,6 +9,7 @@ local subscribe = require(script.subscribe)
 local useAtom = require(script.react.useAtom)
 local useAtomState = require(script.react.useAtomState)
 local useSetAtom = require(script.react.useSetAtom)
+local sync = require(script.sync)
 
 export type Atom<State> = atom.Atom<State>
 export type ReadonlyAtom<State> = atom.ReadonlyAtom<State>
@@ -20,6 +21,7 @@ return {
 	observe = observe,
 	split = split,
 	subscribe = subscribe,
+	sync = sync,
 	useAtom = useAtom,
 	useAtomState = useAtomState,
 	useSetAtom = useSetAtom,
