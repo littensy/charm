@@ -1,3 +1,5 @@
+local validate = require(script.Parent.validate)
+
 local NONE = { __none = "__none" }
 
 local function diff(previousState: { [any]: any }, nextState: { [any]: any })
@@ -12,6 +14,15 @@ local function diff(previousState: { [any]: any }, nextState: { [any]: any })
 			patch[key] = NONE
 		elseif type(previous) == "table" and type(next) == "table" then
 			patch[key] = diff(previous, next)
+		end
+	end
+
+	if _G.__DEV__ then
+		for key, value in previousState do
+			validate(value, key, warn)
+		end
+		for key, value in nextState do
+			validate(value, key, warn)
 		end
 	end
 
