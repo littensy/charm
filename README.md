@@ -47,53 +47,55 @@ Charm = "littensy/charm@VERSION"
 
 ## 📚 Documentation
 
-### `atom(state)`
+### Core
 
-### `derive(...atoms, combiner)`
+#### `atom(state)`
 
-### `subscribe(atom, listener)`
+#### `derive(...atoms, combiner)`
 
-### `observe(atom, observer)`
+#### `subscribe(atom, listener)`
 
-### `split(atom, keyExtractor?)`
+#### `observe(atom, observer)`
 
----
+#### `split(atom, keyExtractor?)`
 
-### `Atom(state?)`
+### Atom
 
-### `Atom.get(selector?)`
+#### `Atom(state?)`
 
-### `Atom.set(state)`
+#### `Atom.get(selector?)`
 
-### `Atom.memo(equalityFn)`
+#### `Atom.set(state)`
 
-### `Atom.readonly()`
+#### `Atom.memo(equalityFn)`
 
-### `Atom.writable(onSet?)`
+#### `Atom.readonly()`
 
-### `Atom.named(label)`
+#### `Atom.writable(onSet?)`
 
-### `Atom.unmount()`
+#### `Atom.named(label)`
 
----
+#### `Atom.unmount()`
 
-### `useAtom(atom, selector?)`
+### React
 
-### `useAtomState(atom)`
+#### `useAtom(atom, selector?)`
 
-### `useSetAtom(atom)`
+#### `useAtomState(atom)`
 
----
+#### `useSetAtom(atom)`
 
-### `sync.client(options)`
+### Sync
 
-### `Client.sync(payload)`
+#### `sync.client(options)`
 
-### `sync.server(options)`
+#### `Client.sync(payload)`
 
-### `Server.onSync(callback)`
+#### `sync.server(options)`
 
-### `Server.hydrate(player)`
+#### `Server.onSync(callback)`
+
+#### `Server.hydrate(player)`
 
 ## 🚀 Examples
 
