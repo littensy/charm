@@ -29,21 +29,21 @@ local function isUnsafeTable(object: { [any]: any })
 	return false
 end
 
-local function validate(value: any, key: any, log: (string) -> ())
+local function validate(value: any, key: any)
 	local typeOfKey = type(key)
 	local typeOfValue = type(value)
 
 	if not SAFE_KEYS[typeOfKey] then
-		return log(`Invalid key type '{typeOfKey}' at key '{key}'`)
+		error(`Invalid key type '{typeOfKey}' at key '{key}'`)
 	elseif not SAFE_VALUES[typeOfValue] then
-		return log(`Invalid value type '{typeOfValue}' at key '{key}'`)
+		error(`Invalid value type '{typeOfValue}' at key '{key}'`)
 	elseif typeOfValue == "table" then
 		if getmetatable(value) ~= nil then
-			return log(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
+			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
 		elseif isAtom(value) then
-			return log(`Cannot sync nested atoms! Got atom '{value.debugLabel}' at key '{key}'`)
+			error(`Cannot sync nested atoms! Got atom '{value.debugLabel}' at key '{key}'`)
 		elseif isUnsafeTable(value) then
-			return log(
+			error(
 				`Cannot sync tables unsupported by remote events! The value has the key '{key}'.\n\n`
 					.. "This can be for the following reasons:\n"
 					.. "1. The object is an array with non-sequential keys\n"
@@ -55,15 +55,15 @@ local function validate(value: any, key: any, log: (string) -> ())
 
 	if typeOfValue == "number" then
 		if value ~= value then
-			return log(`Cannot sync NaN at key '{key}'`)
+			error(`Cannot sync NaN at key '{key}'`)
 		elseif value == math.huge or value == -math.huge then
-			return log(`Cannot sync infinity at key '{key}'`)
+			error(`Cannot sync infinity at key '{key}'`)
 		end
 	elseif typeOfKey == "number" then
 		if key == math.huge or key == -math.huge then
-			return log("Cannot sync infinity as key")
+			error("Cannot sync infinity as key")
 		elseif math.floor(key) ~= key then
-			return log("Cannot sync non-integer number as key")
+			error("Cannot sync non-integer number as key")
 		end
 	end
 end

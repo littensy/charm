@@ -17,7 +17,7 @@ return function()
 
 		for key, case in pairs(cases) do
 			local success, result = pcall(function()
-				validate(case.value, key, error)
+				validate(case.value, key)
 			end)
 
 			if case.expected and not success then

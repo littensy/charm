@@ -18,11 +18,17 @@ local function diff(previousState: { [any]: any }, nextState: { [any]: any })
 	end
 
 	if _G.__DEV__ then
-		for key, value in previousState do
-			validate(value, key, warn)
-		end
-		for key, value in nextState do
-			validate(value, key, warn)
+		local success, result = pcall(function()
+			for key, value in previousState do
+				validate(value, key)
+			end
+			for key, value in nextState do
+				validate(value, key)
+			end
+		end)
+
+		if not success then
+			warn(result)
 		end
 	end
 
