@@ -7,13 +7,13 @@ type ClientSyncOptions = {
 	atoms: { [string]: Atom<any> },
 }
 
-type ClientSync = {
-	sync: (self: ClientSync, payload: types.SyncPayload) -> (),
+type ClientSyncer = {
+	sync: (self: ClientSyncer, payload: types.SyncPayload) -> (),
 }
 
-local function client(options: ClientSyncOptions): ClientSync
+local function client(options: ClientSyncOptions): ClientSyncer
 	local atoms = options.atoms
-	local self = {} :: ClientSync
+	local self = {} :: ClientSyncer
 
 	function self:sync(payload)
 		for key, state in payload.data do

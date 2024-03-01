@@ -34,8 +34,8 @@ declare namespace Charm {
 		set: never;
 	}
 
-	type AtomStates<T extends Atom<any>[]> = {
-		[Key in keyof T]: T[Key] extends Atom<infer State> ? State : never;
+	type AtomArrayToStates<Atoms extends Atom<any>[]> = {
+		[Key in keyof Atoms]: Atoms[Key] extends Atom<infer State> ? State : never;
 	};
 
 	function atom<State>(state: State): Atom<State>;
@@ -43,7 +43,7 @@ declare namespace Charm {
 	function isAtom(value: unknown): value is Atom<any>;
 
 	function derive<Atoms extends Atom<any>[], Result>(
-		...args: [...atoms: Atoms, combiner: (...atoms: AtomStates<Atoms>) => Result]
+		...args: [...atoms: Atoms, combiner: (...atoms: AtomArrayToStates<Atoms>) => Result]
 	): ReadonlyAtom<Result>;
 
 	function subscribe<State>(atom: Atom<State>, callback: (state: State) => void): () => void;
@@ -86,4 +86,46 @@ declare namespace Charm {
 		atom: Atom<State>,
 		selector: (state: State) => Result,
 	): LuaTuple<[state: Result, setState: (state: Result | ((previous: Result) => Result)) => void]>;
+
+	interface None {
+		readonly __none: "__none";
+	}
+
+	type StatePatch<States> = {
+		readonly [K in keyof States]?: (States[K] extends object ? StatePatch<States[K]> : States[K]) | None;
+	};
+
+	type SyncPayload<States> = { type: "set"; data: States } | { type: "patch"; data: StatePatch<States> };
+
+	interface AtomMap {
+		readonly [key: string]: Atom<any>;
+	}
+
+	type AtomMapToStates<Atoms extends AtomMap> = {
+		readonly [Key in keyof Atoms]: Atoms[Key] extends Atom<infer State> ? State : never;
+	};
+
+	interface ClientSyncOptions<Atoms extends AtomMap> {
+		atoms: Atoms;
+	}
+
+	interface ClientSyncer<States> {
+		sync(payload: SyncPayload<States>): void;
+	}
+
+	interface ServerSyncOptions<Atoms extends AtomMap> {
+		atoms: Atoms;
+		interval?: number;
+	}
+
+	interface ServerSyncer<States> {
+		onSync(callback: (player: Player, payload: SyncPayload<States>) => void): () => void;
+		hydrate(player: Player): void;
+	}
+
+	namespace sync {
+		function client<Atoms extends AtomMap>(options: ClientSyncOptions<Atoms>): ClientSyncer<AtomMapToStates<Atoms>>;
+
+		function server<Atoms extends AtomMap>(options: ServerSyncOptions<Atoms>): ServerSyncer<AtomMapToStates<Atoms>>;
+	}
 }

@@ -11,16 +11,16 @@ type ServerSyncOptions = {
 	interval: number?,
 }
 
-type ServerSync = {
-	onSync: (self: ServerSync, callback: (player: Player, payload: types.SyncPayload) -> ()) -> () -> (),
-	flush: (self: ServerSync, player: Player?) -> (),
-	hydrate: (self: ServerSync, player: Player) -> (),
+type ServerSyncer = {
+	onSync: (self: ServerSyncer, callback: (player: Player, payload: types.SyncPayload) -> ()) -> () -> (),
+	flush: (self: ServerSyncer, player: Player?) -> (),
+	hydrate: (self: ServerSyncer, player: Player) -> (),
 }
 
-local function server(options: ServerSyncOptions): ServerSync
+local function server(options: ServerSyncOptions): ServerSyncer
 	local atoms = options.atoms
 	local interval = options.interval or 0
-	local self = {} :: ServerSync
+	local self = {} :: ServerSyncer
 	local sync: (player: Player, payload: types.SyncPayload) -> ()
 	local state: {}
 
