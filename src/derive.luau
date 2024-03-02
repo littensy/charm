@@ -15,15 +15,28 @@ type Derive =
 local function derive<Result>(...): ReadonlyAtom<Result>
 	local atoms: { Atom<unknown> } = { ... }
 	local combiner: (...unknown) -> Result = table.remove(atoms) :: any
-	local size = #atoms
+	local size = 0
 	local dependencies: { unknown } = {}
+	local listeners: { [() -> ()]: boolean } = {}
 
 	for index, atom in atoms do
 		dependencies[index] = atom:get()
+		size += 1
 	end
 
 	local derivedAtom = atom(combiner(table.unpack(dependencies, 1, size))):readonly()
+	local derivedAtomUnmount = derivedAtom.unmount
 	local getDerivedAtom = reference.weak(derivedAtom)
+
+	function derivedAtom:unmount()
+		derivedAtomUnmount(self)
+
+		for listener in listeners do
+			for _, atom in atoms do
+				atom.listeners[listener] = nil
+			end
+		end
+	end
 
 	for index, atom in atoms do
 		local function listener(state: unknown)
@@ -44,6 +57,7 @@ local function derive<Result>(...): ReadonlyAtom<Result>
 		-- its derived atoms will be in use as well.
 		derivedAtom.owners[atom] = true
 		atom.listeners[listener] = true
+		listeners[listener] = true
 	end
 
 	return derivedAtom

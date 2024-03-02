@@ -1,15 +1,10 @@
 local reference = require(script.Parent.utils.reference)
 
 type AtomInternal<T> = {
-	--- @deprecated
 	setForced: (self: AtomInternal<T>, state: T | ((T) -> T)) -> (),
-	--- @deprecated
 	listeners: { [(T) -> ()]: true },
-	--- @deprecated
 	debugTraceback: string,
-	--- @deprecated
 	debugLabel: string,
-	--- @deprecated
 	owners: { [any]: true },
 }
 
@@ -63,10 +58,10 @@ local function atom<State>(state: State): Atom<State>
 		if setter then
 			local result = setter(nextState, state)
 
-			if result == nil then
-				return
-			else
+			if result ~= nil then
 				nextState = result
+			else
+				return
 			end
 		end
 
@@ -103,7 +98,9 @@ local function atom<State>(state: State): Atom<State>
 
 	function atom:readonly(): ReadonlyAtom<State>
 		function setter(_, _)
-			error(`Attempt to set read-only atom '{label}' created at: {traceback}`, 3)
+			if _G.__DEV__ then
+				error(`Attempt to set read-only atom '{label}' created at: {traceback}`, 3)
+			end
 		end
 		return self
 	end

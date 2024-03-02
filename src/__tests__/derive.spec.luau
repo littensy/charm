@@ -89,4 +89,14 @@ return function()
 
 		error("None of the derived atoms were collected")
 	end)
+
+	it("unmounts from parent atom", function()
+		local source = atom(1)
+		local derived = derive(source, function(value)
+			return value
+		end)
+		expect((next(source.listeners))).to.be.ok()
+		derived:unmount()
+		expect((next(source.listeners))).to.never.be.ok()
+	end)
 end
