@@ -13,6 +13,7 @@ local function split<Item, Key>(
 	keyExtractor: ((Item) -> Key)?
 ): ReadonlyAtom<{ [Key]: Atom<Item> }>
 	local splitAtom: ReadonlyAtom<{ [Key]: Atom<Item> }> = atom({}):readonly()
+	local splitAtomUnmount = splitAtom.unmount
 	local getSplitAtom = reference.weak(splitAtom)
 
 	local previousAtoms: { [Key]: Atom<Item> } = {}
@@ -65,6 +66,11 @@ local function split<Item, Key>(
 
 		previousAtoms, previousItems = atoms, items
 		splitAtom:setForced(atoms)
+	end
+
+	function splitAtom:unmount()
+		splitAtomUnmount(splitAtom)
+		cleanup()
 	end
 
 	itemsAtom.listeners[listener] = true

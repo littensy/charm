@@ -125,4 +125,12 @@ return function()
 		expect(updated).to.equal(1)
 		expect(deleted).to.equal(3)
 	end)
+
+	it("unmounts from parent atom", function()
+		local itemsAtom = atom({})
+		local itemAtoms = split(itemsAtom)
+		expect((next(itemsAtom.listeners))).to.be.ok()
+		itemAtoms:unmount()
+		expect((next(itemsAtom.listeners))).to.never.be.ok()
+	end)
 end

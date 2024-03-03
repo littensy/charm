@@ -29,7 +29,7 @@ local function derive<Result>(...): ReadonlyAtom<Result>
 	local getDerivedAtom = reference.weak(derivedAtom)
 
 	function derivedAtom:unmount()
-		derivedAtomUnmount(self)
+		derivedAtomUnmount(derivedAtom)
 
 		for listener in listeners do
 			for _, atom in atoms do

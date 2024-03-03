@@ -33,16 +33,11 @@ local atomCount = 0
 local function atom<State>(state: State): Atom<State>
 	atomCount += 1
 
-	local listeners: { [(State) -> ()]: true } = {}
-	local label = `atom{atomCount}`
-	local traceback = debug.traceback(nil, 2)
-	local owners: { [any]: true } = {}
-
 	local atom = {
-		listeners = listeners,
-		debugTraceback = traceback,
-		debugLabel = label,
-		owners = owners,
+		listeners = {},
+		debugTraceback = debug.traceback(nil, 2),
+		debugLabel = `atom{atomCount}`,
+		owners = {},
 	} :: Atom<State>
 
 	local equals: ((State, State) -> boolean)?
@@ -68,7 +63,7 @@ local function atom<State>(state: State): Atom<State>
 		if not (if equals then equals(state, nextState) else state == nextState) then
 			state = nextState
 
-			for listener in table.clone(listeners) do
+			for listener in table.clone(self.listeners) do
 				listener(state)
 			end
 		end
@@ -80,7 +75,7 @@ local function atom<State>(state: State): Atom<State>
 		if not (if equals then equals(state, nextState) else state == nextState) then
 			state = nextState
 
-			for listener in table.clone(listeners) do
+			for listener in table.clone(self.listeners) do
 				listener(state)
 			end
 		end
@@ -99,20 +94,20 @@ local function atom<State>(state: State): Atom<State>
 	function atom:readonly(): ReadonlyAtom<State>
 		function setter(_, _)
 			if _G.__DEV__ then
-				error(`Attempt to set read-only atom '{label}' created at: {traceback}`, 3)
+				error(`Attempt to set read-only atom '{self.debugLabel}' created at: {self.debugTraceback}`, 3)
 			end
 		end
 		return self
 	end
 
 	function atom:named(name: string): Atom<State>
-		label = name
+		self.debugLabel = name
 		return self
 	end
 
 	function atom:unmount()
-		table.clear(listeners)
-		table.clear(owners)
+		table.clear(self.listeners)
+		table.clear(self.owners)
 		reference.release(self)
 	end
 
