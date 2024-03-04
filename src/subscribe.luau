@@ -1,6 +1,5 @@
 local atom = require(script.Parent.atom)
 type Atom<T> = atom.Atom<T>
-
 local reference = require(script.Parent.utils.reference)
 
 local function subscribe<State>(atom: Atom<State>, callback: (state: State, previous: State) -> ()): (() -> (), () -> ())

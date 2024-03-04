@@ -1,7 +1,6 @@
 local atom = require(script.Parent.atom)
 type Atom<T> = atom.Atom<T>
 type ReadonlyAtom<T> = atom.ReadonlyAtom<T>
-
 local reference = require(script.Parent.utils.reference)
 
 type Derive =
@@ -29,7 +28,7 @@ local function derive<Result>(...): ReadonlyAtom<Result>
 	local getDerivedAtom = reference.weak(derivedAtom)
 
 	function derivedAtom:unmount()
-		derivedAtomUnmount(derivedAtom)
+		derivedAtomUnmount(self)
 
 		for listener in listeners do
 			for _, atom in atoms do

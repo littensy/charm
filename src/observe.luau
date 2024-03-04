@@ -1,6 +1,5 @@
 local atom = require(script.Parent.atom)
 type Atom<T> = atom.Atom<T>
-
 local subscribe = require(script.Parent.subscribe)
 
 local function observe<Item, Key>(atom: Atom<{ [Key]: Item }>, factory: (value: Item, key: Key) -> () -> ()): (() -> (), () -> ())

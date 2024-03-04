@@ -57,7 +57,7 @@ Charm = "littensy/charm@VERSION"
 
 #### `observe(atom, observer)`
 
-#### `split(atom, keyExtractor?)`
+#### `mapAtom(atom, mapper)`
 
 ### Atom
 
@@ -67,7 +67,7 @@ Charm = "littensy/charm@VERSION"
 
 #### `Atom.set(state)`
 
-#### `Atom.memo(equalityFn)`
+#### `Atom.memo(areEqual)`
 
 #### `Atom.readonly()`
 

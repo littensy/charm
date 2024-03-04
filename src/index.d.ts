@@ -17,7 +17,7 @@ declare namespace Charm {
 		get(): State;
 		get<Result>(selector: (state: State) => Result): Result;
 		set(state: State | ((current: State) => State)): void;
-		memo(equalityFn: (previous: State, current: State) => boolean): this;
+		memo(areEqual: (previous: State, current: State) => boolean): this;
 		writable(onSet?: (update: State, previous: State) => State | void): Atom<State>;
 		readonly(): ReadonlyAtom<State>;
 		named(label: string): this;
@@ -55,22 +55,25 @@ declare namespace Charm {
 
 	function observe(atom: Atom<any>, factory: (value: unknown, key: unknown) => (() => void) | void): () => void;
 
-	function splitAtom<Item, Key, Id = Key>(
-		listAtom: Atom<ReadonlyMap<Key, Item>> | Atom<Map<Key, Item>>,
-		keyExtractor?: (item: Item) => Id,
-	): Atom<ReadonlyMap<Id, Atom<Item>>>;
+	function mapAtom<V0, K1, V1>(
+		atom: Atom<readonly V0[]> | Atom<V0[]>,
+		mapper: (value: V0, index: number) => LuaTuple<[V1 | undefined, K1]>,
+	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
 
-	function splitAtom<Item>(listAtom: Atom<readonly Item[]>): Atom<readonly Atom<Item>[]>;
+	function mapAtom<V0, V1>(
+		atom: Atom<readonly V0[]> | Atom<V0[]>,
+		mapper: (value: V0, index: number) => V1,
+	): ReadonlyAtom<readonly V1[]>;
 
-	function splitAtom<Item, Id = number>(
-		listAtom: Atom<readonly Item[]>,
-		keyExtractor?: (item: Item) => Id,
-	): Atom<ReadonlyMap<Id, Atom<Item>>>;
+	function mapAtom<K0, V0, K1 = K0, V1 = V0>(
+		atom: Atom<ReadonlyMap<K0, V0>> | Atom<Map<K0, V0>>,
+		mapper: (value: V0, key: K0) => LuaTuple<[V1 | undefined, K1]> | V1,
+	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
 
-	function splitAtom<Item, Key extends string | number | symbol, Id = Key>(
-		listAtom: Atom<{ readonly [K in Key]?: Item }>,
-		keyExtractor?: (item: Item) => Id,
-	): Atom<ReadonlyMap<Id, Atom<Item>>>;
+	function mapAtom<K0 extends string | number | symbol, V0, K1, V1>(
+		atom: Atom<{ readonly [K in K0]: V0 }>,
+		mapper: (value: V0, key: K0) => LuaTuple<[V1 | undefined, K1]> | V1,
+	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
 
 	function useAtomState<State>(atom: Atom<State>): State;
 
