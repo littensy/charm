@@ -45,39 +45,41 @@ Add `littensy/charm` to your `wally.toml` file.
 Charm = "littensy/charm@VERSION"
 ```
 
-## 📚 Documentation
+## 📚 API Reference
 
-### `atom(state)`
+### Charm
 
-### `derive(atom, comparator?)`
+#### `atom(state)`
 
-### `subscribe(atom, listener)`
+#### `effect(callback)`
 
-### `effect(callback)`
+#### `subscribe(atom, listener)`
 
-### `observe(atom, observer)`
+#### `derive(atom, comparator?)`
 
-### `mapAtom(atom, mapper)`
+#### `observe(atom, observer)`
 
-## 📚 React API
+#### `mapAtom(atom, mapper)`
 
-### `useAtom(atom, selector?)`
+### React
 
-### `useAtomState(atom)`
+#### `useAtom(atom, selector?)`
 
-### `useSetAtom(atom)`
+#### `useAtomState(atom)`
 
-## 📚 Sync API
+#### `useSetAtom(atom)`
 
-### `sync.client(options)`
+### Sync
 
-### `sync.server(options)`
+#### `sync.client(options)`
 
-### `Client.sync(payload)`
+#### `Client.sync(payload)`
 
-### `Server.onSync(callback)`
+#### `sync.server(options)`
 
-### `Server.hydrate(player)`
+#### `Server.onSync(callback)`
+
+#### `Server.hydrate(player)`
 
 ## 🚀 Examples
 
