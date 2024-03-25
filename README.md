@@ -47,55 +47,37 @@ Charm = "littensy/charm@VERSION"
 
 ## 📚 Documentation
 
-### Core
+### `atom(state)`
 
-#### `atom(state)`
+### `derive(atom, comparator?)`
 
-#### `derive(...atoms, combiner)`
+### `subscribe(atom, listener)`
 
-#### `subscribe(atom, listener)`
+### `effect(callback)`
 
-#### `observe(atom, observer)`
+### `observe(atom, observer)`
 
-#### `mapAtom(atom, mapper)`
+### `mapAtom(atom, mapper)`
 
-### Atom
+## 📚 React API
 
-#### `Atom(state?)`
+### `useAtom(atom, selector?)`
 
-#### `Atom.get(selector?)`
+### `useAtomState(atom)`
 
-#### `Atom.set(state)`
+### `useSetAtom(atom)`
 
-#### `Atom.memo(areEqual)`
+## 📚 Sync API
 
-#### `Atom.readonly()`
+### `sync.client(options)`
 
-#### `Atom.writable(onSet?)`
+### `sync.server(options)`
 
-#### `Atom.named(label)`
+### `Client.sync(payload)`
 
-#### `Atom.unmount()`
+### `Server.onSync(callback)`
 
-### React
-
-#### `useAtom(atom, selector?)`
-
-#### `useAtomState(atom)`
-
-#### `useSetAtom(atom)`
-
-### Sync
-
-#### `sync.client(options)`
-
-#### `Client.sync(payload)`
-
-#### `sync.server(options)`
-
-#### `Server.onSync(callback)`
-
-#### `Server.hydrate(player)`
+### `Server.hydrate(player)`
 
 ## 🚀 Examples
 
@@ -105,7 +87,7 @@ Charm = "littensy/charm@VERSION"
 import { atom, derive, subscribe } from "@rbxts/charm";
 
 const counterAtom = atom(0);
-const doubleCounterAtom = derive(counterAtom, (counter) => counter * 2);
+const doubleCounterAtom = derive(() => counterAtom() * 2);
 
 subscribe(doubleCounterAtom, (value) => {
 	print(value);
@@ -136,12 +118,6 @@ function Counter() {
 	);
 }
 ```
-
-## 🙋 Concerns
-
-In Jotai, `atom()` returns an [atom config](https://jotai.org/docs/core/atom), and its state is managed entirely by the Provider. However, in Charm, `atom()` returns something closer to a store, and its state is managed by the atom itself.
-
-Charm does this for simplicity in use cases outside of React, but this might go against Jotai's focus on pure functional programming. More insight is needed to determine if this is a good idea.
 
 ---
 

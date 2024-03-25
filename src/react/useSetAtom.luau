@@ -1,13 +1,13 @@
-local React = require(script.Parent.Parent.modules.React)
+local requireReact = require(script.Parent.Parent.modules.React)
 
-local atom = require(script.Parent.Parent.atom)
-type Atom<T> = atom.Atom<T>
+local types = require(script.Parent.Parent.types)
+type Atom<T> = types.Atom<T>
 
 export type SetState<T> = (T | ((T) -> T)) -> ()
 
 local function useSetAtom<State>(atom: Atom<State>): SetState<State>
-	return React.useCallback(function(value)
-		atom:set(value)
+	return requireReact().useCallback(function(value)
+		atom(value)
 	end, { atom })
 end
 

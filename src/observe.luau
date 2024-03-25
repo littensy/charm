@@ -1,11 +1,13 @@
-local atom = require(script.Parent.atom)
-type Atom<T> = atom.Atom<T>
-local subscribe = require(script.Parent.subscribe)
+local effect = require(script.Parent.effect)
+local types = require(script.Parent.types)
+type ReadonlyAtom<T> = types.ReadonlyAtom<T>
 
-local function observe<Item, Key>(atom: Atom<{ [Key]: Item }>, factory: (value: Item, key: Key) -> () -> ()): (() -> (), () -> ())
-	local connections: { [Key]: () -> () } = {}
+local function observe<V, K>(source: ReadonlyAtom<{ [K]: V }>, factory: (value: V, key: K) -> () -> ()): () -> ()
+	local connections: { [K]: () -> () } = {}
 
-	local function update(state: { [Key]: Item })
+	local unsubscribe = effect(function()
+		local state = source()
+
 		for key, disconnect in connections do
 			if state[key] == nil then
 				connections[key] = nil
@@ -18,9 +20,7 @@ local function observe<Item, Key>(atom: Atom<{ [Key]: Item }>, factory: (value: 
 				connections[key] = factory(value, key)
 			end
 		end
-	end
-
-	local unsubscribe, flush = subscribe(atom, update)
+	end)
 
 	local function cleanup()
 		unsubscribe()
@@ -29,9 +29,7 @@ local function observe<Item, Key>(atom: Atom<{ [Key]: Item }>, factory: (value: 
 		end
 	end
 
-	update(atom:get())
-
-	return cleanup, flush
+	return cleanup
 end
 
 return observe

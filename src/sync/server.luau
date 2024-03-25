@@ -1,10 +1,11 @@
 local Players = game:GetService("Players")
 
-local atom = require(script.Parent.Parent.atom)
-type Atom<T> = atom.Atom<T>
+local atomTypes = require(script.Parent.Parent.types)
+type Atom<T> = atomTypes.Atom<T>
 local setInterval = require(script.Parent.Parent.utils.setInterval)
 local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
+type SyncPayload = types.SyncPayload
 
 type ServerSyncOptions = {
 	atoms: { [string]: Atom<any> },
@@ -12,7 +13,7 @@ type ServerSyncOptions = {
 }
 
 type ServerSyncer = {
-	onSync: (self: ServerSyncer, callback: (player: Player, payload: types.SyncPayload) -> ()) -> () -> (),
+	onSync: (self: ServerSyncer, callback: (player: Player, payload: SyncPayload) -> ()) -> () -> (),
 	flush: (self: ServerSyncer, player: Player?) -> (),
 	hydrate: (self: ServerSyncer, player: Player) -> (),
 }
@@ -21,13 +22,13 @@ local function server(options: ServerSyncOptions): ServerSyncer
 	local atoms = options.atoms
 	local interval = options.interval or 0
 	local self = {} :: ServerSyncer
-	local sync: (player: Player, payload: types.SyncPayload) -> ()
+	local sync: (player: Player, payload: SyncPayload) -> ()
 	local state: {}
 
 	local function getState()
 		local state = {}
 		for key, atom in atoms do
-			state[key] = atom:get()
+			state[key] = atom()
 		end
 		return state
 	end
@@ -47,7 +48,7 @@ local function server(options: ServerSyncOptions): ServerSyncer
 		state = current
 
 		if current ~= previous then
-			local payload: types.SyncPayload = {
+			local payload: SyncPayload = {
 				type = "patch",
 				data = patch.diff(previous, current),
 			}

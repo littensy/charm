@@ -1,62 +1,51 @@
 local atom = require(script.Parent.Parent.atom)
 local derive = require(script.Parent.Parent.derive)
+local store = require(script.Parent.Parent.store)
 
 return function()
-	it("derives from dependencies", function()
-		local a = atom(1)
-		local b = atom(2)
-		local sum = derive(a, b, function(a: number, b: number)
-			return a + b
-		end)
-		expect(sum()).to.equal(3)
-		a(2)
-		expect(sum()).to.equal(4)
-		b(3)
-		expect(sum()).to.equal(5)
-		expect(function()
-			(sum :: any)(2)
-		end).to.throw()
-	end)
-
 	it("memoizes the result", function()
 		local calls = 0
-		local source = atom(1)
-		local double = derive(source, function(value: number)
+		local a = atom(1)
+		local b = atom(2)
+		local double = derive(function()
 			calls += 1
-			return value * 2
+			return a() * b()
 		end)
 		expect(calls).to.equal(1)
-		source(1)
+		a(1)
 		expect(calls).to.equal(1)
-		source(2)
+		a(2)
 		expect(calls).to.equal(2)
+		b(3)
+		expect(calls).to.equal(3)
 		double()
-		expect(calls).to.equal(2)
+		expect(calls).to.equal(3)
 	end)
 
-	it("can be a dependency", function()
+	it("takes a custom comparator", function()
 		local source = atom(1)
-		local double = derive(source, function(value: number)
-			return value * 2
+		local derived = derive(function()
+			return source()
+		end, function(prev, next)
+			return next < prev
 		end)
-		local quadruple = derive(double, function(value: number)
-			return value * 2
+		source(2)
+		expect(derived()).to.equal(2)
+		source(1)
+		expect(derived()).to.equal(2)
+	end)
+
+	it("can be nested", function()
+		local source = atom(1)
+		local double = derive(function()
+			return source() * 2
+		end)
+		local quadruple = derive(function()
+			return double() * 2
 		end)
 		expect(quadruple()).to.equal(4)
 		source(2)
 		expect(quadruple()).to.equal(8)
-	end)
-
-	it("allows custom setter", function()
-		local source = atom(1)
-		local double = derive(source, function(value: number)
-			return value * 2
-		end):writable(function(update: number)
-			source(update / 2)
-		end)
-		double(4)
-		expect(source()).to.equal(2)
-		expect(double()).to.equal(4)
 	end)
 
 	it("garbage collects", function()
@@ -66,7 +55,7 @@ return function()
 
 		local function listenersDecreased()
 			local count = 0
-			for _ in source.listeners do
+			for _ in pairs(store.listeners[source]) do
 				count += 1
 			end
 			max = math.max(max, count)
@@ -74,11 +63,11 @@ return function()
 		end
 
 		for index = 1, 500 do
-			derive(source, function(value)
-				return string.upper(value)
+			derive(function()
+				return string.upper(source())
 			end)
 			if index % 50 == 0 then
-				-- derived atoms check if they are collected when they are updated
+				-- derived atoms should be collected when memory is stressed
 				source(source() .. "x")
 				task.wait()
 			end
@@ -88,15 +77,5 @@ return function()
 		end
 
 		error("None of the derived atoms were collected")
-	end)
-
-	it("unmounts from parent atom", function()
-		local source = atom(1)
-		local derived = derive(source, function(value)
-			return value
-		end)
-		expect((next(source.listeners))).to.be.ok()
-		derived:unmount()
-		expect((next(source.listeners))).to.never.be.ok()
 	end)
 end

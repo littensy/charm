@@ -3,17 +3,17 @@ local validate = require(script.Parent.validate)
 local NONE = { __none = "__none" }
 
 local function diff(previousState: { [any]: any }, nextState: { [any]: any })
-	local patch = table.clone(nextState)
+	local patches = table.clone(nextState)
 
 	for key, previous in previousState do
 		local next = nextState[key]
 
 		if previous == next then
-			patch[key] = nil
+			patches[key] = nil
 		elseif next == nil then
-			patch[key] = NONE
+			patches[key] = NONE
 		elseif type(previous) == "table" and type(next) == "table" then
-			patch[key] = diff(previous, next)
+			patches[key] = diff(previous, next)
 		end
 	end
 
@@ -23,7 +23,9 @@ local function diff(previousState: { [any]: any }, nextState: { [any]: any })
 				validate(value, key)
 			end
 			for key, value in nextState do
-				validate(value, key)
+				if previousState[key] ~= value then
+					validate(value, key)
+				end
 			end
 		end)
 
@@ -32,13 +34,13 @@ local function diff(previousState: { [any]: any }, nextState: { [any]: any })
 		end
 	end
 
-	return patch
+	return patches
 end
 
-local function apply(state: { [any]: any }, patchState: { [any]: any })
+local function apply(state: { [any]: any }, patches: { [any]: any })
 	local nextState = table.clone(state)
 
-	for key, patch in patchState do
+	for key, patch in patches do
 		local current = nextState[key]
 
 		if type(patch) == "table" and patch.__none == "__none" then

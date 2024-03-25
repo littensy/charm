@@ -2,13 +2,11 @@ local store = require(script.Parent.store)
 local types = require(script.Parent.types)
 type ReadonlyAtom<T> = types.ReadonlyAtom<T>
 
-local function subscribe<T>(source: ReadonlyAtom<T>, callback: (state: T, previous: T) -> ()): () -> ()
-	local atoms, state = store.capture(source)
+local function effect(source: ReadonlyAtom<nil>): () -> ()
+	local atoms = store.capture(source)
 
 	local function listener()
-		local lastState = state
-		state = source()
-		callback(state, lastState)
+		source()
 	end
 
 	for atom in atoms do
@@ -22,4 +20,4 @@ local function subscribe<T>(source: ReadonlyAtom<T>, callback: (state: T, previo
 	end
 end
 
-return subscribe
+return effect

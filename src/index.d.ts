@@ -2,91 +2,74 @@ export = Charm;
 export as namespace Charm;
 
 declare namespace Charm {
-	interface InternalAtom<State> {
-		/** @hidden */
-		readonly listeners: Set<(value: State) => void>;
-		/** @hidden */
-		readonly debugTraceback: string;
-		/** @hidden */
-		readonly debugLabel: string;
-		/** @hidden */
-		setForced(state: State | ((current: State) => State)): void;
+	interface Atom<T> extends ReadonlyAtom<T> {
+		readonly __nominal: unique symbol;
+		(state: T | ((state: T) => T)): T;
 	}
 
-	interface BaseAtom<State> extends InternalAtom<State> {
-		get(): State;
-		get<Result>(selector: (state: State) => Result): Result;
-		set(state: State | ((current: State) => State)): void;
-		memo(areEqual: (previous: State, current: State) => boolean): this;
-		writable(onSet?: (update: State, previous: State) => State | void): Atom<State>;
-		readonly(): ReadonlyAtom<State>;
-		named(label: string): this;
-		unmount(): void;
+	interface ReadonlyAtom<T> {
+		(): T;
 	}
 
-	interface Atom<State> extends BaseAtom<State> {
-		(): State;
-		(state: State | ((previous: State) => State)): void;
-	}
-
-	interface ReadonlyAtom<State> extends BaseAtom<State> {
-		(): State;
-		set: never;
-	}
-
-	type AtomArrayToStates<Atoms extends Atom<any>[]> = {
-		[Key in keyof Atoms]: Atoms[Key] extends Atom<infer State> ? State : never;
+	type AtomArrayToStates<Atoms extends ReadonlyAtom<any>[]> = {
+		[Key in keyof Atoms]: Atoms[Key] extends ReadonlyAtom<infer State> ? State : never;
 	};
 
 	function atom<State>(state: State): Atom<State>;
 
 	function isAtom(value: unknown): value is Atom<any>;
 
-	function derive<Atoms extends Atom<any>[], Result>(
-		...args: [...atoms: Atoms, combiner: (...atoms: AtomArrayToStates<Atoms>) => Result]
-	): ReadonlyAtom<Result>;
+	function derive<State>(
+		atom: ReadonlyAtom<State>,
+		comparator?: (previous: State, current: State) => boolean,
+	): ReadonlyAtom<State>;
 
-	function subscribe<State>(atom: Atom<State>, callback: (state: State) => void): () => void;
+	function subscribe<State>(
+		atom: ReadonlyAtom<State>,
+		callback: (state: State, previousState: State) => void,
+	): () => void;
+
+	function effect(callback: () => void): () => void;
 
 	function observe<K, V>(
-		atom: Atom<Map<K, V> | ReadonlyMap<K, V>>,
+		atom: ReadonlyAtom<Map<K, V> | ReadonlyMap<K, V>>,
 		factory: (value: V, key: K) => (() => void) | void,
 	): () => void;
 
-	function observe(atom: Atom<any>, factory: (value: unknown, key: unknown) => (() => void) | void): () => void;
+	function observe(atom: ReadonlyAtom<any>, factory: (value: unknown, key: unknown) => (() => void) | void): () => void;
 
 	function mapAtom<V0, K1, V1>(
-		atom: Atom<readonly V0[]> | Atom<V0[]>,
+		atom: ReadonlyAtom<readonly V0[]> | ReadonlyAtom<V0[]>,
 		mapper: (value: V0, index: number) => LuaTuple<[V1 | undefined, K1]>,
 	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
 
 	function mapAtom<V0, V1>(
-		atom: Atom<readonly V0[]> | Atom<V0[]>,
+		atom: ReadonlyAtom<readonly V0[]> | ReadonlyAtom<V0[]>,
 		mapper: (value: V0, index: number) => V1,
 	): ReadonlyAtom<readonly V1[]>;
 
 	function mapAtom<K0, V0, K1 = K0, V1 = V0>(
-		atom: Atom<ReadonlyMap<K0, V0>> | Atom<Map<K0, V0>>,
+		atom: ReadonlyAtom<ReadonlyMap<K0, V0>> | ReadonlyAtom<Map<K0, V0>>,
 		mapper: (value: V0, key: K0) => LuaTuple<[V1 | undefined, K1]> | V1,
 	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
 
 	function mapAtom<K0 extends string | number | symbol, V0, K1, V1>(
-		atom: Atom<{ readonly [K in K0]: V0 }>,
+		atom: ReadonlyAtom<{ readonly [K in K0]: V0 }>,
 		mapper: (value: V0, key: K0) => LuaTuple<[V1 | undefined, K1]> | V1,
 	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
 
-	function useAtomState<State>(atom: Atom<State>): State;
+	function useAtomState<State>(atom: ReadonlyAtom<State>): State;
 
-	function useAtomState<State, Result>(atom: Atom<State>, selector: (state: State) => Result): Result;
+	function useAtomState<State, Result>(atom: ReadonlyAtom<State>, selector: (state: State) => Result): Result;
 
-	function useSetAtom<State>(atom: Atom<State>): (state: State | ((previous: State) => State)) => void;
+	function useSetAtom<State>(atom: ReadonlyAtom<State>): (state: State | ((previous: State) => State)) => void;
 
 	function useAtom<State>(
-		atom: Atom<State>,
+		atom: ReadonlyAtom<State>,
 	): LuaTuple<[state: State, setState: (state: State | ((previous: State) => State)) => void]>;
 
 	function useAtom<State, Result>(
-		atom: Atom<State>,
+		atom: ReadonlyAtom<State>,
 		selector: (state: State) => Result,
 	): LuaTuple<[state: Result, setState: (state: Result | ((previous: Result) => Result)) => void]>;
 

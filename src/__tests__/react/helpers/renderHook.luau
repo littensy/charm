@@ -2,7 +2,7 @@ _G.__ROACT_17_MOCK_SCHEDULER__ = true
 
 local Package = script:FindFirstAncestor("__tests__").Parent
 
-local React = require(Package.modules.React)
+local React = require(Package.modules.React)()
 local ReactRoblox = require(Package.modules.ReactRoblox)
 
 type RenderedHook<Props, Result> = {
