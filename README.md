@@ -89,7 +89,7 @@ Charm = "littensy/charm@VERSION"
 import { atom, derive, subscribe } from "@rbxts/charm";
 
 const counterAtom = atom(0);
-const doubleCounterAtom = derive(() => counterAtom() * 2);
+const doubleCounterAtom = () => counterAtom() * 2;
 
 subscribe(doubleCounterAtom, (value) => {
 	print(value);
