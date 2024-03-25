@@ -86,7 +86,7 @@ Charm = "littensy/charm@VERSION"
 ### Counter atom
 
 ```ts
-import { atom, derive, subscribe } from "@rbxts/charm";
+import { atom, subscribe } from "@rbxts/charm";
 
 const counterAtom = atom(0);
 const doubleCounterAtom = () => counterAtom() * 2;
