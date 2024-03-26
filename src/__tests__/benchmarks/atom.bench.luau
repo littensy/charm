@@ -29,9 +29,11 @@ local benchmarks = {
 	derived_memo = function(_, source: any)
 		derive(function()
 			return { count = 2 * source().count }
-		end, function(previous, current)
-			return previous.count == current.count
-		end)
+		end, {
+			equals = function(previous, current)
+				return previous.count == current.count
+			end,
+		})
 		for _ = 1, 500 do
 			source({ count = math.random(1, 2) })
 		end

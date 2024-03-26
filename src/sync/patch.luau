@@ -2,10 +2,12 @@ local validate = require(script.Parent.validate)
 
 local NONE = { __none = "__none" }
 
-local function diff(previousState: { [any]: any }, nextState: { [any]: any })
+local warnings = {}
+
+local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
 
-	for key, previous in previousState do
+	for key, previous in prevState do
 		local next = nextState[key]
 
 		if previous == next then
@@ -19,17 +21,18 @@ local function diff(previousState: { [any]: any }, nextState: { [any]: any })
 
 	if _G.__DEV__ then
 		local success, result = pcall(function()
-			for key, value in previousState do
+			for key, value in prevState do
 				validate(value, key)
 			end
 			for key, value in nextState do
-				if previousState[key] ~= value then
+				if prevState[key] ~= value then
 					validate(value, key)
 				end
 			end
 		end)
 
-		if not success then
+		if not success and not warnings[result] then
+			warnings[result] = true
 			warn(result)
 		end
 	end

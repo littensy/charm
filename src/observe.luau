@@ -1,8 +1,8 @@
 local effect = require(script.Parent.effect)
 local types = require(script.Parent.types)
-type ReadonlyAtom<T> = types.ReadonlyAtom<T>
+type Source<T> = types.Source<T>
 
-local function observe<V, K>(source: ReadonlyAtom<{ [K]: V }>, factory: (value: V, key: K) -> () -> ()): () -> ()
+local function observe<K, V>(source: Source<{ [K]: V }>, factory: (value: V, key: K) -> () -> ()): () -> ()
 	local connections: { [K]: () -> () } = {}
 
 	local unsubscribe = effect(function()

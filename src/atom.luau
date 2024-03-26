@@ -1,8 +1,11 @@
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
+type AtomOptions<T> = types.AtomOptions<T>
 
-local function atom<T>(state: T): Atom<T>
+local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
+	local equals = options and options.equals
+
 	local function atom(...)
 		if select("#", ...) == 0 then
 			if store.shouldCapture() then
@@ -14,7 +17,7 @@ local function atom<T>(state: T): Atom<T>
 
 		local nextState = if type(...) == "function" then (...)(state) else ...
 
-		if state ~= nextState then
+		if state ~= nextState and not (equals and equals(state, nextState)) then
 			state = nextState
 
 			for listener in pairs(table.clone(store.listeners[atom])) do

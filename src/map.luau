@@ -2,12 +2,17 @@ local atom = require(script.Parent.atom)
 local subscribe = require(script.Parent.subscribe)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
-type ReadonlyAtom<T> = types.ReadonlyAtom<T>
+type Source<T> = types.Source<T>
 
-local function mapAtom<K0, V0, K1, V1>(itemsAtom: Atom<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): ReadonlyAtom<{ [K1]: V1 }>
+type Map =
+	(<K0, V0, K1, V1>(atom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Source<{ [K1]: V1 }>)
+	& (<K0, V0, V1>(atom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Source<{ [K0]: V1 }>)
+	& (<K0, V0, K1, V1>(atom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Source<{ [K1]: V1 }>)
+
+local function map<K0, V0, K1, V1>(itemsAtom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Source<{ [K1]: V1 }>
 	local mappedAtom = atom({})
 	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
-	local previousMappedItems: { [K1]: V1 } = {}
+	local prevMappedItems: { [K1]: V1 } = {}
 	local unsubscribe
 
 	local function listener(items: { [K0]: V0 })
@@ -30,13 +35,13 @@ local function mapAtom<K0, V0, K1, V1>(itemsAtom: Atom<{ [K0]: V0 }>, mapper: (V
 			end
 		end
 
-		for key in previousMappedItems do
-			if mappedKeys[key] == nil and mappedItems[key] == previousMappedItems[key] then
+		for key in prevMappedItems do
+			if mappedKeys[key] == nil and mappedItems[key] == prevMappedItems[key] then
 				mappedItems[key] = nil
 			end
 		end
 
-		previousMappedItems = mappedItems
+		prevMappedItems = mappedItems
 		mappedAtom(mappedItems)
 	end
 
@@ -46,4 +51,4 @@ local function mapAtom<K0, V0, K1, V1>(itemsAtom: Atom<{ [K0]: V0 }>, mapper: (V
 	return mappedAtom
 end
 
-return mapAtom
+return map :: Map

@@ -55,11 +55,13 @@ Charm = "littensy/charm@VERSION"
 
 #### `subscribe(atom, listener)`
 
-#### `derive(atom, comparator?)`
+#### `derive(atom, equals?)`
 
 #### `observe(atom, observer)`
 
-#### `mapAtom(atom, mapper)`
+#### `map(atom, mapper)`
+
+#### `unwrap(atom)`
 
 ### React
 
@@ -77,7 +79,7 @@ Charm = "littensy/charm@VERSION"
 
 #### `sync.server(options)`
 
-#### `Server.onSync(callback)`
+#### `Server.connect(callback)`
 
 #### `Server.hydrate(player)`
 

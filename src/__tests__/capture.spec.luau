@@ -1,0 +1,22 @@
+local atom = require(script.Parent.Parent.atom)
+local capture = require(script.Parent.Parent.capture)
+
+return function()
+	it("captures atoms from a function", function()
+		local a, b, c = atom(1), atom(1), atom(2)
+		local captured, result = capture(function()
+			return a() + b()
+		end)
+		expect(captured[a]).to.be.ok()
+		expect(captured[b]).to.be.ok()
+		expect(captured[c]).to.never.be.ok()
+		expect(result).to.equal(2)
+	end)
+
+	it("captures an atom by itself", function()
+		local a = atom(1)
+		local captured, result = capture(a)
+		expect(captured[a]).to.be.ok()
+		expect(result).to.equal(1)
+	end)
+end

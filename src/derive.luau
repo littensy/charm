@@ -1,24 +1,19 @@
 local atom = require(script.Parent.atom)
+local capture = require(script.Parent.capture)
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
-type ReadonlyAtom<T> = types.ReadonlyAtom<T>
+type AtomOptions<T> = types.AtomOptions<T>
+type Source<T> = types.Source<T>
 
-local function derive<T>(source: ReadonlyAtom<T>, comparator: ((old: T, new: T) -> boolean)?): ReadonlyAtom<T>
-	local atoms, state = store.capture(source)
-	local derived = atom(state)
+local function derive<T>(source: Source<T>, options: AtomOptions<T>?): Source<T>
+	local atoms, state = capture(source)
+	local derived = atom(state, options)
 	local derivedRef = setmetatable({ current = derived }, { __mode = "v" })
 
 	local function listener()
-		if not derivedRef.current then
-			return
-		end
-
-		local nextState = source()
-
-		if state ~= nextState and not (comparator and comparator(state, nextState)) then
-			state = nextState
-			derivedRef.current(nextState)
+		if derivedRef.current then
+			derivedRef.current(source())
 		end
 	end
 

@@ -6,8 +6,8 @@ type Atom<T> = types.Atom<T>
 export type SetState<T> = (T | ((T) -> T)) -> ()
 
 local function useSetAtom<State>(atom: Atom<State>): SetState<State>
-	return requireReact().useCallback(function(value)
-		atom(value)
+	return requireReact().useCallback(function(state: State | ((State) -> State)): ()
+		atom(state)
 	end, { atom })
 end
 

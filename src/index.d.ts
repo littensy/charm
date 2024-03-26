@@ -1,117 +1,109 @@
 export = Charm;
 export as namespace Charm;
 
+type Cleanup = () => void;
+
+type AnyMap<K, V> =
+	| Map<K, V>
+	| ReadonlyMap<K, V>
+	| (K extends string | number | symbol ? { readonly [Key in K]: V } : never);
+
 declare namespace Charm {
-	interface Atom<T> extends ReadonlyAtom<T> {
+	interface Atom<T> extends Source<T> {
 		readonly __nominal: unique symbol;
-		(state: T | ((state: T) => T)): T;
+		(state: T | ((prev: T) => T)): void;
 	}
 
-	interface ReadonlyAtom<T> {
-		(): T;
+	type Source<T> = () => T;
+
+	interface AtomOptions<State> {
+		equals?: (prev: State, next: State) => boolean;
 	}
 
-	type AtomArrayToStates<Atoms extends ReadonlyAtom<any>[]> = {
-		[Key in keyof Atoms]: Atoms[Key] extends ReadonlyAtom<infer State> ? State : never;
-	};
-
-	function atom<State>(state: State): Atom<State>;
+	function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
 
 	function isAtom(value: unknown): value is Atom<any>;
 
-	function derive<State>(
-		atom: ReadonlyAtom<State>,
-		comparator?: (previous: State, current: State) => boolean,
-	): ReadonlyAtom<State>;
+	function derive<State>(atom: Source<State>, options?: AtomOptions<State>): Source<State>;
 
-	function subscribe<State>(
-		atom: ReadonlyAtom<State>,
-		callback: (state: State, previousState: State) => void,
-	): () => void;
+	function subscribe<State>(atom: Source<State>, callback: (state: State, prev: State) => void): Cleanup;
 
-	function effect(callback: () => void): () => void;
+	function effect(callback: Source<void>): Cleanup;
 
-	function observe<K, V>(
-		atom: ReadonlyAtom<Map<K, V> | ReadonlyMap<K, V>>,
-		factory: (value: V, key: K) => (() => void) | void,
-	): () => void;
+	function unwrap<State>(atom: State | Source<State>): State;
 
-	function observe(atom: ReadonlyAtom<any>, factory: (value: unknown, key: unknown) => (() => void) | void): () => void;
+	function capture<State>(atom: Source<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
 
-	function mapAtom<V0, K1, V1>(
-		atom: ReadonlyAtom<readonly V0[]> | ReadonlyAtom<V0[]>,
-		mapper: (value: V0, index: number) => LuaTuple<[V1 | undefined, K1]>,
-	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
+	function observe<Item>(
+		atom: Source<readonly Item[]>,
+		factory: (item: Item, index: number) => Cleanup | void,
+	): Cleanup;
 
-	function mapAtom<V0, V1>(
-		atom: ReadonlyAtom<readonly V0[]> | ReadonlyAtom<V0[]>,
-		mapper: (value: V0, index: number) => V1,
-	): ReadonlyAtom<readonly V1[]>;
+	function observe<Key, Item>(
+		atom: Source<AnyMap<Key, Item>>,
+		factory: (item: Item, key: Key) => Cleanup | void,
+	): Cleanup;
 
-	function mapAtom<K0, V0, K1 = K0, V1 = V0>(
-		atom: ReadonlyAtom<ReadonlyMap<K0, V0>> | ReadonlyAtom<Map<K0, V0>>,
-		mapper: (value: V0, key: K0) => LuaTuple<[V1 | undefined, K1]> | V1,
-	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
+	function map<V0, K1, V1>(
+		atom: Source<readonly V0[]>,
+		mapper: (value: V0, index: number) => LuaTuple<[value: V1 | undefined, key: K1]>,
+	): Source<ReadonlyMap<K1, V1>>;
 
-	function mapAtom<K0 extends string | number | symbol, V0, K1, V1>(
-		atom: ReadonlyAtom<{ readonly [K in K0]: V0 }>,
-		mapper: (value: V0, key: K0) => LuaTuple<[V1 | undefined, K1]> | V1,
-	): ReadonlyAtom<ReadonlyMap<K1, V1>>;
+	function map<V0, V1>(atom: Source<readonly V0[]>, mapper: (value: V0, index: number) => V1): Source<readonly V1[]>;
 
-	function useAtomState<State>(atom: ReadonlyAtom<State>): State;
+	function map<K0, V0, K1 = K0, V1 = V0>(
+		atom: Source<AnyMap<K0, V0>>,
+		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
+	): Source<ReadonlyMap<K1, V1>>;
 
-	function useAtomState<State, Result>(atom: ReadonlyAtom<State>, selector: (state: State) => Result): Result;
+	// React
 
-	function useSetAtom<State>(atom: ReadonlyAtom<State>): (state: State | ((previous: State) => State)) => void;
+	function useAtomState<State>(atom: Source<State>): State;
+
+	function useAtomState<State, Result>(atom: Source<State>, selector: (state: State) => Result): Result;
+
+	function useSetAtom<State>(atom: Source<State>): (state: State | ((prev: State) => State)) => void;
 
 	function useAtom<State>(
-		atom: ReadonlyAtom<State>,
-	): LuaTuple<[state: State, setState: (state: State | ((previous: State) => State)) => void]>;
+		atom: Source<State>,
+	): LuaTuple<[state: State, setState: (state: State | ((prev: State) => State)) => void]>;
 
 	function useAtom<State, Result>(
-		atom: ReadonlyAtom<State>,
+		atom: Source<State>,
 		selector: (state: State) => Result,
-	): LuaTuple<[state: Result, setState: (state: Result | ((previous: Result) => Result)) => void]>;
+	): LuaTuple<[state: Result, setState: (state: Result | ((prev: Result) => Result)) => void]>;
 
-	interface None {
-		readonly __none: "__none";
-	}
+	// Sync
 
-	type StatePatch<States> = {
-		readonly [K in keyof States]?: (States[K] extends object ? StatePatch<States[K]> : States[K]) | None;
+	const sync: {
+		client(options: ClientOptions): ClientSyncer;
+		server(options: ServerOptions): ServerSyncer;
 	};
 
-	type SyncPayload<States> = { type: "set"; data: States } | { type: "patch"; data: StatePatch<States> };
-
-	interface AtomMap {
-		readonly [key: string]: Atom<any>;
+	interface SyncPatch {
+		[key: string | number | symbol]: SyncPatch | { __none: "__none" } | string | number | boolean | undefined;
 	}
 
-	type AtomMapToStates<Atoms extends AtomMap> = {
-		readonly [Key in keyof Atoms]: Atoms[Key] extends Atom<infer State> ? State : never;
-	};
-
-	interface ClientSyncOptions<Atoms extends AtomMap> {
-		atoms: Atoms;
+	interface SyncPayload {
+		type: "set" | "patch";
+		data: SyncPatch;
 	}
 
-	interface ClientSyncer<States> {
-		sync(payload: SyncPayload<States>): void;
+	interface ClientOptions {
+		atoms: Record<string, Atom<any>>;
 	}
 
-	interface ServerSyncOptions<Atoms extends AtomMap> {
-		atoms: Atoms;
+	interface ServerOptions {
+		atoms: Record<string, Atom<any>>;
 		interval?: number;
 	}
 
-	interface ServerSyncer<States> {
-		onSync(callback: (player: Player, payload: SyncPayload<States>) => void): () => void;
-		hydrate(player: Player): void;
+	interface ClientSyncer {
+		sync(payload: SyncPayload): void;
 	}
 
-	namespace sync {
-		function client<Atoms extends AtomMap>(options: ClientSyncOptions<Atoms>): ClientSyncer<AtomMapToStates<Atoms>>;
-
-		function server<Atoms extends AtomMap>(options: ServerSyncOptions<Atoms>): ServerSyncer<AtomMapToStates<Atoms>>;
+	interface ServerSyncer {
+		connect(callback: (player: Player, payload: SyncPayload) => void): Cleanup;
+		hydrate(player: Player): void;
 	}
 }

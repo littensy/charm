@@ -1,9 +1,8 @@
+local capture = require(script.Parent.capture)
 local store = require(script.Parent.store)
-local types = require(script.Parent.types)
-type ReadonlyAtom<T> = types.ReadonlyAtom<T>
 
-local function effect(source: ReadonlyAtom<nil>): () -> ()
-	local atoms = store.capture(source)
+local function effect(source: () -> nil): () -> ()
+	local atoms = capture(source)
 
 	local function listener()
 		source()

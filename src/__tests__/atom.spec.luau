@@ -42,4 +42,18 @@ return function()
 		expect(outer).to.equal(2)
 		expect(inner).to.equal(1)
 	end)
+
+	it("takes a custom comparator", function()
+		local max = atom(1, {
+			equals = function(prev, next)
+				return next < prev
+			end,
+		})
+		max(2)
+		expect(max()).to.equal(2)
+		max(1)
+		expect(max()).to.equal(2)
+		max(3)
+		expect(max()).to.equal(3)
+	end)
 end
