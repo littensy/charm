@@ -1,4 +1,4 @@
-local reference = require(script.Parent.Parent.utils.reference)
+local store = require(script.Parent.Parent.store)
 
 return function()
 	local previous = _G.__DEV__
@@ -12,6 +12,6 @@ return function()
 	end)
 
 	afterEach(function()
-		reference.clear()
+		table.clear(store.listeners :: any)
 	end)
 end

@@ -1,5 +1,5 @@
-local atom = require(script.Parent.Parent.atom)
-type Atom<T> = atom.Atom<T>
+local types = require(script.Parent.Parent.types)
+type Atom<T> = types.Atom<T>
 
 local useAtomState = require(script.Parent.useAtomState)
 local useSetAtom = require(script.Parent.useSetAtom)

@@ -1,16 +1,17 @@
 local atom = require(script.Parent.Parent.atom)
-local mapAtom = require(script.Parent.Parent.mapAtom)
+local map = require(script.Parent.Parent.map)
 local observe = require(script.Parent.Parent.observe)
+local store = require(script.Parent.Parent.store)
 
 return function()
 	it("returns mapped atoms", function()
 		local itemsAtom = atom({ "a", "b", "c" })
-		local mappedAtom = mapAtom(itemsAtom, function(value, key)
+		local mappedAtom = map(itemsAtom, function(value, key)
 			return string.upper(value), key
 		end)
 		local updates = 0
 
-		mappedAtom.listeners[function()
+		store.listeners[mappedAtom][function()
 			updates += 1
 		end] = true
 
@@ -34,7 +35,7 @@ return function()
 
 	it("uses key extractor", function()
 		local itemsAtom = atom({ { key = 1 }, { key = 2 }, { key = 3 } })
-		local mappedAtom = mapAtom(itemsAtom, function(item)
+		local mappedAtom = map(itemsAtom, function(item)
 			return item, item.key
 		end)
 
@@ -60,14 +61,14 @@ return function()
 			{ key = 3, value = "c" },
 		})
 
-		local mappedAtom = mapAtom(itemsAtom, function(item)
+		local mappedAtom = map(itemsAtom, function(item)
 			return item, item.key
 		end)
 
 		local added = 0
 		local deleted = 0
 
-		local _, flush = observe(mappedAtom, function(item, key)
+		observe(mappedAtom, function(item, key)
 			expect(item).to.equal(itemsAtom()[key])
 			added += 1
 
@@ -81,25 +82,13 @@ return function()
 		expect(deleted).to.equal(0)
 
 		itemsAtom({ itemsAtom()[1], itemsAtom()[3] })
-		flush()
 
 		expect(added).to.equal(3)
 		expect(deleted).to.equal(1)
 
 		itemsAtom({})
-		flush()
 
 		expect(added).to.equal(3)
 		expect(deleted).to.equal(3)
-	end)
-
-	it("unmounts from parent atom", function()
-		local itemsAtom = atom({})
-		local mappedAtom = mapAtom(itemsAtom, function(item, key)
-			return item, key
-		end)
-		expect((next(itemsAtom.listeners))).to.be.ok()
-		mappedAtom:unmount()
-		expect((next(itemsAtom.listeners))).to.never.be.ok()
 	end)
 end

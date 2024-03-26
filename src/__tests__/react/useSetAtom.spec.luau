@@ -24,11 +24,11 @@ return function()
 	end)
 
 	it("memoizes the function", function()
-		local hook = renderHook(function(source)
-			return useSetAtom(source)
-		end, atom(0))
+		local hook = renderHook(function(props)
+			return useSetAtom(props.source)
+		end, { source = atom(0) })
 		local fn = hook.result
-		hook.rerender(atom(1))
+		hook.rerender({ source = atom(1) })
 		expect(hook.result).to.never.equal(fn)
 	end)
 end

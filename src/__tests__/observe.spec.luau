@@ -6,7 +6,7 @@ return function()
 		local itemsAtom = atom({ "a", "b", "c" })
 		local state = {}
 
-		local cleanup, flush = observe(itemsAtom, function(item, key)
+		local cleanup = observe(itemsAtom, function(item, key)
 			state[key] = item
 			return function()
 				state[key] = nil
@@ -14,14 +14,13 @@ return function()
 		end)
 
 		for key = 1, 3 do
-			expect(state[key]).to.equal(itemsAtom:get()[key])
+			expect(state[key]).to.equal(itemsAtom()[key])
 		end
 
-		itemsAtom:set({ [4] = "d", [5] = "e", [6] = "f" })
-		flush()
+		itemsAtom({ [4] = "d", [5] = "e", [6] = "f" })
 
 		for key = 1, 6 do
-			expect(state[key]).to.equal(itemsAtom:get()[key])
+			expect(state[key]).to.equal(itemsAtom()[key])
 		end
 
 		cleanup()

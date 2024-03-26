@@ -1,65 +1,27 @@
 local atom = require(script.Parent.atom)
-type Atom<T> = atom.Atom<T>
-type ReadonlyAtom<T> = atom.ReadonlyAtom<T>
-local reference = require(script.Parent.utils.reference)
+local capture = require(script.Parent.capture)
+local store = require(script.Parent.store)
+local types = require(script.Parent.types)
+type Atom<T> = types.Atom<T>
+type AtomOptions<T> = types.AtomOptions<T>
+type Source<T> = types.Source<T>
 
-type Derive =
-	(<A, T>(Atom<A>, (A) -> T) -> ReadonlyAtom<T>)
-	& (<A, B, T>(Atom<A>, Atom<B>, (A, B) -> T) -> ReadonlyAtom<T>)
-	& (<A, B, C, T>(Atom<A>, Atom<B>, Atom<C>, (A, B, C) -> T) -> ReadonlyAtom<T>)
-	& (<A, B, C, D, T>(Atom<A>, Atom<B>, Atom<C>, Atom<D>, (A, B, C, D) -> T) -> ReadonlyAtom<T>)
-	& (<A, B, C, D, E, T>(Atom<A>, Atom<B>, Atom<C>, Atom<D>, Atom<E>, (A, B, C, D, E) -> T) -> ReadonlyAtom<T>)
-	& (<T>(...(Atom<any> | ((...any) -> T))) -> ReadonlyAtom<T>)
+local function derive<T>(source: Source<T>, options: AtomOptions<T>?): Source<T>
+	local atoms, state = capture(source)
+	local derived = atom(state, options)
+	local derivedRef = setmetatable({ current = derived }, { __mode = "v" })
 
-local function derive<Result>(...): ReadonlyAtom<Result>
-	local atoms: { Atom<unknown> } = { ... }
-	local combiner: (...unknown) -> Result = table.remove(atoms) :: any
-	local size = 0
-	local dependencies: { unknown } = {}
-	local listeners: { [() -> ()]: boolean } = {}
-
-	for index, atom in atoms do
-		dependencies[index] = atom:get()
-		size += 1
-	end
-
-	local derivedAtom = atom(combiner(table.unpack(dependencies, 1, size))):readonly()
-	local derivedAtomUnmount = derivedAtom.unmount
-	local getDerivedAtom = reference.weak(derivedAtom)
-
-	function derivedAtom:unmount()
-		derivedAtomUnmount(self)
-
-		for listener in listeners do
-			for _, atom in atoms do
-				atom.listeners[listener] = nil
-			end
+	local function listener()
+		if derivedRef.current then
+			derivedRef.current(source())
 		end
 	end
 
-	for index, atom in atoms do
-		local function listener(state: unknown)
-			-- Remove the listener if the derived atom has been garbage collected,
-			-- typically because no subscriptions to it exist.
-			local derivedAtom = getDerivedAtom()
-
-			if derivedAtom then
-				dependencies[index] = state
-				derivedAtom:setForced(combiner(table.unpack(dependencies, 1, size)))
-			else
-				atom.listeners[listener] = nil
-			end
-		end
-
-		-- Tie the lifetime of the derived atom to the lifetime of its dependencies
-		-- without creating a strong reference cycle. As long as an atom is in use,
-		-- its derived atoms will be in use as well.
-		derivedAtom.owners[atom] = true
-		atom.listeners[listener] = true
-		listeners[listener] = true
+	for atom in atoms do
+		store.listeners[atom][listener] = derived
 	end
 
-	return derivedAtom
+	return derived
 end
 
-return derive :: Derive
+return derive

@@ -5,4 +5,11 @@ local Packages = if Package.Parent:FindFirstChild("React")
 
 type React = typeof(require(Package.Parent.React))
 
-return (if Packages then require(Packages.React) else nil) :: React
+local React: React
+
+return function()
+	if not React then
+		React = Packages and require(Packages.React) :: React
+	end
+	return React
+end

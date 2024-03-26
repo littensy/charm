@@ -1,4 +1,5 @@
 local atom = require(script.Parent.Parent.atom)
+local store = require(script.Parent.Parent.store)
 
 return function()
 	it("updates state", function()
@@ -14,10 +15,10 @@ return function()
 	it("calls listeners", function()
 		local source = atom(1)
 		local value
-		local function listener(state)
-			value = state
+		local function listener()
+			value = source()
 		end
-		source.listeners[listener] = true
+		store.listeners[source][listener] = true
 		source(2)
 		expect(value).to.equal(2)
 	end)
@@ -31,9 +32,9 @@ return function()
 			local function listener()
 				inner += 1
 			end
-			source.listeners[listener] = true
+			store.listeners[source][listener] = true
 		end
-		source.listeners[listener] = true
+		store.listeners[source][listener] = true
 		source(2)
 		expect(outer).to.equal(1)
 		expect(inner).to.equal(0)
@@ -42,44 +43,17 @@ return function()
 		expect(inner).to.equal(1)
 	end)
 
-	it("can be readonly", function()
-		local readonly = atom(1):readonly()
-
-		expect(function()
-			(readonly :: any)(2)
-		end).to.throw()
-
-		local writable = readonly:writable()
-
-		writable(2)
-		expect(writable()).to.equal(2)
-	end)
-
-	it("calls the setter", function()
-		local source = atom(1):writable(function(_, value: number)
-			return value + 1
-		end)
-		source(1)
-		expect(source()).to.equal(2)
-	end)
-
-	it("cancels if setter returns nil", function()
-		local source = atom(1):writable(function(value: number)
-			return if value == 2 then nil else value
-		end)
-		source(2)
-		expect(source()).to.equal(1)
-		source(3)
-		expect(source()).to.equal(3)
-	end)
-
-	it("can be memoized", function()
-		local source = atom(1):memo(function(prev, next)
-			return next < prev
-		end)
-		source(2)
-		expect(source()).to.equal(2)
-		source(1)
-		expect(source()).to.equal(2)
+	it("takes a custom comparator", function()
+		local max = atom(1, {
+			equals = function(prev, next)
+				return next < prev
+			end,
+		})
+		max(2)
+		expect(max()).to.equal(2)
+		max(1)
+		expect(max()).to.equal(2)
+		max(3)
+		expect(max()).to.equal(3)
 	end)
 end

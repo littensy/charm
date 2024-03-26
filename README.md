@@ -1,6 +1,6 @@
 <p align="center">
   <p align="center">
-    <img width="150" height="150" src="images/logo.png" alt="Logo">
+	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/master/images/logo.png" alt="Logo">
   </p>
   <h1 align="center"><b>Charm</b></h1>
   <p align="center">
@@ -45,37 +45,23 @@ Add `littensy/charm` to your `wally.toml` file.
 Charm = "littensy/charm@VERSION"
 ```
 
-## 📚 Documentation
+## 📚 API Reference
 
-### Core
+### Charm
 
 #### `atom(state)`
 
-#### `derive(...atoms, combiner)`
+#### `effect(callback)`
 
 #### `subscribe(atom, listener)`
 
+#### `derive(atom, equals?)`
+
 #### `observe(atom, observer)`
 
-#### `mapAtom(atom, mapper)`
+#### `map(atom, mapper)`
 
-### Atom
-
-#### `Atom(state?)`
-
-#### `Atom.get(selector?)`
-
-#### `Atom.set(state)`
-
-#### `Atom.memo(areEqual)`
-
-#### `Atom.readonly()`
-
-#### `Atom.writable(onSet?)`
-
-#### `Atom.named(label)`
-
-#### `Atom.unmount()`
+#### `unwrap(atom)`
 
 ### React
 
@@ -93,7 +79,7 @@ Charm = "littensy/charm@VERSION"
 
 #### `sync.server(options)`
 
-#### `Server.onSync(callback)`
+#### `Server.connect(callback)`
 
 #### `Server.hydrate(player)`
 
@@ -102,10 +88,10 @@ Charm = "littensy/charm@VERSION"
 ### Counter atom
 
 ```ts
-import { atom, derive, subscribe } from "@rbxts/charm";
+import { atom, subscribe } from "@rbxts/charm";
 
 const counterAtom = atom(0);
-const doubleCounterAtom = derive(counterAtom, (counter) => counter * 2);
+const doubleCounterAtom = () => counterAtom() * 2;
 
 subscribe(doubleCounterAtom, (value) => {
 	print(value);
@@ -136,12 +122,6 @@ function Counter() {
 	);
 }
 ```
-
-## 🙋 Concerns
-
-In Jotai, `atom()` returns an [atom config](https://jotai.org/docs/core/atom), and its state is managed entirely by the Provider. However, in Charm, `atom()` returns something closer to a store, and its state is managed by the atom itself.
-
-Charm does this for simplicity in use cases outside of React, but this might go against Jotai's focus on pure functional programming. More insight is needed to determine if this is a good idea.
 
 ---
 

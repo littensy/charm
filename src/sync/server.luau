@@ -1,69 +1,69 @@
 local Players = game:GetService("Players")
 
-local atom = require(script.Parent.Parent.atom)
-type Atom<T> = atom.Atom<T>
+local types = require(script.Parent.Parent.types)
+type Atom<T> = types.Atom<T>
+type SyncPayload = types.SyncPayload
 local setInterval = require(script.Parent.Parent.utils.setInterval)
 local patch = require(script.Parent.patch)
-local types = require(script.Parent.types)
 
-type ServerSyncOptions = {
+type ServerOptions = {
 	atoms: { [string]: Atom<any> },
 	interval: number?,
 }
 
 type ServerSyncer = {
-	onSync: (self: ServerSyncer, callback: (player: Player, payload: types.SyncPayload) -> ()) -> () -> (),
-	flush: (self: ServerSyncer, player: Player?) -> (),
+	connect: (self: ServerSyncer, callback: (player: Player, payload: SyncPayload) -> ()) -> () -> (),
+	flush: (self: ServerSyncer, player: Player) -> (),
 	hydrate: (self: ServerSyncer, player: Player) -> (),
 }
 
-local function server(options: ServerSyncOptions): ServerSyncer
+local function server(options: ServerOptions): ServerSyncer
 	local atoms = options.atoms
 	local interval = options.interval or 0
+
 	local self = {} :: ServerSyncer
-	local sync: (player: Player, payload: types.SyncPayload) -> ()
+	local sync: (player: Player, payload: SyncPayload) -> ()
 	local state: {}
 
 	local function getState()
 		local state = {}
 		for key, atom in atoms do
-			state[key] = atom:get()
+			state[key] = atom()
 		end
 		return state
 	end
 
-	function self:onSync(callback)
+	function self:connect(callback)
 		sync = callback
 		state = getState()
 
 		return setInterval(function()
-			self:flush()
+			local previous = state
+			state = getState()
+
+			if state ~= previous then
+				for _, player in Players:GetPlayers() do
+					callback(player, {
+						type = "patch",
+						data = patch.diff(previous, state),
+					})
+				end
+			end
 		end, interval)
 	end
 
-	function self:flush(player: Player?)
-		local current = getState()
-		local previous = state or current
-		state = current
+	function self:flush(player: Player)
+		local previous = state
+		state = getState()
 
-		if current ~= previous then
-			local payload: types.SyncPayload = {
-				type = "patch",
-				data = patch.diff(previous, current),
-			}
-
-			if player then
-				return sync(player, payload)
-			end
-
-			for _, player in Players:GetPlayers() do
-				sync(player, payload)
-			end
-		end
+		sync(player, {
+			type = "patch",
+			data = patch.diff(previous, state),
+		})
 	end
 
 	function self:hydrate(player)
-		assert(sync, "onSync must be called before onJoin")
+		assert(sync, "connect() must be called before hydrate()")
 
 		sync(player, {
 			type = "set",

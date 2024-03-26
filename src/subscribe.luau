@@ -1,45 +1,26 @@
-local atom = require(script.Parent.atom)
-type Atom<T> = atom.Atom<T>
-local reference = require(script.Parent.utils.reference)
+local capture = require(script.Parent.capture)
+local store = require(script.Parent.store)
+local types = require(script.Parent.types)
+type Source<T> = types.Source<T>
 
-local function subscribe<State>(atom: Atom<State>, callback: (state: State, previous: State) -> ()): (() -> (), () -> ())
-	local pending: thread? = nil
-	local state = atom:get()
+local function subscribe<T>(source: Source<T>, callback: (state: T, prev: T) -> ()): () -> ()
+	local atoms, state = capture(source)
 
-	local function emit()
-		local lastState = state
-		state = atom:get()
-		callback(state, lastState)
+	local function listener()
+		local prevState = state
+		state = source()
+		callback(state, prevState)
 	end
 
-	local function update()
-		pending = pending or task.defer(function()
-			pending = nil
-			emit()
-		end)
+	for atom in atoms do
+		store.listeners[atom][listener] = true
 	end
 
-	local function flush()
-		if pending then
-			pending = task.cancel(pending)
-			emit()
+	return function()
+		for atom in atoms do
+			store.listeners[atom][listener] = nil
 		end
 	end
-
-	local function unsubscribe()
-		reference.release(atom)
-		atom.listeners[update] = nil
-
-		if pending then
-			pending = task.cancel(pending)
-		end
-	end
-
-	-- Ensure the atom is held in memory while the subscription is active
-	reference.hold(atom)
-	atom.listeners[update] = true
-
-	return unsubscribe, flush
 end
 
 return subscribe
