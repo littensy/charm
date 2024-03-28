@@ -9,7 +9,7 @@ export type AtomOptions<T> = {
 }
 
 export type SyncPayload = {
-	type: "patch" | "set",
+	type: "patch" | "init",
 	data: { [any]: any },
 }
 

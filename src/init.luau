@@ -21,16 +21,16 @@ export type SyncPayload = types.SyncPayload
 
 return {
 	atom = atom,
+	capture = capture,
 	derive = derive,
 	effect = effect,
 	isAtom = isAtom,
 	map = map,
 	observe = observe,
-	subscribe = subscribe,
-	unwrap = unwrap,
-	capture = capture,
-	sync = sync,
 	useAtom = useAtom,
 	useAtomState = useAtomState,
 	useSetAtom = useSetAtom,
+	subscribe = subscribe,
+	sync = sync,
+	unwrap = unwrap,
 }

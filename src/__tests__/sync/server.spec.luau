@@ -17,7 +17,7 @@ return function()
 		server:hydrate(target)
 
 		expect(player).to.equal(target)
-		expect(payload.type).to.equal("set")
+		expect(payload.type).to.equal("init")
 		expect(payload.data.a).to.equal(1)
 
 		disconnect()

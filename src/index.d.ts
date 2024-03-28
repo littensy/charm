@@ -76,34 +76,36 @@ declare namespace Charm {
 	// Sync
 
 	const sync: {
-		client(options: ClientOptions): ClientSyncer;
-		server(options: ServerOptions): ServerSyncer;
+		client: <T extends Record<string, Atom<any>>>(options: ClientOptions<T>) => ClientSyncer<T>;
+		server: <T extends Record<string, Atom<any>>>(options: ServerOptions<T>) => ServerSyncer<T>;
+		collect: (root: Instance) => Record<string, Atom<any>>;
 	};
 
-	interface SyncPatch {
-		[key: string | number | symbol]: SyncPatch | { __none: "__none" } | string | number | boolean | undefined;
+	interface None {
+		__none: "__none";
 	}
 
-	interface SyncPayload {
-		type: "set" | "patch";
-		data: SyncPatch;
+	type SyncPatch<T> = {
+		readonly [P in keyof T]?: (T[P] extends object ? SyncPatch<T[P]> : T[P]) | (T[P] extends undefined ? None : never);
+	};
+
+	type SyncPayload<T> = { type: "init"; data: T } | { type: "patch"; data: SyncPatch<T> };
+
+	interface ClientOptions<T extends Record<string, Atom<any>>> {
+		atoms: T;
 	}
 
-	interface ClientOptions {
-		atoms: Record<string, Atom<any>>;
-	}
-
-	interface ServerOptions {
-		atoms: Record<string, Atom<any>>;
+	interface ServerOptions<T extends Record<string, Atom<any>>> {
+		atoms: T;
 		interval?: number;
 	}
 
-	interface ClientSyncer {
-		sync(payload: SyncPayload): void;
+	interface ClientSyncer<T extends Record<string, Atom<any>>> {
+		sync(payload: SyncPayload<T>): void;
 	}
 
-	interface ServerSyncer {
-		connect(callback: (player: Player, payload: SyncPayload) => void): Cleanup;
+	interface ServerSyncer<T extends Record<string, Atom<any>>> {
+		connect(callback: (player: Player, payload: SyncPayload<T>) => void): Cleanup;
 		hydrate(player: Player): void;
 	}
 }

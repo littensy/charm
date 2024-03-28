@@ -7,7 +7,7 @@ return function()
 		local client = sync.client({ atoms = { a = a } })
 
 		client:sync({
-			type = "set",
+			type = "init",
 			data = { a = 2 },
 		})
 

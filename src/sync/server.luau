@@ -42,10 +42,12 @@ local function server(options: ServerOptions): ServerSyncer
 			state = getState()
 
 			if state ~= previous then
+				local diffs = patch.diff(previous, state)
+
 				for _, player in Players:GetPlayers() do
 					callback(player, {
 						type = "patch",
-						data = patch.diff(previous, state),
+						data = diffs,
 					})
 				end
 			end
@@ -66,7 +68,7 @@ local function server(options: ServerOptions): ServerSyncer
 		assert(sync, "connect() must be called before hydrate()")
 
 		sync(player, {
-			type = "set",
+			type = "init",
 			data = getState(),
 		})
 	end
