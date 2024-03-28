@@ -40,19 +40,17 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	return patches
 end
 
-local function apply(state: { [any]: any }, patches: { [any]: any })
+local function apply(state: any, patches: any): any
+	if type(patches) == "table" and patches.__none == "__none" then
+		return nil
+	elseif type(state) ~= "table" or type(patches) ~= "table" then
+		return patches
+	end
+
 	local nextState = table.clone(state)
 
 	for key, patch in patches do
-		local current = nextState[key]
-
-		if type(patch) == "table" and patch.__none == "__none" then
-			nextState[key] = nil
-		elseif type(patch) == "table" and type(current) == "table" then
-			nextState[key] = apply(current, patch)
-		else
-			nextState[key] = patch
-		end
+		nextState[key] = apply(nextState[key], patch)
 	end
 
 	return nextState
