@@ -4,16 +4,16 @@ local store = require(script.Parent.store)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
 type AtomOptions<T> = types.AtomOptions<T>
-type Source<T> = types.Source<T>
+type Molecule<T> = types.Molecule<T>
 
-local function derive<T>(source: Source<T>, options: AtomOptions<T>?): Source<T>
-	local atoms, state = capture(source)
+local function derive<T>(molecule: Molecule<T>, options: AtomOptions<T>?): Molecule<T>
+	local atoms, state = capture(molecule)
 	local derived = atom(state, options)
 	local derivedRef = setmetatable({ current = derived }, { __mode = "v" })
 
 	local function listener()
 		if derivedRef.current then
-			derivedRef.current(source())
+			derivedRef.current(molecule())
 		end
 	end
 

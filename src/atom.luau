@@ -1,5 +1,6 @@
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
+local unwrap = require(script.Parent.unwrap)
 type Atom<T> = types.Atom<T>
 type AtomOptions<T> = types.AtomOptions<T>
 
@@ -15,7 +16,14 @@ local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
 			return state
 		end
 
-		local nextState = if type(...) == "function" then (...)(state) else ...
+		local nextState = ...
+
+		if type(nextState) == "function" then
+			-- Atoms called in a function should not be included as dependencies
+			nextState = unwrap(function()
+				return nextState(state)
+			end)
+		end
 
 		if state ~= nextState and not (equals and equals(state, nextState)) then
 			state = nextState

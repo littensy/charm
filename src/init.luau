@@ -16,7 +16,7 @@ local types = require(script.types)
 local unwrap = require(script.unwrap)
 
 export type Atom<State> = types.Atom<State>
-export type Source<State> = types.Source<State>
+export type Molecule<State> = types.Molecule<State>
 export type SyncPayload = types.SyncPayload
 
 return {

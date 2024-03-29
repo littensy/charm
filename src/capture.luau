@@ -1,15 +1,15 @@
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
-type Source<T> = types.Source<T>
+type Molecule<T> = types.Molecule<T>
 
-local function capture<T>(source: Source<T>): ({ [Atom<any>]: true }, T)
-	if store.listeners[source] then
-		return { [source] = true }, source()
+local function capture<T>(molecule: Molecule<T>): ({ [Atom<any>]: true }, T)
+	if store.listeners[molecule] then
+		return { [molecule] = true }, molecule()
 	end
 
 	store.setCapturing(true)
-	local success, result = pcall(source)
+	local success, result = pcall(molecule)
 	store.setCapturing(false)
 
 	local dependencies = table.clone(store.captured)

@@ -9,12 +9,12 @@ type AnyMap<K, V> =
 	| (K extends string | number | symbol ? { readonly [Key in K]: V } : never);
 
 declare namespace Charm {
-	interface Atom<T> extends Source<T> {
+	interface Atom<State> extends Molecule<State> {
 		readonly __nominal: unique symbol;
-		(state: T | ((prev: T) => T)): void;
+		(state: State | ((prev: State) => State)): void;
 	}
 
-	type Source<T> = () => T;
+	type Molecule<State> = () => State;
 
 	interface AtomOptions<State> {
 		equals?: (prev: State, next: State) => boolean;
@@ -24,52 +24,55 @@ declare namespace Charm {
 
 	function isAtom(value: unknown): value is Atom<any>;
 
-	function derive<State>(atom: Source<State>, options?: AtomOptions<State>): Source<State>;
+	function derive<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
 
-	function subscribe<State>(atom: Source<State>, callback: (state: State, prev: State) => void): Cleanup;
+	function subscribe<State>(molecule: Molecule<State>, callback: (state: State, prev: State) => void): Cleanup;
 
-	function effect(callback: Source<void>): Cleanup;
+	function effect(callback: Molecule<void>): Cleanup;
 
-	function unwrap<State>(atom: State | Source<State>): State;
+	function unwrap<State>(molecule: State | Molecule<State>): State;
 
-	function capture<State>(atom: Source<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
+	function capture<State>(molecule: Molecule<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
 
 	function observe<Item>(
-		atom: Source<readonly Item[]>,
+		molecule: Molecule<readonly Item[]>,
 		factory: (item: Item, index: number) => Cleanup | void,
 	): Cleanup;
 
 	function observe<Key, Item>(
-		atom: Source<AnyMap<Key, Item>>,
+		molecule: Molecule<AnyMap<Key, Item>>,
 		factory: (item: Item, key: Key) => Cleanup | void,
 	): Cleanup;
 
 	function map<V0, K1, V1>(
-		atom: Source<readonly V0[]>,
+		molecule: Molecule<readonly V0[]>,
 		mapper: (value: V0, index: number) => LuaTuple<[value: V1 | undefined, key: K1]>,
-	): Source<ReadonlyMap<K1, V1>>;
+	): Molecule<ReadonlyMap<K1, V1>>;
 
-	function map<V0, V1>(atom: Source<readonly V0[]>, mapper: (value: V0, index: number) => V1): Source<readonly V1[]>;
+	function map<V0, V1>(
+		molecule: Molecule<readonly V0[]>,
+		mapper: (value: V0, index: number) => V1,
+	): Molecule<readonly V1[]>;
 
 	function map<K0, V0, K1 = K0, V1 = V0>(
-		atom: Source<AnyMap<K0, V0>>,
+		molecule: Molecule<AnyMap<K0, V0>>,
 		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
-	): Source<ReadonlyMap<K1, V1>>;
+	): Molecule<ReadonlyMap<K1, V1>>;
 
 	// React
 
-	function useAtomState<State>(atom: Source<State>): State;
+	function useAtomState<State>(molecule: Molecule<State>): State;
 
-	function useAtomState<State, Result>(atom: Source<State>, selector: (state: State) => Result): Result;
+	function useAtomState<State, Result>(molecule: Molecule<State>, selector: (state: State) => Result): Result;
 
-	function useSetAtom<State>(atom: Source<State>): (state: State | ((prev: State) => State)) => void;
+	function useSetAtom<State>(molecule: Molecule<State>): (state: State | ((prev: State) => State)) => void;
 
 	function useAtom<State>(
-		atom: Source<State>,
+		molecule: Molecule<State>,
 	): LuaTuple<[state: State, setState: (state: State | ((prev: State) => State)) => void]>;
 
 	function useAtom<State, Result>(
-		atom: Source<State>,
+		molecule: Molecule<State>,
 		selector: (state: State) => Result,
 	): LuaTuple<[state: Result, setState: (state: Result | ((prev: Result) => Result)) => void]>;
 

@@ -2,14 +2,14 @@ local atom = require(script.Parent.atom)
 local subscribe = require(script.Parent.subscribe)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
-type Source<T> = types.Source<T>
+type Molecule<T> = types.Molecule<T>
 
 type Map =
-	(<K0, V0, K1, V1>(atom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Source<{ [K1]: V1 }>)
-	& (<K0, V0, V1>(atom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Source<{ [K0]: V1 }>)
-	& (<K0, V0, K1, V1>(atom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Source<{ [K1]: V1 }>)
+	(<K0, V0, K1, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Molecule<{ [K1]: V1 }>)
+	& (<K0, V0, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Molecule<{ [K0]: V1 }>)
+	& (<K0, V0, K1, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Molecule<{ [K1]: V1 }>)
 
-local function map<K0, V0, K1, V1>(itemsAtom: Source<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Source<{ [K1]: V1 }>
+local function map<K0, V0, K1, V1>(getItems: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Molecule<{ [K1]: V1 }>
 	local mappedAtom = atom({})
 	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
 	local prevMappedItems: { [K1]: V1 } = {}
@@ -45,8 +45,8 @@ local function map<K0, V0, K1, V1>(itemsAtom: Source<{ [K0]: V0 }>, mapper: (V0,
 		mappedAtom(mappedItems)
 	end
 
-	unsubscribe = subscribe(itemsAtom, listener)
-	listener(itemsAtom())
+	unsubscribe = subscribe(getItems, listener)
+	listener(getItems())
 
 	return mappedAtom
 end

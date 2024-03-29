@@ -1,11 +1,11 @@
 local capture = require(script.Parent.capture)
 local store = require(script.Parent.store)
 
-local function effect(source: () -> nil): () -> ()
-	local atoms = capture(source)
+local function effect(molecule: () -> nil): () -> ()
+	local atoms = capture(molecule)
 
 	local function listener()
-		source()
+		molecule()
 	end
 
 	for atom in atoms do

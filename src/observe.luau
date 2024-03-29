@@ -1,12 +1,12 @@
 local effect = require(script.Parent.effect)
 local types = require(script.Parent.types)
-type Source<T> = types.Source<T>
+type Molecule<T> = types.Molecule<T>
 
-local function observe<K, V>(source: Source<{ [K]: V }>, factory: (value: V, key: K) -> () -> ()): () -> ()
+local function observe<K, V>(molecule: Molecule<{ [K]: V }>, factory: (value: V, key: K) -> () -> ()): () -> ()
 	local connections: { [K]: () -> () } = {}
 
 	local unsubscribe = effect(function()
-		local state = source()
+		local state = molecule()
 
 		for key, disconnect in connections do
 			if state[key] == nil then

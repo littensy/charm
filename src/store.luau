@@ -1,6 +1,5 @@
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
-type Source<T> = types.Source<T>
 type WeakMap<K, V> = types.WeakMap<K, V>
 
 local listeners: WeakMap<Atom<any>, WeakMap<() -> (), unknown>> = setmetatable({}, { __mode = "k" })

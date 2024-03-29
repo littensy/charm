@@ -1,14 +1,14 @@
 local capture = require(script.Parent.capture)
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
-type Source<T> = types.Source<T>
+type Molecule<T> = types.Molecule<T>
 
-local function subscribe<T>(source: Source<T>, callback: (state: T, prev: T) -> ()): () -> ()
-	local atoms, state = capture(source)
+local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T) -> ()): () -> ()
+	local atoms, state = capture(molecule)
 
 	local function listener()
 		local prevState = state
-		state = source()
+		state = molecule()
 		callback(state, prevState)
 	end
 
