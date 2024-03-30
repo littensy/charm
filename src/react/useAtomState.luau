@@ -13,7 +13,7 @@ local function useAtomState<State>(atom: Atom<State>, selector: ((State) -> Stat
 	local React = requireReact()
 
 	local state, setState = React.useState(function()
-		return if selector then atom(selector) else atom()
+		return if selector then selector(atom()) else atom()
 	end)
 
 	local latestSelector = React.useRef(selector)
