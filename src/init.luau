@@ -1,6 +1,7 @@
 _G[script.modules.Promise] = _G[script]
 
 local atom = require(script.atom)
+local batch = require(script.batch)
 local capture = require(script.capture)
 local derive = require(script.derive)
 local effect = require(script.effect)
@@ -21,6 +22,7 @@ export type SyncPayload = types.SyncPayload
 
 return {
 	atom = atom,
+	batch = batch,
 	capture = capture,
 	derive = derive,
 	effect = effect,

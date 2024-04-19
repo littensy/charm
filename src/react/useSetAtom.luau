@@ -1,5 +1,4 @@
 local requireReact = require(script.Parent.Parent.modules.React)
-
 local types = require(script.Parent.Parent.types)
 type Atom<T> = types.Atom<T>
 

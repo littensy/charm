@@ -1,21 +1,17 @@
 local store = require(script.Parent.store)
 
-local function unwrap<T>(atom: (() -> T) | T): T
-	if type(atom) ~= "function" then
-		return atom
+local function unwrap<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
+	if type(callback) ~= "function" then
+		return callback
 	end
 
-	if not store.shouldCapture() then
-		return atom()
+	if not store.isCapturing() then
+		return callback(...)
 	end
 
 	store.setCapturing(false)
-	local success, result = pcall(atom)
+	local result = callback(...)
 	store.setCapturing(true)
-
-	if not success then
-		error(`Failed to unwrap atom: ${result}`, 2)
-	end
 
 	return result
 end

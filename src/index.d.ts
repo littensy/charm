@@ -28,11 +28,13 @@ declare namespace Charm {
 
 	function subscribe<State>(molecule: Molecule<State>, callback: (state: State, prev: State) => void): Cleanup;
 
-	function effect(callback: Molecule<void>): Cleanup;
+	function effect(callback: () => void): Cleanup;
 
-	function unwrap<State>(molecule: State | Molecule<State>): State;
+	function unwrap<State, Args extends unknown[]>(molecule: State | ((...args: Args) => State), ...args: Args): State;
 
 	function capture<State>(molecule: Molecule<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
+
+	function batch(callback: () => void): void;
 
 	function observe<Item>(
 		molecule: Molecule<readonly Item[]>,
