@@ -2,7 +2,7 @@ local validate = require(script.Parent.Parent.Parent.sync.validate)
 
 return function()
 	it("validates inputs", function()
-		local cases = {
+		local cases: { [string]: { value: any, expected: any } } = {
 			array = { value = { 1, 2, 3 }, expected = true },
 			array_sparse = { value = { 1, nil :: any, 3 }, expected = true },
 			array_sparse_invalid = { value = { [1] = 0, [3] = 0 }, expected = false },
@@ -15,7 +15,7 @@ return function()
 			number_nan = { value = 0 / 0, expected = false },
 		}
 
-		for key, case in pairs(cases) do
+		for key, case in cases do
 			local success, result = pcall(function()
 				validate(case.value, key)
 			end)

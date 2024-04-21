@@ -1,16 +1,14 @@
 _G[script.modules.Promise] = _G[script]
 
 local atom = require(script.atom)
-local batch = require(script.batch)
-local capture = require(script.capture)
 local derive = require(script.derive)
 local effect = require(script.effect)
-local isAtom = require(script.isAtom)
 local map = require(script.map)
 local observe = require(script.observe)
 local useAtom = require(script.react.useAtom)
 local useAtomState = require(script.react.useAtomState)
 local useSetAtom = require(script.react.useSetAtom)
+local store = require(script.store)
 local subscribe = require(script.subscribe)
 local sync = require(script.sync)
 local types = require(script.types)
@@ -22,11 +20,12 @@ export type SyncPayload = types.SyncPayload
 
 return {
 	atom = atom,
-	batch = batch,
-	capture = capture,
+	batch = store.batch,
+	capture = store.capture,
+	notify = store.notify,
+	isAtom = store.isAtom,
 	derive = derive,
 	effect = effect,
-	isAtom = isAtom,
 	map = map,
 	observe = observe,
 	useAtom = useAtom,

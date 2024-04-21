@@ -22,8 +22,6 @@ declare namespace Charm {
 
 	function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
 
-	function isAtom(value: unknown): value is Atom<any>;
-
 	function derive<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
 
 	function subscribe<State>(molecule: Molecule<State>, callback: (state: State, prev: State) => void): Cleanup;
@@ -32,9 +30,13 @@ declare namespace Charm {
 
 	function unwrap<State, Args extends unknown[]>(molecule: State | ((...args: Args) => State), ...args: Args): State;
 
-	function capture<State>(molecule: Molecule<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
+	function isAtom(value: unknown): value is Atom<any>;
 
 	function batch(callback: () => void): void;
+
+	function capture<State>(molecule: Molecule<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
+
+	function notify(atom: Atom<unknown>): void;
 
 	function observe<Item>(
 		molecule: Molecule<readonly Item[]>,

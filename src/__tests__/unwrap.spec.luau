@@ -1,11 +1,11 @@
 local atom = require(script.Parent.Parent.atom)
-local capture = require(script.Parent.Parent.capture)
+local store = require(script.Parent.Parent.store)
 local unwrap = require(script.Parent.Parent.unwrap)
 
 return function()
 	it("calls an atom without capturing it", function()
 		local a, b, c = atom(1), atom(1), atom(1)
-		local captured, result = capture(function()
+		local captured, result = store.capture(function()
 			return a() + unwrap(b) + c()
 		end)
 		expect(captured[a]).to.be.ok()

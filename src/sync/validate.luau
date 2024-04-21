@@ -1,4 +1,4 @@
-local isAtom = require(script.Parent.Parent.isAtom)
+local store = require(script.Parent.Parent.store)
 
 local SAFE_KEYS = { string = true, number = true }
 local SAFE_VALUES = { string = true, number = true, boolean = true, table = true }
@@ -40,7 +40,7 @@ local function validate(value: any, key: any)
 	elseif typeOfValue == "table" then
 		if getmetatable(value) ~= nil then
 			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
-		elseif isAtom(value) then
+		elseif store.isAtom(value) then
 			error(`Cannot sync nested atoms! Got atom '{value.debugLabel}' at key '{key}'`)
 		elseif isUnsafeTable(value) then
 			error(

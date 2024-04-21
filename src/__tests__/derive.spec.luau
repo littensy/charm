@@ -42,7 +42,7 @@ return function()
 
 		local function listenersDecreased()
 			local count = 0
-			for _ in pairs(store.listeners[source]) do
+			for _ in next, store.listeners[source] do
 				count += 1
 			end
 			max = math.max(max, count)

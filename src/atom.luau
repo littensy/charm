@@ -21,14 +21,7 @@ local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
 
 		if state ~= nextState and not (equals and equals(state, nextState)) then
 			state = nextState
-
-			if store.isBatching() then
-				store.batched[atom] = true
-			else
-				for listener in pairs(table.clone(store.listeners[atom])) do
-					listener()
-				end
-			end
+			store.notify(atom)
 		end
 
 		return state
