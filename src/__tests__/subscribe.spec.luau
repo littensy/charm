@@ -1,6 +1,9 @@
 local atom = require(script.Parent.Parent.atom)
 local derive = require(script.Parent.Parent.derive)
+local store = require(script.Parent.Parent.store)
 local subscribe = require(script.Parent.Parent.subscribe)
+local collect = require(script.Parent.Parent.utils.collect)
+local count = require(script.Parent.Parent.utils.count)
 
 return function()
 	it("runs on state change", function()
@@ -27,25 +30,41 @@ return function()
 		local source = atom(1)
 		local updates = 0
 
-		for _ = 1, 1000 do
-			-- The idea here is to test whether subscribe() prevents every derived
-			-- atom in a chain from being garbage collected. If any are GCed, then
-			-- the subscription will stop updating and the test will fail.
-			local derived = derive(function()
-				return source()
-			end)
-			subscribe(
-				derive(function()
-					return derived() * 2
-				end),
-				function()
-					updates += 1
-				end
-			)
+		-- Create a new scope to encapsulate variables with a limited lifetime, like
+		-- 'unsubscribe' and 'derived', to ensure they are garbage collected.
+		--
+		-- The idea here is to test whether subscribe() prevents every derived
+		-- atom in a chain from being garbage collected. If any are GCed, then
+		-- the subscription will stop updating and the test will fail.
+		do
+			local unsubscribe
+
+			do
+				local derived = derive(function()
+					return source()
+				end)
+
+				unsubscribe = subscribe(
+					derive(function()
+						return derived() * 2
+					end),
+					function()
+						updates += 1
+					end
+				)
+			end
+
+			collect()
+			source(source() + 1)
+
+			assert(updates == 1, "subscription stopped updating")
+			assert(count(store.listeners[source]) == 1, "derived atom was garbage collected")
+
+			unsubscribe()
 		end
 
-		source(source() + 1)
-		task.wait()
-		expect(updates).to.equal(1000)
+		collect()
+
+		assert(count(store.listeners[source]) == 0, "derived atom did not collect")
 	end)
 end

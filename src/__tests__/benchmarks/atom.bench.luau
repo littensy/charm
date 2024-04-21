@@ -5,6 +5,8 @@ local Package = game:GetService("ReplicatedStorage").Packages.charm
 
 local atom = require(Package.atom)
 local derive = require(Package.derive)
+local effect = require(Package.effect)
+local subscribe = require(Package.subscribe)
 
 local function parameterGenerator()
 	return atom({ count = 0 })
@@ -26,14 +28,13 @@ local benchmarks = {
 		end
 	end,
 
-	derived_memo = function(_, source: any)
-		derive(function()
+	derived_nested = function(_, source: any)
+		local double = derive(function()
 			return { count = 2 * source().count }
-		end, {
-			equals = function(previous, current)
-				return previous.count == current.count
-			end,
-		})
+		end)
+		derive(function()
+			return { count = 2 * double().count }
+		end)
 		for _ = 1, 500 do
 			source({ count = math.random(1, 2) })
 		end

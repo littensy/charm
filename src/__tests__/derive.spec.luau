@@ -1,6 +1,8 @@
 local atom = require(script.Parent.Parent.atom)
 local derive = require(script.Parent.Parent.derive)
 local store = require(script.Parent.Parent.store)
+local collect = require(script.Parent.Parent.utils.collect)
+local count = require(script.Parent.Parent.utils.count)
 
 return function()
 	it("memoizes the result", function()
@@ -35,34 +37,34 @@ return function()
 		expect(quadruple()).to.equal(8)
 	end)
 
-	it("garbage collects", function()
-		-- large values coerce the garbage collector to run
-		local source = atom(string.rep("x", 1e5))
-		local max = 0
+	it("collects derived atoms", function()
+		local source = atom(0)
 
-		local function listenersDecreased()
-			local count = 0
-			for _ in next, store.listeners[source] do
-				count += 1
-			end
-			max = math.max(max, count)
-			return count < max
-		end
+		derive(function()
+			return source()
+		end)
 
-		for index = 1, 500 do
-			derive(function()
-				return string.upper(source())
+		collect()
+
+		assert(count(store.listeners[source]) == 0, "derived atom did not gc")
+	end)
+
+	it("collects nested derived atoms", function()
+		local source = atom(0)
+
+		do
+			-- Declare this in another scope to ensure no references are kept
+			local derived = derive(function()
+				return source()
 			end)
-			if index % 50 == 0 then
-				-- derived atoms should be collected when memory is stressed
-				source(source() .. "x")
-				task.wait()
-			end
-			if listenersDecreased() then
-				return
-			end
+
+			derive(function()
+				return derived() * 2
+			end)
 		end
 
-		error("None of the derived atoms were collected")
+		collect()
+
+		assert(count(store.listeners[source]) == 0, "nested derived atom did not gc")
 	end)
 end
