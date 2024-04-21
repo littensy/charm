@@ -5,8 +5,6 @@ local Package = game:GetService("ReplicatedStorage").Packages.charm
 
 local atom = require(Package.atom)
 local derive = require(Package.derive)
-local effect = require(Package.effect)
-local subscribe = require(Package.subscribe)
 
 local function parameterGenerator()
 	return atom({ count = 0 })
