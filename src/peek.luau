@@ -1,6 +1,6 @@
 local store = require(script.Parent.store)
 
-local function unwrap<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
+local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
 	if type(callback) ~= "function" then
 		return callback
 	end
@@ -16,4 +16,4 @@ local function unwrap<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
 	return result
 end
 
-return unwrap
+return peek

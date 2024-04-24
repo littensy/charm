@@ -61,7 +61,7 @@ Charm = "littensy/charm@VERSION"
 
 #### `map(atom, mapper)`
 
-#### `unwrap(atom)`
+#### `peek(atom)`
 
 ### React
 

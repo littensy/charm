@@ -28,7 +28,7 @@ declare namespace Charm {
 
 	function effect(callback: () => void): Cleanup;
 
-	function unwrap<State, Args extends unknown[]>(molecule: State | ((...args: Args) => State), ...args: Args): State;
+	function peek<State, Args extends unknown[]>(molecule: State | ((...args: Args) => State), ...args: Args): State;
 
 	function isAtom(value: unknown): value is Atom<any>;
 
