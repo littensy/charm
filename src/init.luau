@@ -7,8 +7,6 @@ local map = require(script.map)
 local observe = require(script.observe)
 local peek = require(script.peek)
 local useAtom = require(script.react.useAtom)
-local useAtomState = require(script.react.useAtomState)
-local useSetAtom = require(script.react.useSetAtom)
 local store = require(script.store)
 local subscribe = require(script.subscribe)
 local sync = require(script.sync)
@@ -26,8 +24,6 @@ return {
 	observe = observe,
 	peek = peek,
 	useAtom = useAtom,
-	useAtomState = useAtomState,
-	useSetAtom = useSetAtom,
 	batch = store.batch,
 	capture = store.capture,
 	notify = store.notify,

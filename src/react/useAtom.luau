@@ -1,18 +1,19 @@
+local requireReact = require(script.Parent.Parent.modules.React)
+local subscribe = require(script.Parent.Parent.subscribe)
 local types = require(script.Parent.Parent.types)
-type Atom<T> = types.Atom<T>
-local useAtomState = require(script.Parent.useAtomState)
-local useSetAtom = require(script.Parent.useSetAtom)
+type Molecule<T> = types.Molecule<T>
 
-type UseAtom =
-	(<State>(atom: Atom<State>) -> (State, useSetAtom.SetState<State>))
-	& (<State, Result>(
-		atom: Atom<State>,
-		selector: ((State) -> Result)?
-	) -> (State | Result, useSetAtom.SetState<State | Result>))
-	& (<State, Result>(atom: Atom<State>, selector: (State) -> Result) -> (Result, useSetAtom.SetState<State>))
+local function useAtom<State>(molecule: Molecule<State>, dependencies: { any }?): State
+	local React = requireReact()
 
-local function useAtom<State>(atom: Atom<State>, selector: ((State) -> State)?): (State, useSetAtom.SetState<State>)
-	return useAtomState(atom, selector), useSetAtom(atom)
+	local state, setState = React.useState(molecule)
+
+	React.useEffect(function()
+		setState(molecule())
+		return subscribe(molecule, setState)
+	end, dependencies or {})
+
+	return state
 end
 
-return useAtom :: UseAtom
+return useAtom

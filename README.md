@@ -65,11 +65,7 @@ Charm = "littensy/charm@VERSION"
 
 ### React
 
-#### `useAtom(atom, selector?)`
-
-#### `useAtomState(atom)`
-
-#### `useSetAtom(atom)`
+#### `useAtom(atom, dependencies?)`
 
 ### Sync
 

@@ -65,20 +65,7 @@ declare namespace Charm {
 
 	// React
 
-	function useAtomState<State>(molecule: Molecule<State>): State;
-
-	function useAtomState<State, Result>(molecule: Molecule<State>, selector: (state: State) => Result): Result;
-
-	function useSetAtom<State>(molecule: Molecule<State>): (state: State | ((prev: State) => State)) => void;
-
-	function useAtom<State>(
-		molecule: Molecule<State>,
-	): LuaTuple<[state: State, setState: (state: State | ((prev: State) => State)) => void]>;
-
-	function useAtom<State, Result>(
-		molecule: Molecule<State>,
-		selector: (state: State) => Result,
-	): LuaTuple<[state: Result, setState: (state: Result | ((prev: Result) => Result)) => void]>;
+	function useAtom<State>(molecule: Molecule<State>, dependencies?: unknown[]): State;
 
 	// Sync
 
