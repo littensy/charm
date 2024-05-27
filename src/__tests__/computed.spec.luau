@@ -1,5 +1,5 @@
 local atom = require(script.Parent.Parent.atom)
-local derive = require(script.Parent.Parent.derive)
+local computed = require(script.Parent.Parent.computed)
 local store = require(script.Parent.Parent.store)
 local collect = require(script.Parent.Parent.utils.collect)
 local count = require(script.Parent.Parent.utils.count)
@@ -9,7 +9,7 @@ return function()
 		local calls = 0
 		local a = atom(1)
 		local b = atom(2)
-		local double = derive(function()
+		local double = computed(function()
 			calls += 1
 			return a() * b()
 		end)
@@ -26,10 +26,10 @@ return function()
 
 	it("can be nested", function()
 		local source = atom(1)
-		local double = derive(function()
+		local double = computed(function()
 			return source() * 2
 		end)
-		local quadruple = derive(function()
+		local quadruple = computed(function()
 			return double() * 2
 		end)
 		expect(quadruple()).to.equal(4)
@@ -37,34 +37,35 @@ return function()
 		expect(quadruple()).to.equal(8)
 	end)
 
-	it("collects derived atoms", function()
+	it("collects computed atoms", function()
 		local source = atom(0)
 
-		derive(function()
+		computed(function()
 			return source()
 		end)
 
 		collect()
 
-		assert(count(store.listeners[source]) == 0, "derived atom did not gc")
+		assert(count(store.listeners[source]) == 0, "computed atom did not gc")
 	end)
 
-	it("collects nested derived atoms", function()
+	it("collects nested computed atoms", function()
 		local source = atom(0)
 
 		do
-			-- Declare this in another scope to ensure no references are kept
-			local derived = derive(function()
-				return source()
+			-- Declare this in another scope to ensure no references exist at the
+			-- time of garbage collection.
+			local double = computed(function()
+				return source() * 2
 			end)
 
-			derive(function()
-				return derived() * 2
+			computed(function()
+				return double() * 2
 			end)
 		end
 
 		collect()
 
-		assert(count(store.listeners[source]) == 0, "nested derived atom did not gc")
+		assert(count(store.listeners[source]) == 0, "nested computed atom did not gc")
 	end)
 end

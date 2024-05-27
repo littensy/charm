@@ -49,6 +49,7 @@ local function apply(state: any, patches: any): any
 end
 
 return {
+	NONE = NONE,
 	diff = diff,
 	apply = apply,
 }

@@ -1,9 +1,9 @@
 _G[script.modules.Promise] = _G[script]
 
 local atom = require(script.atom)
-local derive = require(script.derive)
+local computed = require(script.computed)
 local effect = require(script.effect)
-local map = require(script.map)
+local mapped = require(script.mapped)
 local observe = require(script.observe)
 local peek = require(script.peek)
 local useAtom = require(script.react.useAtom)
@@ -18,9 +18,9 @@ export type SyncPayload = types.SyncPayload
 
 return {
 	atom = atom,
-	derive = derive,
+	computed = computed,
 	effect = effect,
-	map = map,
+	mapped = mapped,
 	observe = observe,
 	peek = peek,
 	useAtom = useAtom,

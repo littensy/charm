@@ -16,7 +16,6 @@ local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
 			return state
 		end
 
-		-- Atoms called in a function should not be a part of the dependency tree
 		local nextState = peek(..., state)
 
 		if state ~= nextState and not (equals and equals(state, nextState)) then

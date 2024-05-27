@@ -1,5 +1,6 @@
 local atom = require(script.Parent.atom)
-local subscribe = require(script.Parent.subscribe)
+local effect = require(script.Parent.effect)
+local peek = require(script.Parent.peek)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
 type Molecule<T> = types.Molecule<T>
@@ -9,18 +10,19 @@ type Map =
 	& (<K0, V0, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Molecule<{ [K0]: V1 }>)
 	& (<K0, V0, K1, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Molecule<{ [K1]: V1 }>)
 
-local function map<K0, V0, K1, V1>(getItems: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Molecule<{ [K1]: V1 }>
+local function mapped<K0, V0, K1, V1>(molecule: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Molecule<{ [K1]: V1 }>
 	local mappedAtom = atom({})
 	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
 	local prevMappedItems: { [K1]: V1 } = {}
 	local unsubscribe
 
-	local function listener(items: { [K0]: V0 })
+	unsubscribe = effect(function()
 		if not mappedAtomRef.current then
 			return unsubscribe()
 		end
 
-		local mappedItems = table.clone(mappedAtomRef.current())
+		local items = molecule()
+		local mappedItems = table.clone(peek(mappedAtomRef.current))
 		local mappedKeys = {}
 
 		for key, item in items do
@@ -43,12 +45,9 @@ local function map<K0, V0, K1, V1>(getItems: Molecule<{ [K0]: V0 }>, mapper: (V0
 
 		prevMappedItems = mappedItems
 		mappedAtom(mappedItems)
-	end
-
-	unsubscribe = subscribe(getItems, listener)
-	listener(getItems())
+	end)
 
 	return mappedAtom
 end
 
-return map :: Map
+return mapped :: Map

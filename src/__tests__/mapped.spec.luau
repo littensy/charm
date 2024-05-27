@@ -1,12 +1,12 @@
 local atom = require(script.Parent.Parent.atom)
-local map = require(script.Parent.Parent.map)
+local mapped = require(script.Parent.Parent.mapped)
 local observe = require(script.Parent.Parent.observe)
 local store = require(script.Parent.Parent.store)
 
 return function()
 	it("returns mapped atoms", function()
 		local itemsAtom = atom({ "a", "b", "c" })
-		local mappedAtom = map(itemsAtom, function(value, key)
+		local mappedAtom = mapped(itemsAtom, function(value, key)
 			return string.upper(value), key
 		end)
 		local updates = 0
@@ -35,7 +35,7 @@ return function()
 
 	it("uses key extractor", function()
 		local itemsAtom = atom({ { key = 1 }, { key = 2 }, { key = 3 } })
-		local mappedAtom = map(itemsAtom, function(item)
+		local mappedAtom = mapped(itemsAtom, function(item)
 			return item, item.key
 		end)
 
@@ -61,7 +61,7 @@ return function()
 			{ key = 3, value = "c" },
 		})
 
-		local mappedAtom = map(itemsAtom, function(item)
+		local mappedAtom = mapped(itemsAtom, function(item)
 			return item, item.key
 		end)
 

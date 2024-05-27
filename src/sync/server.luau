@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 
+local subscribe = require(script.Parent.Parent.subscribe)
 local types = require(script.Parent.Parent.types)
 type Atom<T> = types.Atom<T>
 type SyncPayload = types.SyncPayload
@@ -13,8 +14,8 @@ type ServerOptions = {
 
 type ServerSyncer = {
 	connect: (self: ServerSyncer, callback: (player: Player, payload: SyncPayload) -> ()) -> () -> (),
-	flush: (self: ServerSyncer, player: Player) -> (),
 	hydrate: (self: ServerSyncer, player: Player) -> (),
+	_sendPatch: (self: ServerSyncer, player: Player) -> (),
 }
 
 local function server(options: ServerOptions): ServerSyncer
@@ -23,53 +24,76 @@ local function server(options: ServerOptions): ServerSyncer
 
 	local self = {} :: ServerSyncer
 	local sync: (player: Player, payload: SyncPayload) -> ()
-	local state: {}
+	local state: { [string]: any } = {}
+	local stateSnapshot = {}
+	local changed = false
 
-	local function getState()
-		local state = {}
-		for key, atom in atoms do
-			state[key] = atom()
-		end
-		return state
-	end
-
+	-- Start the interval to send state patches over the network.
 	function self:connect(callback)
+		local cleanups = {}
 		sync = callback
-		state = getState()
 
-		return setInterval(function()
-			local previous = state
-			state = getState()
+		-- Populate the initial state and snapshot for each atom.
+		-- Subscribe to each atom and update the state when it changes.
+		for key, atom in atoms do
+			cleanups[key] = subscribe(atom, function(current)
+				state[key] = current
+				changed = true
+			end)
 
-			if state ~= previous then
-				local diffs = patch.diff(previous, state)
+			state[key] = atom()
+			stateSnapshot[key] = atom()
+		end
 
-				for _, player in Players:GetPlayers() do
-					callback(player, {
-						type = "patch",
-						data = diffs,
-					})
-				end
+		local disconnect = setInterval(function()
+			if not changed then
+				return
+			end
+
+			local diffs = patch.diff(stateSnapshot, state)
+			stateSnapshot = table.clone(state)
+			changed = false
+
+			for _, player in Players:GetPlayers() do
+				callback(player, {
+					type = "patch",
+					data = diffs,
+				})
 			end
 		end, interval)
+
+		return function()
+			disconnect()
+			for _, cleanup in cleanups do
+				cleanup()
+			end
+		end
 	end
 
-	function self:flush(player: Player)
-		local previous = state
-		state = getState()
-
-		sync(player, {
-			type = "patch",
-			data = patch.diff(previous, state),
-		})
-	end
-
+	-- Send the initial state to a player when they join the server.
 	function self:hydrate(player)
 		assert(sync, "connect() must be called before hydrate()")
 
 		sync(player, {
 			type = "init",
-			data = getState(),
+			data = state,
+		})
+	end
+
+	function self:_sendPatch(player: Player)
+		assert(sync, "connect() must be called before _sendPatch()")
+
+		if not changed then
+			return
+		end
+
+		local diffs = patch.diff(stateSnapshot, state)
+		stateSnapshot = table.clone(state)
+		changed = false
+
+		sync(player, {
+			type = "patch",
+			data = diffs,
 		})
 	end
 

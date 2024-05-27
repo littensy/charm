@@ -3,7 +3,7 @@ local types = require(script.Parent.types)
 type Molecule<T> = types.Molecule<T>
 
 local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T) -> ()): () -> ()
-	local atoms, state = store.capture(molecule)
+	local captured, state = store.capture(molecule)
 
 	local function listener()
 		local prevState = state
@@ -11,12 +11,12 @@ local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T)
 		callback(state, prevState)
 	end
 
-	for atom in atoms do
+	for atom in captured do
 		store.listeners[atom][listener] = true
 	end
 
 	return function()
-		for atom in atoms do
+		for atom in captured do
 			store.listeners[atom][listener] = nil
 		end
 	end

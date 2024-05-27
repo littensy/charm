@@ -15,6 +15,7 @@ local function client(options: ClientOptions): ClientSyncer
 	local atoms = options.atoms
 	local self = {} :: ClientSyncer
 
+	-- Apply the state changes sent by the server.
 	function self:sync(payload)
 		for key, state in payload.data do
 			if payload.type == "patch" then

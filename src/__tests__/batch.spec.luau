@@ -1,5 +1,5 @@
 local atom = require(script.Parent.Parent.atom)
-local derive = require(script.Parent.Parent.derive)
+local computed = require(script.Parent.Parent.computed)
 local effect = require(script.Parent.Parent.effect)
 local store = require(script.Parent.Parent.store)
 local subscribe = require(script.Parent.Parent.subscribe)
@@ -37,15 +37,15 @@ return function()
 		expect(value).to.equal(1)
 	end)
 
-	it("batches derived atoms", function()
+	it("batches computed atoms", function()
 		local source = atom(1)
 		local updates = 0
-		local computed = 0
-		local double = derive(function()
-			computed += 1
+		local computations = 0
+		local double = computed(function()
+			computations += 1
 			return source() * 2
 		end)
-		computed = 0 -- derived atoms will run once initially
+		computations = 0 -- computed atoms will run once initially
 		subscribe(double, function()
 			updates += 1
 		end)
@@ -55,7 +55,7 @@ return function()
 			source(4)
 		end)
 		expect(updates).to.equal(1)
-		expect(computed).to.equal(1)
+		expect(computations).to.equal(1)
 		expect(double()).to.equal(8)
 	end)
 end

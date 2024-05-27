@@ -18,17 +18,14 @@
 
 </div>
 
-**Charm** is a Roblox state management library, inspired by [Jotai](https://jotai.org). Designed to be an alternative to [Reflex](https://littensy.github.io/reflex), Charm aims to bring an atomic and composable approach to your game's state.
+**Charm** is an atomic state management library inspired by [Jotai](https://jotai.org). Designed to be a unique alternative to [Reflex](https://littensy.github.io/reflex), Charm aims to provide a simple and composable interface for your game's state.
 
 > [!NOTE]
-> Charm is incomplete and not ready for use.
+> Charm is incomplete and not ready for production use.
 
 ## 📦 Setup
 
 ### TypeScript
-
-Install Charm through your package manager of choice. \
-[React](https://github.com/littensy/rbxts-react) is optional, but highly recommended.
 
 ```sh
 npm install @rbxts/charm
@@ -49,17 +46,17 @@ Charm = "littensy/charm@VERSION"
 
 ### Charm
 
-#### `atom(state)`
+#### `atom(state, options?)`
 
 #### `effect(callback)`
 
 #### `subscribe(atom, listener)`
 
-#### `derive(atom, equals?)`
+#### `computed(atom, options?)`
 
 #### `observe(atom, observer)`
 
-#### `map(atom, mapper)`
+#### `mapped(atom, mapper)`
 
 #### `peek(atom)`
 

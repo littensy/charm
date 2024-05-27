@@ -22,7 +22,7 @@ declare namespace Charm {
 
 	function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
 
-	function derive<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
+	function computed<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
 
 	function subscribe<State>(molecule: Molecule<State>, callback: (state: State, prev: State) => void): Cleanup;
 
@@ -48,17 +48,17 @@ declare namespace Charm {
 		factory: (item: Item, key: Key) => Cleanup | void,
 	): Cleanup;
 
-	function map<V0, K1, V1>(
+	function mapped<V0, K1, V1>(
 		molecule: Molecule<readonly V0[]>,
 		mapper: (value: V0, index: number) => LuaTuple<[value: V1 | undefined, key: K1]>,
 	): Molecule<ReadonlyMap<K1, V1>>;
 
-	function map<V0, V1>(
+	function mapped<V0, V1>(
 		molecule: Molecule<readonly V0[]>,
 		mapper: (value: V0, index: number) => V1,
 	): Molecule<readonly V1[]>;
 
-	function map<K0, V0, K1 = K0, V1 = V0>(
+	function mapped<K0, V0, K1 = K0, V1 = V0>(
 		molecule: Molecule<AnyMap<K0, V0>>,
 		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
 	): Molecule<ReadonlyMap<K1, V1>>;

@@ -4,7 +4,7 @@
 local Package = game:GetService("ReplicatedStorage").Packages.charm
 
 local atom = require(Package.atom)
-local derive = require(Package.derive)
+local computed = require(Package.computed)
 
 local function parameterGenerator()
 	return atom({ count = 0 })
@@ -17,8 +17,8 @@ local benchmarks = {
 		end
 	end,
 
-	derived = function(_, source: any)
-		derive(function()
+	computed = function(_, source: any)
+		computed(function()
 			return { count = 2 * source().count }
 		end)
 		for _ = 1, 500 do
@@ -26,11 +26,11 @@ local benchmarks = {
 		end
 	end,
 
-	derived_nested = function(_, source: any)
-		local double = derive(function()
+	computed_nested = function(_, source: any)
+		local double = computed(function()
 			return { count = 2 * source().count }
 		end)
-		derive(function()
+		computed(function()
 			return { count = 2 * double().count }
 		end)
 		for _ = 1, 500 do
