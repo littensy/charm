@@ -18,14 +18,14 @@
 
 </div>
 
-**Charm** is an atomic state management library inspired by [Jotai](https://jotai.org). Designed to be a unique alternative to [Reflex](https://littensy.github.io/reflex), Charm aims to provide a simple and composable interface for your game's state.
+**Charm** is an atomic state management library inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Designed to be a more composable alternative to Reflex, Charm aims to address common criticisms of Rodux-like state containers to better address certain use cases.
 
 > [!NOTE]
-> Charm is incomplete and not ready for production use.
+> The documentation is a work-in-progress! Please refer to the [examples](#🚀-examples) section for more information on how to use Charm.
 
 ## 📦 Setup
 
-### TypeScript
+Install Charm for roblox-ts using your package manager of choice.
 
 ```sh
 npm install @rbxts/charm
@@ -33,9 +33,7 @@ yarn add @rbxts/charm
 pnpm add @rbxts/charm
 ```
 
-### Wally
-
-Add `littensy/charm` to your `wally.toml` file.
+Alternatively, add `littensy/charm` to your `wally.toml` file.
 
 ```toml
 [dependencies]
@@ -86,12 +84,16 @@ import { atom, subscribe } from "@rbxts/charm";
 const counterAtom = atom(0);
 const doubleCounterAtom = () => counterAtom() * 2;
 
+function incrementCounter() {
+	counterAtom((count) => count + 1);
+}
+
 subscribe(doubleCounterAtom, (value) => {
 	print(value);
 });
 
 counterAtom(1);
-counterAtom((count) => count + 1);
+incrementCounter();
 ```
 
 ### Counter component
@@ -99,21 +101,68 @@ counterAtom((count) => count + 1);
 ```tsx
 import React from "@rbxts/react";
 import { useAtom } from "@rbxts/charm";
-import { counterAtom } from "./counter-atom";
+import { counterAtom, incrementCounter } from "./counter-atom";
 
 function Counter() {
-	const [count, setCount] = useAtom(counterAtom);
+	const count = useAtom(counterAtom);
 
 	return (
 		<textlabel
 			Text={`Count: ${count}`}
 			Size={new UDim2(0, 100, 0, 50)}
 			Event={{
-				Activated: () => setCount(count + 1),
+				Activated: () => incrementCounter(),
 			}}
 		/>
 	);
 }
+```
+
+### Server-client sync
+
+Charm provides client and server objects for synchronizing state between the server and clients. Start by defining a module (or creating an object) exporting the atoms you want to sync:
+
+```ts
+export { counterAtom } from "./counter-atom";
+export { writerAtom } from "./writer-atom";
+```
+
+Then, on the server, create a server sync object and pass in the atoms to sync. Use remote events to broadcast state updates and send initial state to clients upon request.
+
+```ts
+import { sync } from "@rbxts/charm";
+import { remotes } from "./remotes";
+import * as atoms from "./atoms";
+
+const server = sync.server({ atoms });
+
+// Broadcast a state update to a specific player
+server.connect((player, payload) => {
+	remotes.sync.fire(player, payload);
+});
+
+// Send initial state to a player upon request
+remotes.init.connect((player) => {
+	server.hydrate(player);
+});
+```
+
+Finally, on the client, create a client sync object and apply incoming state changes.
+
+```ts
+import { sync } from "@rbxts/charm";
+import { remotes } from "./remotes";
+import * as atoms from "./atoms";
+
+const client = sync.client({ atoms });
+
+// Listen for incoming state changes from the server
+remotes.sync.connect((payload) => {
+	client.sync(payload);
+});
+
+// Request initial state from the server
+remotes.init.fire();
 ```
 
 ---
