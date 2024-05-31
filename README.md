@@ -23,6 +23,18 @@
 > [!NOTE]
 > The documentation is a work-in-progress! Please refer to the [examples](#🚀-examples) section for more information on how to use Charm.
 
+## 🍀 Features
+
+- ⚛️ **Manage state with _atoms_.** Decompose state into small, distinct containers called _atoms_, as opposed to combining them into a single store.
+
+- 💪 **Minimal, yet powerful.** No concept of actions or middleware — write simple functions to read from and write to state.
+
+- 🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
+
+- 🦄 **Like magic.** Selector functions can be subscribed to as-is — their memoization and dependencies are resolved for you.
+
+---
+
 ## 📦 Setup
 
 Install Charm for roblox-ts using your package manager of choice.
@@ -39,6 +51,8 @@ Alternatively, add `littensy/charm` to your `wally.toml` file.
 [dependencies]
 Charm = "littensy/charm@VERSION"
 ```
+
+---
 
 ## 📚 API Reference
 
@@ -73,6 +87,8 @@ Charm = "littensy/charm@VERSION"
 #### `Server.connect(callback)`
 
 #### `Server.hydrate(player)`
+
+---
 
 ## 🚀 Examples
 
