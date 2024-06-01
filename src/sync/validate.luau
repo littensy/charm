@@ -41,7 +41,7 @@ local function validate(value: any, key: any)
 		if getmetatable(value) ~= nil then
 			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
 		elseif store.isAtom(value) then
-			error(`Cannot sync nested atoms! Got atom '{value.debugLabel}' at key '{key}'`)
+			error(`Cannot sync nested atoms! Got atom at key '{key}'`)
 		elseif isUnsafeTable(value) then
 			error(
 				`Cannot sync tables unsupported by remote events! The value has the key '{key}'.\n\n`
