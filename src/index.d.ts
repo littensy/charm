@@ -83,12 +83,12 @@ declare namespace Charm {
 	 * changes. Returns a cleanup function that unsubscribes the callback.
 	 *
 	 * Note that dependencies are only evaluated once when the effect is created,
-	 * conditional dependencies may not work as expected.
+	 * so conditional dependencies may not work as expected.
 	 *
 	 * @param callback The function to run.
 	 * @returns A function that unsubscribes the callback.
 	 */
-	function effect(callback: () => void): Cleanup;
+	function effect(callback: () => Cleanup | void): Cleanup;
 
 	/**
 	 * Returns the result of the function without subscribing to changes. If a
