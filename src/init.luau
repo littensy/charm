@@ -5,7 +5,6 @@ local computed = require(script.computed)
 local effect = require(script.effect)
 local mapped = require(script.mapped)
 local observe = require(script.observe)
-local peek = require(script.peek)
 local useAtom = require(script.react.useAtom)
 local store = require(script.store)
 local subscribe = require(script.subscribe)
@@ -22,12 +21,12 @@ return {
 	effect = effect,
 	mapped = mapped,
 	observe = observe,
-	peek = peek,
 	useAtom = useAtom,
 	batch = store.batch,
 	capture = store.capture,
-	notify = store.notify,
 	isAtom = store.isAtom,
+	notify = store.notify,
+	peek = store.peek,
 	subscribe = subscribe,
 	sync = sync,
 }

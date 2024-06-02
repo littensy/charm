@@ -29,6 +29,13 @@ local function isUnsafeTable(object: { [any]: any })
 	return false
 end
 
+--[=[
+	Validates a value to ensure it can be synced over a remote event.
+
+	@param value The value to validate.
+	@param key The key of the value in the table.
+	@error Throws an error if the value cannot be synced.
+]=]
 local function validate(value: any, key: any)
 	local typeOfKey = type(key)
 	local typeOfValue = type(value)
