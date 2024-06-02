@@ -176,8 +176,6 @@ declare namespace Charm {
 		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
 	): Molecule<ReadonlyMap<K1, V1>>;
 
-	// React
-
 	/**
 	 * A hook that subscribes to changes in the given atom or molecule. The
 	 * component is re-rendered whenever the state changes.
