@@ -1,6 +1,6 @@
 <p align="center">
   <p align="center">
-	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/master/images/logo.png" alt="Logo">
+	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/main/images/logo.png" alt="Logo">
   </p>
   <h1 align="center"><b>Charm</b></h1>
   <p align="center">
@@ -12,7 +12,7 @@
 
 <div align="center">
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/littensy/charm/ci.yml?style=for-the-badge&branch=master&logo=github)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/littensy/charm/ci.yml?style=for-the-badge&branch=main&logo=github)
 [![NPM Version](https://img.shields.io/npm/v/@rbxts/charm.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/@rbxts/charm)
 [![GitHub License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE.md)
 
