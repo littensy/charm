@@ -1,3 +1,4 @@
+local atom = require(script.Parent.Parent.Parent.atom)
 local validate = require(script.Parent.Parent.Parent.sync.validate)
 
 return function()
@@ -13,6 +14,8 @@ return function()
 			number = { value = 1, expected = true },
 			number_infinity = { value = math.huge, expected = false },
 			number_nan = { value = 0 / 0, expected = false },
+
+			nested_atom = { value = atom(0), expected = false },
 		}
 
 		for key, case in cases do
