@@ -1,5 +1,9 @@
 local validate = require(script.Parent.validate)
 
+--[=[
+	A special value that denotes the absence of a value. Used to represent
+	undefined values in patches.
+]=]
 local NONE = { __none = "__none" }
 
 local function diff(prevState: { [any]: any }, nextState: { [any]: any })

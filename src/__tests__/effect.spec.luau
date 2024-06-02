@@ -24,7 +24,23 @@ return function()
 
 		unsubscribe()
 		a(4)
-
 		expect(current).to.equal(6)
+	end)
+
+	it("accepts a cleanup function", function()
+		local a = atom(0)
+		local cleanups = 0
+		local unsubscribe = effect(function()
+			a()
+			return function()
+				cleanups += 1
+			end
+		end)
+
+		expect(cleanups).to.equal(0)
+		a(1)
+		expect(cleanups).to.equal(1)
+		unsubscribe()
+		expect(cleanups).to.equal(2)
 	end)
 end
