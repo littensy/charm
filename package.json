@@ -26,6 +26,7 @@
 	"homepage": "https://github.com/littensy/charm",
 	"files": [
 		"src",
+		"default.project.json",
 		"!src/**/*.spec.luau"
 	],
 	"publishConfig": {
