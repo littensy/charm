@@ -24,7 +24,7 @@
 
 - ⚛️ **Manage state with _atoms_.** Decompose state into small, distinct containers called _atoms_, as opposed to combining them into a single store.
 
-- 💪 **Minimal, yet powerful.** No concept of actions or middleware — write simple functions to read from and write to state.
+- 💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
 
 - 🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
 
@@ -48,6 +48,23 @@ Alternatively, add `littensy/charm` to your `wally.toml` file.
 [dependencies]
 Charm = "littensy/charm@VERSION"
 ```
+
+---
+
+## 🐛 Debugging
+
+Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true` at the entry point of your project.
+
+Enabling `__DEV__` adds a few helpful features:
+
+- Better error handling for molecules, listeners, and batched functions:
+
+  - Errors provide the function's name and line number.
+  - Yielding in these functions will throw an error.
+
+- Server state is validated for [remote event limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations) before being passed to the client.
+
+Enabling debug mode in unit tests, storybooks, and other development environments can help you catch potential issues early. However, remember to turn off debug mode in production to avoid the performance overhead.
 
 ---
 
@@ -388,18 +405,6 @@ remotes.requestState.connect((player) => {
 #### Caveats
 
 - The server sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes sending the initial state, which is implemented via `requestState` in the example above.
-
----
-
-## 🚧 Development
-
-Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true`.
-
-Currently, the debug flag enables the following checks:
-
-- Molecules, listeners, and batched functions are not allowed to yield, and will throw an error if they do.
-
-- Server state is validated before sending to clients. If the state is not serializable, an error will be thrown. A list of common cases can be found in the [source code](src/__tests__/sync/validate.spec.luau).
 
 ---
 
