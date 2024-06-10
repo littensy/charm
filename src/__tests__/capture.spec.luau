@@ -28,4 +28,21 @@ return function()
 		expect(deps[a]).to.be.ok()
 		expect(result).to.equal(1)
 	end)
+
+	it("allows nested captures", function()
+		local a = atom(1)
+		local b = atom(1)
+		local inner
+		local outer = store.capture(function()
+			inner = store.capture(function()
+				return b()
+			end)
+			return a()
+		end)
+
+		assert(outer[a], "outer did not capture a")
+		assert(outer[b], "outer did not capture b")
+		assert(inner[a] == nil, "inner captured a")
+		assert(inner[b], "inner did not capture b")
+	end)
 end

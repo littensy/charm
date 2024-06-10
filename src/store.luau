@@ -1,11 +1,11 @@
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
+type Set<T> = types.Set<T>
 type WeakMap<K, V> = types.WeakMap<K, V>
 
 local listeners: WeakMap<Atom<any>, WeakMap<() -> (), unknown>> = setmetatable({}, { __mode = "k" })
-
-local capturing: { current: { [Atom<any>]: true }? } = {}
-local batched: { [() -> ()]: true } = {}
+local capturing: Set<Set<Atom<any>>> = {}
+local batched: Set<() -> ()> = {}
 local batching = false
 
 --[=[
@@ -81,18 +81,16 @@ end
 	@param molecule The function to run.
 	@return A tuple containing the captured atoms and the result of the function.
 ]=]
-local function capture<T>(molecule: () -> T): ({ [Atom<any>]: true }, T)
+local function capture<T>(molecule: () -> T): (Set<Atom<any>>, T)
 	if listeners[molecule] then
 		return { [molecule] = true }, molecule()
 	end
 
-	local dependencies = {}
-	local previous = capturing.current
-
-	capturing.current = dependencies
+	local dependencies: Set<Atom<any>> = {}
+	capturing[dependencies] = true
 
 	local result = try(molecule, function()
-		capturing.current = previous
+		capturing[dependencies] = nil
 	end)
 
 	return dependencies, result
@@ -135,16 +133,18 @@ local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
 		return callback
 	end
 
-	if not capturing.current then
+	if not next(capturing) then
 		return callback(...)
 	end
 
-	local previous = capturing.current
+	local snapshot = table.clone(capturing)
 
-	capturing.current = nil
+	table.clear(capturing)
 
 	local result = try(callback, function()
-		capturing.current = previous
+		for set in snapshot do
+			capturing[set] = true
+		end
 	end, ...)
 
 	return result
@@ -157,7 +157,7 @@ end
 	@param listener The function to call when the atoms change.
 	@param ref Optionally bind the lifetime of the listener to a value.
 ]=]
-local function connect(dependencies: { [Atom<any>]: true }, listener: () -> (), ref: unknown?)
+local function connect(dependencies: Set<Atom<any>>, listener: () -> (), ref: unknown?)
 	for atom in dependencies do
 		listeners[atom][listener] = ref or true
 	end
@@ -169,7 +169,7 @@ end
 	@param dependencies The atoms to stop listening to.
 	@param listener The function to stop calling when the atoms change.
 ]=]
-local function disconnect(dependencies: { [Atom<any>]: true }, listener: () -> ())
+local function disconnect(dependencies: Set<Atom<any>>, listener: () -> ())
 	for atom in dependencies do
 		listeners[atom][listener] = nil
 	end
@@ -187,10 +187,10 @@ end
 ]=]
 local function reconnect<T>(
 	molecule: Atom<T>,
-	dependencies: { [Atom<any>]: true },
+	dependencies: Set<Atom<any>>,
 	listener: () -> (),
 	ref: unknown?
-): ({ [Atom<any>]: true }, T)
+): (Set<Atom<any>>, T)
 	disconnect(dependencies, listener)
 	local nextDependencies, state = capture(molecule)
 	connect(nextDependencies, listener, ref)

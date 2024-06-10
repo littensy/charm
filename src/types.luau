@@ -1,3 +1,5 @@
+export type Set<T> = { [T]: true }
+
 export type WeakMap<K, V> = typeof(setmetatable({} :: { [K]: V }, { __mode = "k" }))
 
 --[=[
