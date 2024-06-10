@@ -375,7 +375,7 @@ remotes.requestState.connect((player) => {
 
   - `atoms`: An object containing the atoms to sync. The keys should match the keys on the client.
 
-  - `interval`: The interval at which to send state updates to clients. Defaults to `0`, meaning updates are sent on the next frame.
+  - **optional** `interval`: The interval at which to send state updates to clients. Defaults to `0`, meaning updates are sent on the next frame.
 
 #### Returns
 
