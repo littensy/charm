@@ -28,20 +28,33 @@ local function try<T, U...>(callback: (U...) -> T | any, finally: (() -> ())?, .
 		end
 
 		if coroutine.status(thread) == "suspended" then
+			local source, line, name = debug.info(callback, "sln")
 			coroutine.close(thread)
-			error("Yielding is not allowed in atom functions")
+			error(
+				"Yielding is not allowed in atom functions. Consider wrapping this code in a Promise or task.defer instead."
+					.. `\nFunction defined at: {source}:{line}`
+					.. if name == "" then "" else ` function {name}`
+			)
 		elseif not success then
-			error("An error occurred while running an atom function")
+			local source, line, name = debug.info(callback, "sln")
+			error(
+				"An error occurred while running an atom function"
+					.. `\nFunction defined at: {source}:{line}`
+					.. (if name == "" then "" else ` function {name}`)
+					.. `\nError: {result}`
+			)
 		end
 
 		return result
 	end
 
-	local result = callback(...)
-
-	if finally then
-		finally()
+	if not finally then
+		return callback(...)
 	end
+
+	local success, result = pcall(callback, ...)
+	finally()
+	assert(success, result)
 
 	return result
 end
