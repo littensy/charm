@@ -123,7 +123,7 @@ declare namespace Charm {
 	 * @param molecule The function to run.
 	 * @returns A tuple containing the captured atoms and the result of the function.
 	 */
-	function capture<State>(molecule: Molecule<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
+	function capture<State>(molecule: Molecule<State>): LuaTuple<[dependencies: Set<Atom<unknown>>, state: State]>;
 
 	/**
 	 * Notifies all subscribers of the given atom that the state has changed.

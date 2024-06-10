@@ -67,4 +67,32 @@ return function()
 
 		assert(count(store.listeners[source]) == 0, "computed atom did not collect")
 	end)
+
+	it("tracks conditional dependencies", function()
+		local condition = atom(false)
+		local a = atom(0)
+		local b = atom(1)
+		local reruns = 0
+		local current
+
+		subscribe(function()
+			return if condition() then a() else b()
+		end, function(state)
+			reruns += 1
+			current = state
+		end)
+
+		condition(true)
+		expect(reruns).to.equal(1)
+		expect(current).to.equal(0)
+
+		a(1)
+		b(2)
+		expect(reruns).to.equal(2)
+		expect(current).to.equal(1)
+
+		condition(false)
+		expect(reruns).to.equal(3)
+		expect(current).to.equal(2)
+	end)
 end

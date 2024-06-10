@@ -16,20 +16,18 @@ local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T)
 
 	local function listener()
 		local prevState = state
-		state = molecule()
+
+		captured, state = store.reconnect(molecule, captured, listener)
+
 		if state ~= prevState then
 			callback(state, prevState)
 		end
 	end
 
-	for atom in captured do
-		store.listeners[atom][listener] = true
-	end
+	store.connect(captured, listener)
 
 	return function()
-		for atom in captured do
-			store.listeners[atom][listener] = nil
-		end
+		store.disconnect(captured, listener)
 	end
 end
 

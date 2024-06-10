@@ -15,8 +15,8 @@ local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
 
 	local function atom(...)
 		if select("#", ...) == 0 then
-			if store.isCapturing() then
-				store.captured[atom] = true
+			if store.capturing.current then
+				store.capturing.current[atom] = true
 			end
 
 			return state
