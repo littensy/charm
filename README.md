@@ -391,6 +391,18 @@ remotes.requestState.connect((player) => {
 
 ---
 
+## 🚧 Development
+
+Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true`.
+
+Currently, the debug flag enables the following checks:
+
+- Molecules, listeners, and batched functions are not allowed to yield, and will throw an error if they do.
+
+- Server state is validated before sending to clients. If the state is not serializable, an error will be thrown. A list of common cases can be found in the [source code](src/__tests__/sync/validate.spec.luau).
+
+---
+
 ## 🚀 Examples
 
 ### Counter atom
