@@ -144,10 +144,6 @@ effect(() => {
 
 `effect` returns a cleanup function.
 
-#### Caveats
-
-- Dependencies are captured when the effect is created, but not when it re-runs. This means that atoms referenced conditionally might be "skipped" in the dependency list.
-
 ---
 
 ### `computed(molecule, options?)`

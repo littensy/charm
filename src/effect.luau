@@ -6,9 +6,6 @@ type Cleanup = () -> ()
 	Runs the given callback immediately and whenever any atom it depends on
 	changes. Returns a cleanup function that unsubscribes the callback.
 	
-	Note that dependencies are only evaluated once when the effect is created,
-	and conditional dependencies may not work as expected.
-	
 	@param callback The function to run.
 	@return A function that unsubscribes the callback.
 ]=]
