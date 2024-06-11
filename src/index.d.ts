@@ -196,6 +196,7 @@ declare namespace Charm {
 		 * Creates a `ClientSyncer` object that receives patches from the server and
 		 * applies them to the local state.
 		 *
+		 * @client
 		 * @param options The atoms to synchronize with the server.
 		 * @returns A `ClientSyncer` object.
 		 */
@@ -204,6 +205,7 @@ declare namespace Charm {
 		 * Creates a `ServerSyncer` object that sends patches to the client and
 		 * hydrates the client's state.
 		 *
+		 * @server
 		 * @param options The atoms to synchronize with the client.
 		 * @returns A `ServerSyncer` object.
 		 */
