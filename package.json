@@ -27,7 +27,7 @@
 	"files": [
 		"src",
 		"default.project.json",
-		"!src/**/*.spec.luau"
+		"!src/__tests__"
 	],
 	"publishConfig": {
 		"access": "public"
