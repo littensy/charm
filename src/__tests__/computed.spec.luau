@@ -68,4 +68,35 @@ return function()
 
 		assert(count(store.listeners[source]) == 0, "nested computed atom did not gc")
 	end)
+
+	it("tracks conditional dependencies", function()
+		local condition = atom(false)
+		local a = atom(0)
+		local b = atom(1)
+		local reruns = 0
+		local current
+
+		-- assign variable to avoid gc
+		local _ = computed(function()
+			reruns += 1
+			current = if condition() then a() else b()
+			return current
+		end)
+
+		expect(reruns).to.equal(1)
+		expect(current).to.equal(1)
+
+		condition(true)
+		expect(reruns).to.equal(2)
+		expect(current).to.equal(0)
+
+		a(1)
+		b(2)
+		expect(reruns).to.equal(3)
+		expect(current).to.equal(1)
+
+		condition(false)
+		expect(reruns).to.equal(4)
+		expect(current).to.equal(2)
+	end)
 end

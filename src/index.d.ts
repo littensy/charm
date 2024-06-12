@@ -82,9 +82,6 @@ declare namespace Charm {
 	 * Runs the given callback immediately and whenever any atom it depends on
 	 * changes. Returns a cleanup function that unsubscribes the callback.
 	 *
-	 * Note that dependencies are only evaluated once when the effect is created,
-	 * so conditional dependencies may not work as expected.
-	 *
 	 * @param callback The function to run.
 	 * @returns A function that unsubscribes the callback.
 	 */
@@ -123,7 +120,7 @@ declare namespace Charm {
 	 * @param molecule The function to run.
 	 * @returns A tuple containing the captured atoms and the result of the function.
 	 */
-	function capture<State>(molecule: Molecule<State>): LuaTuple<[captured: Set<Atom<unknown>>, state: State]>;
+	function capture<State>(molecule: Molecule<State>): LuaTuple<[dependencies: Set<Atom<unknown>>, state: State]>;
 
 	/**
 	 * Notifies all subscribers of the given atom that the state has changed.
@@ -199,6 +196,7 @@ declare namespace Charm {
 		 * Creates a `ClientSyncer` object that receives patches from the server and
 		 * applies them to the local state.
 		 *
+		 * @client
 		 * @param options The atoms to synchronize with the server.
 		 * @returns A `ClientSyncer` object.
 		 */
@@ -207,6 +205,7 @@ declare namespace Charm {
 		 * Creates a `ServerSyncer` object that sends patches to the client and
 		 * hydrates the client's state.
 		 *
+		 * @server
 		 * @param options The atoms to synchronize with the client.
 		 * @returns A `ServerSyncer` object.
 		 */

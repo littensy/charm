@@ -1,14 +1,63 @@
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
+type Set<T> = types.Set<T>
 type WeakMap<K, V> = types.WeakMap<K, V>
 
 local listeners: WeakMap<Atom<any>, WeakMap<() -> (), unknown>> = setmetatable({}, { __mode = "k" })
-
-local captured: { [Atom<any>]: true } = {}
-local capturing = false
-
-local batched: { [() -> ()]: true } = {}
+local capturing: Set<Set<Atom<any>>> = {}
+local batched: Set<() -> ()> = {}
 local batching = false
+
+--[=[
+	Calls the given function and returns the result. If the function yields or
+	throws an error, the thread is closed and an error is thrown. Regardless of
+	the outcome, the `finally` function is called to clean up any resources.
+	
+	@param callback The function to run.
+	@param finally Cleanup logic to run before error handling.
+	@param ... Arguments to pass to the callback.
+	@return The result of the callback.
+]=]
+local function try<T, U...>(callback: (U...) -> T | any, finally: (() -> ())?, ...: U...): T
+	if _G.__DEV__ then
+		local thread = coroutine.create(callback)
+		local success, result = coroutine.resume(thread, ...)
+
+		if finally then
+			finally()
+		end
+
+		if coroutine.status(thread) == "suspended" then
+			local source, line, name = debug.info(callback, "sln")
+			coroutine.close(thread)
+			error(
+				"Yielding is not allowed in atom functions. Consider wrapping this code in a Promise or task.defer instead."
+					.. `\nFunction defined at: {source}:{line}`
+					.. if name == "" then "" else ` function {name}`
+			)
+		elseif not success then
+			local source, line, name = debug.info(callback, "sln")
+			error(
+				"An error occurred while running an atom function"
+					.. `\nFunction defined at: {source}:{line}`
+					.. (if name == "" then "" else ` function {name}`)
+					.. `\nError: {result}`
+			)
+		end
+
+		return result
+	end
+
+	if not finally then
+		return callback(...)
+	end
+
+	local success, result = pcall(callback, ...)
+	finally()
+	assert(success, result)
+
+	return result
+end
 
 --[=[
 	Returns whether the given value is an atom.
@@ -16,7 +65,7 @@ local batching = false
 	@param value The value to check.
 	@return `true` if the value is an atom, otherwise `false`.
 ]=]
-local function isAtom(value: any)
+local function isAtom(value: any): boolean
 	return not not (value and listeners[value])
 end
 
@@ -34,7 +83,7 @@ local function notify(atom: Atom<any>)
 	end
 
 	for listener in next, table.clone(listeners[atom]) do
-		listener()
+		try(listener)
 	end
 end
 
@@ -45,17 +94,17 @@ end
 	@param molecule The function to run.
 	@return A tuple containing the captured atoms and the result of the function.
 ]=]
-local function capture<T>(callback: () -> T): ({ [Atom<any>]: true }, T)
-	if listeners[callback] then
-		return { [callback] = true }, callback()
+local function capture<T>(molecule: () -> T): (Set<Atom<any>>, T)
+	if listeners[molecule] then
+		return { [molecule] = true }, molecule()
 	end
 
-	capturing = true
-	local result = callback()
-	capturing = false
+	local dependencies: Set<Atom<any>> = {}
+	capturing[dependencies] = true
 
-	local dependencies = table.clone(captured)
-	table.clear(captured)
+	local result = try(molecule, function()
+		capturing[dependencies] = nil
+	end)
 
 	return dependencies, result
 end
@@ -68,16 +117,17 @@ end
 ]=]
 local function batch(callback: () -> ())
 	if batching then
-		callback()
-		return
+		return callback()
 	end
 
 	batching = true
-	callback()
-	batching = false
+
+	try(callback, function()
+		batching = false
+	end)
 
 	for listener in batched do
-		listener()
+		try(listener)
 	end
 
 	table.clear(batched)
@@ -96,44 +146,79 @@ local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
 		return callback
 	end
 
-	if not capturing then
+	if not next(capturing) then
 		return callback(...)
 	end
 
-	capturing = false
-	local result = callback(...)
-	capturing = true
+	local snapshot = table.clone(capturing)
+
+	table.clear(capturing)
+
+	local result = try(callback, function()
+		for set in snapshot do
+			capturing[set] = true
+		end
+	end, ...)
 
 	return result
 end
 
 --[=[
-	Sets whether the store is capturing atoms. If `true`, atoms that are read
-	will be tracked and returned by `capture`.
-
-	@param value Whether to capture atoms.
+	Subscribes the listener to the changes of the given atoms.
+	
+	@param dependencies The atoms to listen to.
+	@param listener The function to call when the atoms change.
+	@param ref Optionally bind the lifetime of the listener to a value.
 ]=]
-local function setCapturing(value: boolean)
-	capturing = value
+local function connect(dependencies: Set<Atom<any>>, listener: () -> (), ref: unknown?)
+	for atom in dependencies do
+		listeners[atom][listener] = ref or true
+	end
 end
 
 --[=[
-	Returns whether the store is currently capturing atoms.
-
-	@return `true` if the store is capturing atoms, otherwise `false`.
+	Unsubscribes the listener from the changes of the given atoms.
+	
+	@param dependencies The atoms to stop listening to.
+	@param listener The function to stop calling when the atoms change.
 ]=]
-local function isCapturing()
-	return capturing
+local function disconnect(dependencies: Set<Atom<any>>, listener: () -> ())
+	for atom in dependencies do
+		listeners[atom][listener] = nil
+	end
+end
+
+--[=[
+	Disconnects the listener and evaluates the molecule again to capture any
+	new dependencies. Useful for tracking conditional dependencies.
+
+	@param molecule The atom or molecule to evaluate.
+	@param dependencies The current dependencies.
+	@param listener The listener to disconnect.
+	@param ref Optionally bind the lifetime of the listener to a value.
+	@return The new dependencies and the state of the molecule.
+]=]
+local function reconnect<T>(
+	molecule: Atom<T>,
+	dependencies: Set<Atom<any>>,
+	listener: () -> (),
+	ref: unknown?
+): (Set<Atom<any>>, T)
+	disconnect(dependencies, listener)
+	local nextDependencies, state = capture(molecule)
+	connect(nextDependencies, listener, ref)
+	return nextDependencies, state
 end
 
 return {
 	listeners = listeners,
-	captured = captured,
+	capturing = capturing,
 	isAtom = isAtom,
 	notify = notify,
 	capture = capture,
 	batch = batch,
 	peek = peek,
-	setCapturing = setCapturing,
-	isCapturing = isCapturing,
+	connect = connect,
+	disconnect = disconnect,
+	reconnect = reconnect,
 }

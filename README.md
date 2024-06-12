@@ -24,7 +24,7 @@
 
 - ⚛️ **Manage state with _atoms_.** Decompose state into small, distinct containers called _atoms_, as opposed to combining them into a single store.
 
-- 💪 **Minimal, yet powerful.** No concept of actions or middleware — write simple functions to read from and write to state.
+- 💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
 
 - 🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
 
@@ -48,6 +48,23 @@ Alternatively, add `littensy/charm` to your `wally.toml` file.
 [dependencies]
 Charm = "littensy/charm@VERSION"
 ```
+
+---
+
+## 🐛 Debugging
+
+Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true` at the entry point of your project.
+
+Enabling `__DEV__` adds a few helpful features:
+
+- Better error handling for molecules, listeners, and batched functions:
+
+  - Errors provide the function's name and line number.
+  - Yielding in these functions will throw an error.
+
+- Server state is validated for [remote event limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations) before being passed to the client.
+
+Enabling debug mode in unit tests, storybooks, and other development environments can help you catch potential issues early. However, remember to turn off debug mode in production to avoid the performance overhead.
 
 ---
 
@@ -143,10 +160,6 @@ effect(() => {
 #### Returns
 
 `effect` returns a cleanup function.
-
-#### Caveats
-
-- Dependencies are captured when the effect is created, but not when it re-runs. This means that atoms referenced conditionally might be "skipped" in the dependency list.
 
 ---
 
@@ -379,7 +392,7 @@ remotes.requestState.connect((player) => {
 
   - `atoms`: An object containing the atoms to sync. The keys should match the keys on the client.
 
-  - `interval`: The interval at which to send state updates to clients. Defaults to `0`, meaning updates are sent on the next frame.
+  - **optional** `interval`: The interval at which to send state updates to clients. Defaults to `0`, meaning updates are sent on the next frame.
 
 #### Returns
 
