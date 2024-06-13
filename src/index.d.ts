@@ -127,7 +127,7 @@ declare namespace Charm {
 	 *
 	 * @param atom The atom to notify.
 	 */
-	function notify(atom: Atom<unknown>): void;
+	function notify<State>(atom: Atom<State>): void;
 
 	/**
 	 * Creates an instance of `factory` for each item in the atom's state, and
