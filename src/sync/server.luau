@@ -86,7 +86,7 @@ local function server(options: ServerOptions): ServerSyncer
 			end
 
 			local diffs = patch.diff(stateSnapshot, state)
-			stateSnapshot = state
+			stateSnapshot = table.clone(state)
 			changed = false
 
 			for _, player in Players:GetPlayers() do
