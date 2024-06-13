@@ -467,7 +467,7 @@ import { sync } from "@rbxts/charm";
 import { remotes } from "./remotes";
 import * as atoms from "./atoms";
 
-const server = sync.server({ atoms });
+const server = sync.server({ atoms: atoms });
 
 // Broadcast a state update to a specific player
 server.connect((player, payload) => {
@@ -487,7 +487,7 @@ import { sync } from "@rbxts/charm";
 import { remotes } from "./remotes";
 import * as atoms from "./atoms";
 
-const client = sync.client({ atoms });
+const client = sync.client({ atoms: atoms });
 
 // Listen for incoming state changes from the server
 remotes.syncState.connect((payload) => {
