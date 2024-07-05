@@ -28,4 +28,20 @@ return function()
 		expect(a().b).to.equal(3)
 		expect(a().c).to.equal(2)
 	end)
+
+	it("fixes sparse array patches", function()
+		local a = atom({ 1 })
+		local client = sync.client({ atoms = { a = a } })
+
+		-- This patch would be the result of a diff between { 1 } and { 1, 2 } that
+		-- was JSON-serialized and deserialized. The client should be able to catch
+		-- this and convert the string key back to a number.
+		client:sync({
+			type = "patch",
+			data = { a = { ["2"] = 2 } },
+		})
+
+		expect(a()["2" :: any]).to.never.be.ok()
+		expect(a()[2]).to.equal(2)
+	end)
 end

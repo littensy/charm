@@ -44,8 +44,16 @@ local function apply(state: any, patches: any): any
 	end
 
 	local nextState = table.clone(state)
+	local stateIsArray = state[1] ~= nil
 
 	for key, patch in patches do
+		-- Diff-checking an array produces a sparse array, which will not be
+		-- preserved when converted to JSON. To prevent this, we turn string
+		-- keys back into numeric keys.
+		if stateIsArray and type(key) == "string" then
+			key = tonumber(key) or key
+		end
+
 		nextState[key] = apply(nextState[key], patch)
 	end
 
