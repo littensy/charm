@@ -254,11 +254,13 @@ declare namespace Charm {
 		| MaybeNone<State>
 		| (State extends ReadonlyMap<infer K, infer V> | Map<infer K, infer V>
 				? ReadonlyMap<K, SyncPatch<V> | None>
-				: State extends readonly (infer T)[]
-					? readonly (SyncPatch<T> | None | undefined)[]
-					: State extends object
-						? { readonly [P in keyof State]?: SyncPatch<State[P]> }
-						: State);
+				: State extends Set<infer T> | ReadonlySet<infer T>
+					? ReadonlySet<T | None>
+					: State extends readonly (infer T)[]
+						? readonly (SyncPatch<T> | None | undefined)[]
+						: State extends object
+							? { readonly [P in keyof State]?: SyncPatch<State[P]> }
+							: State);
 
 	/**
 	 * A payload that can be sent from the server to the client to synchronize
