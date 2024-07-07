@@ -255,7 +255,7 @@ declare namespace Charm {
 		| (State extends ReadonlyMap<infer K, infer V> | Map<infer K, infer V>
 				? ReadonlyMap<K, SyncPatch<V> | None>
 				: State extends Set<infer T> | ReadonlySet<infer T>
-					? ReadonlySet<T | None>
+					? ReadonlyMap<T, true | None>
 					: State extends readonly (infer T)[]
 						? readonly (SyncPatch<T> | None | undefined)[]
 						: State extends object
