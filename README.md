@@ -400,11 +400,40 @@ remotes.requestState.connect((player) => {
 
 - `server.connect(callback)` registers a callback to send state updates to clients. The callback will receive the player and the payload to send, and should send the payload to the client. The payload should not be mutated, so changes should be applied to a copy of the payload.
 
-- `server.hydrate(player)` sends the initial state to a player, calling the callback passed to `connect` with a payload containing the initial state.
+- `server.hydrate(player)` sends the initial state to a player. This calls the function passed to `connect` with a payload containing the initial state.
 
 #### Caveats
 
 - The server sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes sending the initial state, which is implemented via `requestState` in the example above.
+
+---
+
+### `sync.isNone(value)`
+
+State patches represent the _difference_ between the current state and next state, excluding unchanged values. However, this means both unchanged and removed values would be `nil` in the patch. In these cases, Charm uses the `None` marker to represent a removed value.
+
+Call `sync.isNone` to check if a value is `None`.
+
+```ts
+import { sync } from "@rbxts/charm";
+
+const server = sync.server({ atoms: atomsToSync });
+
+server.connect((player, payload) => {
+	if (sync.isNone(payload.data.todosAtom?.eggs)) {
+		// 'eggs' will be removed from the client's todo list
+	}
+	remotes.syncState.fire(player, payload);
+});
+```
+
+#### Parameters
+
+- `value`: Any value. If the value is `None`, `sync.isNone` will return `true`.
+
+#### Returns
+
+`sync.isNone` returns a boolean.
 
 ---
 

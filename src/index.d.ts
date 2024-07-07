@@ -258,7 +258,7 @@ declare namespace Charm {
 	 * A payload that can be sent from the server to the client to synchronize
 	 * state between the two.
 	 */
-	type SyncPayload<Atoms> =
+	type SyncPayload<Atoms extends AtomMap> =
 		| { type: "init"; data: StateOfMap<Atoms> }
 		| { type: "patch"; data: SyncPatch<StateOfMap<Atoms>> };
 
