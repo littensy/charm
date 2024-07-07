@@ -6,6 +6,10 @@ local validate = require(script.Parent.validate)
 ]=]
 local NONE = { __none = "__none" }
 
+local function isNone(value: any): boolean
+	return type(value) == "table" and value.__none == "__none"
+end
+
 local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
 
@@ -62,6 +66,7 @@ end
 
 return {
 	NONE = NONE,
+	isNone = isNone,
 	diff = diff,
 	apply = apply,
 }

@@ -33,10 +33,23 @@ declare namespace Charm {
 	 * A function that depends on one or more atoms and produces a state. Can be
 	 * used to derive state from atoms.
 	 *
-	 * @template State The type of the state.
 	 * @returns The current state.
 	 */
 	type Molecule<State> = () => State;
+
+	/**
+	 * Infers the type of the state produced by the given molecule.
+	 */
+	type StateOf<T> = T extends Molecule<infer State> ? State : never;
+
+	/**
+	 * Recursively infers the type of the state produced by a map of molecules.
+	 */
+	type StateOfMap<T> = {
+		[P in keyof T]: T[P] extends Molecule<infer State> ? State : never;
+	};
+
+	type AtomMap = Record<string, Atom<any>>;
 
 	interface AtomOptions<State> {
 		/**
@@ -200,7 +213,7 @@ declare namespace Charm {
 		 * @param options The atoms to synchronize with the server.
 		 * @returns A `ClientSyncer` object.
 		 */
-		client: <T extends Record<string, Atom<any>>>(options: ClientOptions<T>) => ClientSyncer<T>;
+		client: <Atoms extends AtomMap>(options: ClientOptions<Atoms>) => ClientSyncer<Atoms>;
 		/**
 		 * Creates a `ServerSyncer` object that sends patches to the client and
 		 * hydrates the client's state.
@@ -209,39 +222,58 @@ declare namespace Charm {
 		 * @param options The atoms to synchronize with the client.
 		 * @returns A `ServerSyncer` object.
 		 */
-		server: <T extends Record<string, Atom<any>>>(options: ServerOptions<T>) => ServerSyncer<T>;
+		server: <Atoms extends AtomMap>(options: ServerOptions<Atoms>) => ServerSyncer<Atoms>;
+		/**
+		 * Checks whether a value is `None`. If `true`, the value is scheduled to be
+		 * removed from the state when the patch is applied.
+		 *
+		 * @param value The value to check.
+		 * @returns `true` if the value is `None`, otherwise `false`.
+		 */
+		isNone: (value: unknown) => value is None;
 	};
 
 	/**
 	 * A special value that denotes the absence of a value. Used to represent
-	 * undefined values in patches.
+	 * removed values in patches.
 	 */
 	interface None {
 		readonly __none: "__none";
 	}
 
-	type SyncPatch<T> = {
-		readonly [P in keyof T]?: (T[P] extends object ? SyncPatch<T[P]> : T[P]) | (T[P] extends undefined ? None : never);
+	/**
+	 * A partial patch that can be applied to the state to update it. Represents
+	 * the difference between the current state and the next state.
+	 *
+	 * If a value was removed, it is replaced with `None`. This can be checked
+	 * using the `sync.isNone` function.
+	 */
+	type SyncPatch<State> = {
+		readonly [P in keyof State]?:
+			| (State[P] extends object ? SyncPatch<State[P]> : State[P])
+			| (undefined extends State[P] ? None : never);
 	};
 
 	/**
 	 * A payload that can be sent from the server to the client to synchronize
 	 * state between the two.
 	 */
-	type SyncPayload<T> = { type: "init"; data: T } | { type: "patch"; data: SyncPatch<T> };
+	type SyncPayload<Atoms extends AtomMap> =
+		| { type: "init"; data: StateOfMap<Atoms> }
+		| { type: "patch"; data: SyncPatch<StateOfMap<Atoms>> };
 
-	interface ClientOptions<T extends Record<string, Atom<any>>> {
+	interface ClientOptions<Atoms extends AtomMap> {
 		/**
 		 * The atoms to synchronize with the server.
 		 */
-		atoms: T;
+		atoms: Atoms;
 	}
 
-	interface ServerOptions<T extends Record<string, Atom<any>>> {
+	interface ServerOptions<Atoms extends AtomMap> {
 		/**
 		 * The atoms to synchronize with the client.
 		 */
-		atoms: T;
+		atoms: Atoms;
 		/**
 		 * The interval at which to send patches to the client, in seconds.
 		 * Defaults to `0` (patches are sent up to once per frame). Set to a
@@ -250,17 +282,17 @@ declare namespace Charm {
 		interval?: number;
 	}
 
-	interface ClientSyncer<T extends Record<string, Atom<any>>> {
+	interface ClientSyncer<Atoms extends AtomMap> {
 		/**
 		 * Applies a patch or initializes the state of the atoms with the given
 		 * payload from the server.
 		 *
 		 * @param payload The patch or hydration payload to apply.
 		 */
-		sync(payload: SyncPayload<T>): void;
+		sync(payload: SyncPayload<Atoms>): void;
 	}
 
-	interface ServerSyncer<T extends Record<string, Atom<any>>> {
+	interface ServerSyncer<Atoms extends AtomMap> {
 		/**
 		 * Sets up a subscription to each atom that schedules a patch to be sent to
 		 * the client whenever the state changes. When a change occurs, the `callback`
@@ -272,7 +304,7 @@ declare namespace Charm {
 		 * @param callback The function to call when the state changes.
 		 * @returns A cleanup function that unsubscribes all listeners.
 		 */
-		connect(callback: (player: Player, payload: SyncPayload<T>) => void): Cleanup;
+		connect(callback: (player: Player, payload: SyncPayload<Atoms>) => void): Cleanup;
 		/**
 		 * Hydrates the client's state with the server's state. This should be
 		 * called when a player joins the game and requires the server's state.

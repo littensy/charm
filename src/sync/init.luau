@@ -1,4 +1,5 @@
 local client = require(script.client)
+local patch = require(script.patch)
 local server = require(script.server)
 
 --[=[
@@ -8,4 +9,5 @@ local server = require(script.server)
 return {
 	client = client,
 	server = server,
+	isNone = patch.isNone,
 }
