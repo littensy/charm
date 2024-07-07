@@ -420,8 +420,8 @@ import { sync } from "@rbxts/charm";
 const server = sync.server({ atoms: atomsToSync });
 
 server.connect((player, payload) => {
-	if (sync.isNone(payload.data.todosAtom?.eggs)) {
-		// 'eggs' will be removed from the client's todo list
+	if (payload.type === "patch" && sync.isNone(payload.data.todosAtom?.eggs)) {
+		// 'eggs' will be removed from the client's todos atom
 	}
 	remotes.syncState.fire(player, payload);
 });
