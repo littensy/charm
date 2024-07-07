@@ -241,6 +241,8 @@ declare namespace Charm {
 		readonly __none: "__none";
 	}
 
+	type MaybeNone<T> = undefined extends T ? None : never;
+
 	/**
 	 * A partial patch that can be applied to the state to update it. Represents
 	 * the difference between the current state and the next state.
@@ -248,11 +250,15 @@ declare namespace Charm {
 	 * If a value was removed, it is replaced with `None`. This can be checked
 	 * using the `sync.isNone` function.
 	 */
-	type SyncPatch<State> = {
-		readonly [P in keyof State]?:
-			| (State[P] extends object ? SyncPatch<State[P]> : State[P])
-			| (undefined extends State[P] ? None : never);
-	};
+	type SyncPatch<State> =
+		| MaybeNone<State>
+		| (State extends ReadonlyMap<infer K, infer V> | Map<infer K, infer V>
+				? ReadonlyMap<K, SyncPatch<V> | None>
+				: State extends readonly (infer T)[]
+					? readonly (SyncPatch<T> | None | undefined)[]
+					: State extends object
+						? { readonly [P in keyof State]?: SyncPatch<State[P]> }
+						: State);
 
 	/**
 	 * A payload that can be sent from the server to the client to synchronize
