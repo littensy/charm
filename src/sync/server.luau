@@ -18,6 +18,12 @@ type ServerOptions = {
 		negative value to disable automatic syncing.
 	]=]
 	interval: number?,
+	--[=[
+		Whether the history of state changes since the client's last update
+		should be preserved. This is useful for values that change multiple times
+		per frame, where each individual change is important. Defaults to `false`.
+	]=]
+	preserveHistory: boolean?,
 }
 
 type ServerSyncer = {
@@ -32,7 +38,7 @@ type ServerSyncer = {
 		@param callback The function to call when the state changes.
 		@return A cleanup function that unsubscribes all listeners.
 	]=]
-	connect: (self: ServerSyncer, callback: (player: Player, payload: SyncPayload) -> ()) -> () -> (),
+	connect: (self: ServerSyncer, callback: (player: Player, ...SyncPayload) -> ()) -> () -> (),
 	--[=[
 		Hydrates the client's state with the server's state. This should be
 		called when a player joins the game and requires the server's state.
@@ -54,13 +60,9 @@ type ServerSyncer = {
 	@return A `ServerSyncer` object.
 ]=]
 local function server(options: ServerOptions): ServerSyncer
-	local atoms = options.atoms
-	local interval = options.interval or 0
-
 	local self = {} :: ServerSyncer
 	local sync: (player: Player, payload: SyncPayload) -> ()
-	local state: { [string]: any } = {}
-	local stateSnapshot = {}
+	local snapshots: { { [string]: any } } = {}
 	local changed = false
 
 	-- Start the interval to send state patches over the network.
@@ -68,34 +70,78 @@ local function server(options: ServerOptions): ServerSyncer
 		local cleanups = {}
 		sync = callback
 
+		local function getSnapshot()
+			local snapshot: { [string]: any } = {}
+			for key, atom in options.atoms do
+				snapshot[key] = atom()
+			end
+			return snapshot
+		end
+
+		local function pushSnapshot(key: string, current: any, previous: any)
+			if not options.preserveHistory then
+				if snapshots[2] then
+					snapshots[2][key] = current
+				else
+					snapshots[2] = getSnapshot()
+				end
+				return
+			end
+
+			local lastSnapshot = snapshots[#snapshots]
+			local previousSnapshot = snapshots[#snapshots - 1]
+
+			-- Optimize snapshots by updating the most recent snapshot if the
+			-- previous and current values are the same, since this allows us
+			-- to group multiple changes into a single snapshot.
+			if previousSnapshot and previousSnapshot[key] == previous and lastSnapshot[key] == previous then
+				lastSnapshot[key] = current
+			else
+				local nextSnapshot = table.clone(lastSnapshot)
+				nextSnapshot[key] = current
+				table.insert(snapshots, nextSnapshot)
+			end
+		end
+
 		-- Populate the initial state and snapshot for each atom.
 		-- Subscribe to each atom and update the state when it changes.
-		for key, atom in atoms do
-			cleanups[key] = subscribe(atom, function(current)
-				state[key] = current
+		for key, atom in options.atoms do
+			cleanups[key] = subscribe(atom, function(current, previous)
+				pushSnapshot(key, current, previous)
 				changed = true
 			end)
-
-			state[key] = atom()
-			stateSnapshot[key] = state[key]
 		end
+
+		snapshots[1] = getSnapshot()
 
 		local disconnect = setInterval(function()
 			if not changed then
 				return
 			end
 
-			local diffs = patch.diff(stateSnapshot, state)
-			stateSnapshot = table.clone(state)
+			local payloads: { SyncPayload } = {}
+			local lastSnapshot
+
+			for index, snapshot in snapshots do
+				lastSnapshot = snapshot
+
+				if index == 1 then
+					continue
+				end
+
+				table.insert(payloads, {
+					type = "patch",
+					data = patch.diff(snapshots[index - 1], snapshot),
+				})
+			end
+
+			snapshots = { lastSnapshot }
 			changed = false
 
 			for _, player in Players:GetPlayers() do
-				callback(player, {
-					type = "patch",
-					data = diffs,
-				})
+				callback(player, unpack(payloads))
 			end
-		end, interval)
+		end, options.interval or 0)
 
 		return function()
 			disconnect()
@@ -111,7 +157,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 		sync(player, {
 			type = "init",
-			data = state,
+			data = snapshots[#snapshots],
 		})
 	end
 
@@ -122,14 +168,23 @@ local function server(options: ServerOptions): ServerSyncer
 			return
 		end
 
-		local diffs = patch.diff(stateSnapshot, state)
-		stateSnapshot = table.clone(state)
+		local payloads: { SyncPayload } = {}
+
+		for index, snapshot in snapshots do
+			if index == 1 then
+				continue
+			end
+
+			table.insert(payloads, {
+				type = "patch",
+				data = patch.diff(snapshots[index - 1], snapshot),
+			})
+		end
+
+		snapshots = { snapshots[#snapshots] }
 		changed = false
 
-		sync(player, {
-			type = "patch",
-			data = diffs,
-		})
+		sync(player, unpack(payloads))
 	end
 
 	return self

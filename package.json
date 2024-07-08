@@ -26,7 +26,6 @@
 	"homepage": "https://github.com/littensy/charm",
 	"files": [
 		"src",
-		"default.project.json",
 		"!src/__tests__"
 	],
 	"publishConfig": {

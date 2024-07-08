@@ -1,4 +1,5 @@
 local atom = require(script.Parent.Parent.Parent.atom)
+local subscribe = require(script.Parent.Parent.Parent.subscribe)
 local sync = require(script.Parent.Parent.Parent.sync)
 
 return function()
@@ -43,5 +44,27 @@ return function()
 
 		expect(a()["2" :: any]).to.never.be.ok()
 		expect(a()[2]).to.equal(2)
+	end)
+
+	it("applies multiple patches", function()
+		local a = atom(1)
+		local client = sync.client({ atoms = { a = a } })
+		local calls = {}
+
+		subscribe(a, function(value)
+			table.insert(calls, value)
+		end)
+
+		client:sync({
+			type = "patch",
+			data = { a = 2 },
+		}, {
+			type = "patch",
+			data = { a = 3 },
+		})
+
+		expect(a()).to.equal(3)
+		expect(calls[1]).to.equal(2)
+		expect(calls[2]).to.equal(3)
 	end)
 end
