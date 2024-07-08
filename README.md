@@ -334,40 +334,6 @@ const todos = useAtom(searchTodos(filter), [filter]);
 
 ## 📗 Charm Sync
 
-### `sync.client(options)`
-
-Call `sync.client` to create a client sync object. The object will sync the client's copy of the state with the server's state.
-
-```ts
-import { sync } from "@rbxts/charm";
-
-const client = sync.client({ atoms: atomsToSync });
-
-remotes.syncState.connect((payload) => {
-	client.sync(payload);
-});
-
-remotes.requestState.fire();
-```
-
-#### Parameters
-
-- `options`: An object to configure the client syncer.
-
-  - `atoms`: An object containing the atoms to sync. The keys should match the keys on the server.
-
-#### Returns
-
-`sync.client` returns a client sync object. The sync object has the following methods:
-
-- `client.sync(payload)` applies a state update from the server.
-
-#### Caveats
-
-- The client sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes requesting the initial state, which is implemented via `requestState` in the example above.
-
----
-
 ### `sync.server(options)`
 
 Call `sync.server` to create a server sync object. The object handles sending state updates to clients at a specified interval, and hydrating clients with the initial state.
@@ -375,10 +341,14 @@ Call `sync.server` to create a server sync object. The object handles sending st
 ```ts
 import { sync } from "@rbxts/charm";
 
-const server = sync.server({ atoms: atomsToSync });
+const server = sync.server({
+	atoms: atomsToSync,
+	interval: 0,
+	preserveHistory: false,
+});
 
-server.connect((player, payload) => {
-	remotes.syncState.fire(player, payload);
+server.connect((player, ...payloads) => {
+	remotes.syncState.fire(player, ...payloads);
 });
 
 remotes.requestState.connect((player) => {
@@ -394,6 +364,8 @@ remotes.requestState.connect((player) => {
 
   - **optional** `interval`: The interval at which to send state updates to clients. Defaults to `0`, meaning updates are sent on the next frame.
 
+  - **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance reasons.
+
 #### Returns
 
 `sync.server` returns a server sync object. The sync object has the following methods:
@@ -404,7 +376,43 @@ remotes.requestState.connect((player) => {
 
 #### Caveats
 
+- By default, Charm omits the individual changes made to atoms between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
+
 - The server sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes sending the initial state, which is implemented via `requestState` in the example above.
+
+---
+
+### `sync.client(options)`
+
+Call `sync.client` to create a client sync object. The object will sync the client's copy of the state with the server's state.
+
+```ts
+import { sync } from "@rbxts/charm";
+
+const client = sync.client({ atoms: atomsToSync });
+
+remotes.syncState.connect((...payloads) => {
+	client.sync(...payloads);
+});
+
+remotes.requestState.fire();
+```
+
+#### Parameters
+
+- `options`: An object to configure the client syncer.
+
+  - `atoms`: An object containing the atoms to sync. The keys should match the keys on the server.
+
+#### Returns
+
+`sync.client` returns a client sync object. The sync object has the following methods:
+
+- `client.sync(...payloads)` applies a state update from the server.
+
+#### Caveats
+
+- The client sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes requesting the initial state, which is implemented via `requestState` in the example above.
 
 ---
 
@@ -491,6 +499,8 @@ export { writerAtom } from "./writer-atom";
 
 Then, on the server, create a server sync object and pass in the atoms to sync. Use remote events to broadcast state updates and send initial state to clients upon request.
 
+Note that if `preserveHistory` is `true`, the server will send multiple payloads to the client, so the callback passed to `connect` should accept a `...payloads` parameter. Otherwise, you only need to handle a single `payload` parameter.
+
 ```ts
 import { sync } from "@rbxts/charm";
 import { remotes } from "./remotes";
@@ -499,8 +509,8 @@ import * as atoms from "./atoms";
 const server = sync.server({ atoms });
 
 // Broadcast a state update to a specific player
-server.connect((player, payload) => {
-	remotes.syncState.fire(player, payload);
+server.connect((player, ...payloads) => {
+	remotes.syncState.fire(player, ...payloads);
 });
 
 // Send initial state to a player upon request
@@ -519,8 +529,8 @@ import * as atoms from "./atoms";
 const client = sync.client({ atoms });
 
 // Listen for incoming state changes from the server
-remotes.syncState.connect((payload) => {
-	client.sync(payload);
+remotes.syncState.connect((...payloads) => {
+	client.sync(...payloads);
 });
 
 // Request initial state from the server

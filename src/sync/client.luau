@@ -15,9 +15,9 @@ type ClientSyncer = {
 		Applies a patch or initializes the state of the atoms with the given
 		payload from the server.
 		
-		@param payload The patch or hydration payload to apply.
+		@param ...payloads The patches or hydration payloads to apply.
 	]=]
-	sync: (self: ClientSyncer, payload: SyncPayload) -> (),
+	sync: (self: ClientSyncer, ...SyncPayload) -> (),
 }
 
 --[=[
@@ -32,12 +32,16 @@ local function client(options: ClientOptions): ClientSyncer
 	local self = {} :: ClientSyncer
 
 	-- Apply the state changes sent by the server.
-	function self:sync(payload)
-		for key, state in payload.data do
-			if payload.type == "patch" then
-				atoms[key](patch.apply(atoms[key](), state))
-			else
-				atoms[key](state)
+	function self:sync(...)
+		for index = 1, select("#", ...) do
+			local payload = select(index, ...)
+
+			for key, state in payload.data do
+				if payload.type == "patch" then
+					atoms[key](patch.apply(atoms[key](), state))
+				else
+					atoms[key](state)
+				end
 			end
 		end
 	end

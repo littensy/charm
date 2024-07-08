@@ -288,6 +288,16 @@ declare namespace Charm {
 		 * negative value to disable automatic syncing.
 		 */
 		interval?: number;
+		/**
+		 * Whether the history of state changes since the client's last update
+		 * should be preserved. This is useful for values that change multiple times
+		 * per frame, where each individual change is important. Defaults to `false`.
+		 *
+		 * If `true`, the broadcaster will send a list of payloads to the client
+		 * instead of a single payload. The client will apply each payload in order
+		 * to reconstruct the state's changes over time.
+		 */
+		preserveHistory?: boolean;
 	}
 
 	interface ClientSyncer<Atoms extends AtomMap> {
@@ -295,24 +305,24 @@ declare namespace Charm {
 		 * Applies a patch or initializes the state of the atoms with the given
 		 * payload from the server.
 		 *
-		 * @param payload The patch or hydration payload to apply.
+		 * @param payloads The patches or hydration payloads to apply.
 		 */
-		sync(payload: SyncPayload<Atoms>): void;
+		sync(...payloads: SyncPayload<Atoms>[]): void;
 	}
 
 	interface ServerSyncer<Atoms extends AtomMap> {
 		/**
 		 * Sets up a subscription to each atom that schedules a patch to be sent to
 		 * the client whenever the state changes. When a change occurs, the `callback`
-		 * is called with the player and the payload to send.
+		 * is called with the player and the payloads to send.
 		 *
-		 * Note that the `payload` object should not be mutated. If you need to
-		 * modify the payload, apply the changes to a copy of the object.
+		 * Note that a `payload` object should not be mutated. If you need to modify
+		 * a payload, apply the changes to a copy of the object.
 		 *
 		 * @param callback The function to call when the state changes.
 		 * @returns A cleanup function that unsubscribes all listeners.
 		 */
-		connect(callback: (player: Player, payload: SyncPayload<Atoms>) => void): Cleanup;
+		connect(callback: (player: Player, ...payloads: SyncPayload<Atoms>[]) => void): Cleanup;
 		/**
 		 * Hydrates the client's state with the server's state. This should be
 		 * called when a player joins the game and requires the server's state.

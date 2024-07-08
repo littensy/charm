@@ -50,4 +50,45 @@ return function()
 
 		disconnect()
 	end)
+
+	it("preserves history", function()
+		local a = atom(1)
+		local b = atom(1)
+		local payloads: { types.SyncPayload }
+
+		local server = sync.server({
+			atoms = { a = a, b = b },
+			interval = -1,
+			preserveHistory = true,
+		})
+
+		local disconnect = server:connect(function(_, ...)
+			payloads = { ... }
+		end)
+
+		a(2)
+		b(2)
+		server:_sendPatch(target)
+
+		expect(#payloads).to.equal(1)
+		expect(payloads[1].type).to.equal("patch")
+		expect(payloads[1].data.a).to.equal(2)
+		expect(payloads[1].data.b).to.equal(2)
+
+		a(3)
+		a(4)
+		b(3)
+		server:_sendPatch(target)
+
+		print(payloads)
+		expect(#payloads).to.equal(2)
+		expect(payloads[1].type).to.equal("patch")
+		expect(payloads[1].data.a).to.equal(3)
+		expect(payloads[1].data.b).to.never.be.ok()
+		expect(payloads[2].type).to.equal("patch")
+		expect(payloads[2].data.a).to.equal(4)
+		expect(payloads[2].data.b).to.equal(3)
+
+		disconnect()
+	end)
 end
