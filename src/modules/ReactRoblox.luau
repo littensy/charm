@@ -1,7 +1,7 @@
 local Package = script.Parent.Parent
 local Packages = if Package.Parent:FindFirstChild("ReactRoblox")
 	then Package.Parent
-	else Package.Parent:FindFirstChild("ReactLua")
+	else Package.Parent.Parent:FindFirstChild("ReactLua")
 
 type ReactRoblox = typeof(require(Package.Parent.ReactRoblox))
 
