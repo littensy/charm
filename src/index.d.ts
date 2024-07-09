@@ -243,6 +243,15 @@ declare namespace Charm {
 
 	type MaybeNone<T> = undefined extends T ? None : never;
 
+	type DataTypes = {
+		[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];
+	};
+
+	/**
+	 * A type that should not be made partial in patches.
+	 */
+	type DataType = DataTypes[keyof DataTypes];
+
 	/**
 	 * A partial patch that can be applied to the state to update it. Represents
 	 * the difference between the current state and the next state.
@@ -258,9 +267,11 @@ declare namespace Charm {
 					? ReadonlyMap<T, true | None>
 					: State extends readonly (infer T)[]
 						? readonly (SyncPatch<T> | None | undefined)[]
-						: State extends object
-							? { readonly [P in keyof State]?: SyncPatch<State[P]> }
-							: State);
+						: State extends DataType
+							? State
+							: State extends object
+								? { readonly [P in keyof State]?: SyncPatch<State[P]> }
+								: State);
 
 	/**
 	 * A payload that can be sent from the server to the client to synchronize
