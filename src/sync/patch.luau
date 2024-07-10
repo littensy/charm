@@ -13,7 +13,7 @@ end
 local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
 
-	for key, previous in prevState do
+	for key, previous in next, prevState do
 		local next = nextState[key]
 
 		if previous == next then
@@ -26,7 +26,7 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	end
 
 	if _G.__DEV__ then
-		for key, value in prevState do
+		for key, value in next, prevState do
 			validate(value, key)
 		end
 
@@ -50,7 +50,7 @@ local function apply(state: any, patches: any): any
 	local nextState = table.clone(state)
 	local stateIsArray = state[1] ~= nil
 
-	for key, patch in patches do
+	for key, patch in next, patches do
 		-- Diff-checking an array produces a sparse array, which will not be
 		-- preserved when converted to JSON. To prevent this, we turn string
 		-- keys back into numeric keys.

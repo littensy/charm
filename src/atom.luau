@@ -15,7 +15,7 @@ local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
 
 	local function atom(...)
 		if select("#", ...) == 0 then
-			for set in store.capturing do
+			for set in next, store.capturing do
 				set[atom] = true
 			end
 

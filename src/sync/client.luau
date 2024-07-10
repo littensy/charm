@@ -36,7 +36,7 @@ local function client(options: ClientOptions): ClientSyncer
 		for index = 1, select("#", ...) do
 			local payload = select(index, ...)
 
-			for key, state in payload.data do
+			for key, state in next, payload.data do
 				if payload.type == "patch" then
 					atoms[key](patch.apply(atoms[key](), state))
 				else

@@ -72,7 +72,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 		local function getSnapshot()
 			local snapshot: { [string]: any } = {}
-			for key, atom in options.atoms do
+			for key, atom in next, options.atoms do
 				snapshot[key] = atom()
 			end
 			return snapshot
@@ -105,7 +105,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 		-- Populate the initial state and snapshot for each atom.
 		-- Subscribe to each atom and update the state when it changes.
-		for key, atom in options.atoms do
+		for key, atom in next, options.atoms do
 			cleanups[key] = subscribe(atom, function(current, previous)
 				pushSnapshot(key, current, previous)
 				changed = true
@@ -122,7 +122,7 @@ local function server(options: ServerOptions): ServerSyncer
 			local payloads: { SyncPayload } = {}
 			local lastSnapshot
 
-			for index, snapshot in snapshots do
+			for index, snapshot in next, snapshots do
 				lastSnapshot = snapshot
 
 				if index == 1 then
@@ -138,14 +138,14 @@ local function server(options: ServerOptions): ServerSyncer
 			snapshots = { lastSnapshot }
 			changed = false
 
-			for _, player in Players:GetPlayers() do
+			for _, player in next, Players:GetPlayers() do
 				callback(player, unpack(payloads))
 			end
 		end, options.interval or 0)
 
 		return function()
 			disconnect()
-			for _, cleanup in cleanups do
+			for _, cleanup in next, cleanups do
 				cleanup()
 			end
 		end
@@ -170,7 +170,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 		local payloads: { SyncPayload } = {}
 
-		for index, snapshot in snapshots do
+		for index, snapshot in next, snapshots do
 			if index == 1 then
 				continue
 			end
