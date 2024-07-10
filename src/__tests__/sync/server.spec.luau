@@ -80,7 +80,6 @@ return function()
 		b(3)
 		server:_sendPatch(target)
 
-		print(payloads)
 		expect(#payloads).to.equal(2)
 		expect(payloads[1].type).to.equal("patch")
 		expect(payloads[1].data.a).to.equal(3)
