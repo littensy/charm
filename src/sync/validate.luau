@@ -8,7 +8,7 @@ local function isUnsafeTable(object: { [any]: any })
 	local objectSize = 0
 
 	-- All keys must have the same type
-	for key in object do
+	for key in next, object do
 		local currentType = type(key)
 
 		if not keyType and SAFE_KEYS[currentType] then

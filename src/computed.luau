@@ -20,9 +20,13 @@ local function computed<T>(molecule: Molecule<T>, options: AtomOptions<T>?): Mol
 	local computedRef = setmetatable({ current = computedAtom }, { __mode = "v" })
 
 	local function listener()
-		if computedRef.current then
-			dependencies, state = store.reconnect(molecule, dependencies, listener, computedRef.current)
-			computedRef.current(state)
+		local computedAtom = computedRef.current
+
+		if computedAtom then
+			store.disconnect(dependencies, listener)
+			dependencies, state = store.capture(molecule)
+			store.connect(dependencies, listener, computedAtom)
+			computedAtom(state)
 		end
 	end
 

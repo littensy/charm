@@ -12,22 +12,31 @@ type Molecule<T> = types.Molecule<T>
 	@return A function that unsubscribes the callback.
 ]=]
 local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T) -> ()): () -> ()
-	local captured, state = store.capture(molecule)
+	local dependencies, state = store.capture(molecule)
+	local disconnected = false
 
 	local function listener()
 		local prevState = state
 
-		captured, state = store.reconnect(molecule, captured, listener)
+		store.disconnect(dependencies, listener)
+		dependencies, state = store.capture(molecule)
+
+		if not disconnected then
+			store.connect(dependencies, listener)
+		end
 
 		if state ~= prevState then
 			callback(state, prevState)
 		end
 	end
 
-	store.connect(captured, listener)
+	store.connect(dependencies, listener)
 
 	return function()
-		store.disconnect(captured, listener)
+		if not disconnected then
+			disconnected = true
+			store.disconnect(dependencies, listener)
+		end
 	end
 end
 

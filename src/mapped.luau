@@ -36,7 +36,7 @@ local function mapped<K0, V0, K1, V1>(molecule: Molecule<{ [K0]: V0 }>, mapper: 
 		local mappedKeys = {}
 
 		-- TODO: Only call mapper if the item has changed.
-		for key, item in items do
+		for key, item in next, items do
 			local newItem, newKey = mapper(item, key)
 			if newKey == nil then
 				newKey = key :: any
@@ -48,7 +48,7 @@ local function mapped<K0, V0, K1, V1>(molecule: Molecule<{ [K0]: V0 }>, mapper: 
 			end
 		end
 
-		for key in prevMappedItems do
+		for key in next, prevMappedItems do
 			if mappedKeys[key] == nil and mappedItems[key] == prevMappedItems[key] then
 				mappedItems[key] = nil
 			end

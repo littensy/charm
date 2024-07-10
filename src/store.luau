@@ -126,7 +126,7 @@ local function batch(callback: () -> ())
 		batching = false
 	end)
 
-	for listener in batched do
+	for listener in next, batched do
 		try(listener)
 	end
 
@@ -155,7 +155,7 @@ local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
 	table.clear(capturing)
 
 	local result = try(callback, function()
-		for set in snapshot do
+		for set in next, snapshot do
 			capturing[set] = true
 		end
 	end, ...)
@@ -166,48 +166,26 @@ end
 --[=[
 	Subscribes the listener to the changes of the given atoms.
 	
-	@param dependencies The atoms to listen to.
+	@param atoms The atoms to listen to.
 	@param listener The function to call when the atoms change.
 	@param ref Optionally bind the lifetime of the listener to a value.
 ]=]
-local function connect(dependencies: Set<Atom<any>>, listener: () -> (), ref: unknown?)
-	for atom in dependencies do
+local function connect(atoms: Set<Atom<any>>, listener: () -> (), ref: unknown?)
+	for atom in next, atoms do
 		listeners[atom][listener] = ref or true
 	end
 end
 
 --[=[
-	Unsubscribes the listener from the changes of the given atoms.
+	Unsubscribes the listener from every atom it was connected to.
 	
-	@param dependencies The atoms to stop listening to.
+	@param atoms The atoms to stop listening to.
 	@param listener The function to stop calling when the atoms change.
 ]=]
-local function disconnect(dependencies: Set<Atom<any>>, listener: () -> ())
-	for atom in dependencies do
+local function disconnect(atoms: Set<Atom<any>>, listener: () -> ())
+	for atom in next, atoms do
 		listeners[atom][listener] = nil
 	end
-end
-
---[=[
-	Disconnects the listener and evaluates the molecule again to capture any
-	new dependencies. Useful for tracking conditional dependencies.
-
-	@param molecule The atom or molecule to evaluate.
-	@param dependencies The current dependencies.
-	@param listener The listener to disconnect.
-	@param ref Optionally bind the lifetime of the listener to a value.
-	@return The new dependencies and the state of the molecule.
-]=]
-local function reconnect<T>(
-	molecule: Atom<T>,
-	dependencies: Set<Atom<any>>,
-	listener: () -> (),
-	ref: unknown?
-): (Set<Atom<any>>, T)
-	disconnect(dependencies, listener)
-	local nextDependencies, state = capture(molecule)
-	connect(nextDependencies, listener, ref)
-	return nextDependencies, state
 end
 
 return {
@@ -220,5 +198,4 @@ return {
 	peek = peek,
 	connect = connect,
 	disconnect = disconnect,
-	reconnect = reconnect,
 }

@@ -18,7 +18,7 @@ return function()
 			nested_atom = { value = atom(0), expected = false },
 		}
 
-		for key, case in cases do
+		for key, case in next, cases do
 			local success, result = pcall(function()
 				validate(case.value, key)
 			end)

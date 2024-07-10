@@ -72,4 +72,22 @@ return function()
 		expect(reruns).to.equal(4)
 		expect(current).to.equal(2)
 	end)
+
+	it("allows self-cleanup", function()
+		local a = atom(1)
+		local cleanedUp = false
+		local cleanup
+
+		cleanup = effect(function()
+			if cleanup then
+				assert(not cleanedUp, "cleanup ran twice")
+				cleanup()
+				cleanedUp = true
+			end
+			a()
+		end)
+
+		a(2)
+		a(3)
+	end)
 end
