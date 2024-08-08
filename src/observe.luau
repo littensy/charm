@@ -44,7 +44,4 @@ local function observe<K, V>(molecule: Molecule<{ [K]: V }>, factory: (value: V,
 	return cleanup
 end
 
-return observe :: <K, V>(
-	molecule: Molecule<{ [K]: V }>,
-	factory: ((value: V, key: K) -> () -> ()) | (value: V, key: K) -> ()
-) -> () -> ()
+return observe
