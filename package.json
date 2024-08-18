@@ -1,6 +1,6 @@
 {
 	"name": "@rbxts/charm",
-	"version": "0.5.3",
+	"version": "0.6.0",
 	"description": "Atomic state management for Roblox",
 	"scripts": {
 		"lint": "sh bin/check.sh",
