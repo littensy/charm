@@ -67,4 +67,29 @@ return function()
 		expect(calls[1]).to.equal(2)
 		expect(calls[2]).to.equal(3)
 	end)
+
+	it("batches patches", function()
+		local a = atom(0)
+		local b = atom(0)
+		local client = sync.client({ atoms = { a = a, b = b } })
+		local states = {}
+
+		subscribe(a, function()
+			states.b = b()
+		end)
+
+		subscribe(b, function()
+			states.a = a()
+		end)
+
+		client:sync({
+			type = "patch",
+			data = { a = 1, b = 2 },
+		})
+
+		expect(a()).to.equal(1)
+		expect(b()).to.equal(2)
+		expect(states.a).to.equal(1)
+		expect(states.b).to.equal(2)
+	end)
 end

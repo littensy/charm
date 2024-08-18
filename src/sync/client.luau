@@ -1,3 +1,4 @@
+local store = require(script.Parent.Parent.store)
 local types = require(script.Parent.Parent.types)
 type Atom<T> = types.Atom<T>
 type SyncPayload = types.SyncPayload
@@ -36,13 +37,17 @@ local function client(options: ClientOptions): ClientSyncer
 		for index = 1, select("#", ...) do
 			local payload = select(index, ...)
 
-			for key, state in next, payload.data do
-				if payload.type == "patch" then
-					atoms[key](patch.apply(atoms[key](), state))
-				else
-					atoms[key](state)
+			store.batch(function()
+				for key, state in next, payload.data do
+					local atom = atoms[key]
+
+					if payload.type == "patch" then
+						atom(patch.apply(atom(), state))
+					else
+						atom(state)
+					end
 				end
-			end
+			end)
 		end
 	end
 
