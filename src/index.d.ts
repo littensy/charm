@@ -69,6 +69,9 @@ declare namespace Charm {
 	 */
 	function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
 
+	// Overload for no arguments
+	function atom<State>(state?: State, options?: AtomOptions<State>): Atom<State | undefined>;
+
 	/**
 	 * Creates a read-only atom that derives its state from one or more atoms.
 	 * Used to avoid unnecessary recomputations if multiple listeners depend on
