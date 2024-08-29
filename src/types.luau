@@ -18,7 +18,7 @@ export type Atom<T> = (() -> T) & (state: T | (T) -> T) -> T
 	@template State The type of the state.
 	@return The current state.
 ]=]
-export type Molecule<T> = () -> T
+export type Molecule<T> = (...any) -> T
 
 --[=[
 	Optional configuration for creating an atom.

@@ -35,7 +35,7 @@ declare namespace Charm {
 	 *
 	 * @returns The current state.
 	 */
-	type Molecule<State> = () => State;
+	type Molecule<State> = (...args: any[]) => State;
 
 	/**
 	 * Infers the type of the state produced by the given molecule.
