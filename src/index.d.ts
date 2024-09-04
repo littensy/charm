@@ -50,6 +50,7 @@ declare namespace Charm {
 	};
 
 	type AtomMap = Record<string, Atom<any>>;
+	type MoleculeMap = Record<string, Molecule<any>>;
 
 	interface AtomOptions<State> {
 		/**
@@ -225,7 +226,7 @@ declare namespace Charm {
 		 * @param options The atoms to synchronize with the client.
 		 * @returns A `ServerSyncer` object.
 		 */
-		server: <Atoms extends AtomMap>(options: ServerOptions<Atoms>) => ServerSyncer<Atoms>;
+		server: <Molecules extends MoleculeMap>(options: ServerOptions<Molecules>) => ServerSyncer<Molecules>;
 		/**
 		 * Checks whether a value is `None`. If `true`, the value is scheduled to be
 		 * removed from the state when the patch is applied.
@@ -280,9 +281,9 @@ declare namespace Charm {
 	 * A payload that can be sent from the server to the client to synchronize
 	 * state between the two.
 	 */
-	type SyncPayload<Atoms extends AtomMap> =
-		| { type: "init"; data: StateOfMap<Atoms> }
-		| { type: "patch"; data: SyncPatch<StateOfMap<Atoms>> };
+	type SyncPayload<Molecules extends MoleculeMap> =
+		| { type: "init"; data: StateOfMap<Molecules> }
+		| { type: "patch"; data: SyncPatch<StateOfMap<Molecules>> };
 
 	interface ClientOptions<Atoms extends AtomMap> {
 		/**
@@ -291,11 +292,11 @@ declare namespace Charm {
 		atoms: Atoms;
 	}
 
-	interface ServerOptions<Atoms extends AtomMap> {
+	interface ServerOptions<Molecules extends MoleculeMap> {
 		/**
 		 * The atoms to synchronize with the client.
 		 */
-		atoms: Atoms;
+		atoms: Molecules;
 		/**
 		 * The interval at which to send patches to the client, in seconds.
 		 * Defaults to `0` (patches are sent up to once per frame). Set to a
@@ -324,7 +325,7 @@ declare namespace Charm {
 		sync(...payloads: SyncPayload<Atoms>[]): void;
 	}
 
-	interface ServerSyncer<Atoms extends AtomMap> {
+	interface ServerSyncer<Molecules extends MoleculeMap> {
 		/**
 		 * Sets up a subscription to each atom that schedules a patch to be sent to
 		 * the client whenever the state changes. When a change occurs, the `callback`
@@ -336,7 +337,7 @@ declare namespace Charm {
 		 * @param callback The function to call when the state changes.
 		 * @returns A cleanup function that unsubscribes all listeners.
 		 */
-		connect(callback: (player: Player, ...payloads: SyncPayload<Atoms>[]) => void): Cleanup;
+		connect(callback: (player: Player, ...payloads: SyncPayload<Molecules>[]) => void): Cleanup;
 		/**
 		 * Hydrates the client's state with the server's state. This should be
 		 * called when a player joins the game and requires the server's state.
