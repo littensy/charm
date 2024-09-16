@@ -1,7 +1,7 @@
 local store = require(script.Parent.Parent.store)
 
 local SAFE_KEYS = { string = true, number = true }
-local SAFE_VALUES = { string = true, number = true, boolean = true, table = true }
+local SAFE_VALUES = { string = true, number = true, boolean = true, table = true, userdata = true }
 
 local function isUnsafeTable(object: { [any]: any })
 	local keyType = nil
