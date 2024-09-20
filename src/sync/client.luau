@@ -9,6 +9,11 @@ type ClientOptions = {
 		The atoms to synchronize with the server.
 	]=]
 	atoms: { [string]: Atom<any> },
+	--[=[
+		Whether to ignore patches sent before the client has been hydrated.
+		Default is `true`.
+	]=]
+	ignoreUnhydrated: boolean?,
 }
 
 type ClientSyncer = {
@@ -30,21 +35,22 @@ type ClientSyncer = {
 ]=]
 local function client(options: ClientOptions): ClientSyncer
 	local atoms = options.atoms
+	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
 	local self = {} :: ClientSyncer
-	local ready = false
+	local hydrated = false
 
 	-- Apply the state changes sent by the server.
 	function self:sync(...)
 		for index = 1, select("#", ...) do
 			local payload: SyncPayload = select(index, ...)
 
-			if payload.type ~= "init" and not ready then
-				-- If the client has not been hydrated yet, ignore patches.
-				-- This is to prevent the client from patching incomplete state.
+			if ignoreUnhydrated and payload.type ~= "init" and not hydrated then
+				-- If the client is not initialized, ignore patches. This is
+				-- to prevent patching incomplete state.
 				continue
 			end
 
-			ready = true
+			hydrated = true
 
 			store.batch(function()
 				for key, state in next, payload.data do
