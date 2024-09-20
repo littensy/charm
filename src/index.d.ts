@@ -290,6 +290,11 @@ declare namespace Charm {
 		 * The atoms to synchronize with the server.
 		 */
 		atoms: Atoms;
+		/**
+		 * Whether to ignore patches sent before the client has been hydrated.
+		 * Defaults to `true`.
+		 */
+		ignoreUnhydrated?: boolean;
 	}
 
 	interface ServerOptions<Molecules extends MoleculeMap> {
