@@ -44,7 +44,7 @@ local function client(options: ClientOptions): ClientSyncer
 		for index = 1, select("#", ...) do
 			local payload: SyncPayload = select(index, ...)
 
-			if ignoreUnhydrated and payload.type ~= "init" and not hydrated then
+			if ignoreUnhydrated and payload.type == "patch" and not hydrated then
 				-- If the client is not initialized, ignore patches. This is
 				-- to prevent patching incomplete state.
 				continue
