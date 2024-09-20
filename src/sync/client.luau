@@ -31,11 +31,20 @@ type ClientSyncer = {
 local function client(options: ClientOptions): ClientSyncer
 	local atoms = options.atoms
 	local self = {} :: ClientSyncer
+	local ready = false
 
 	-- Apply the state changes sent by the server.
 	function self:sync(...)
 		for index = 1, select("#", ...) do
-			local payload = select(index, ...)
+			local payload: SyncPayload = select(index, ...)
+
+			if payload.type ~= "init" and not ready then
+				-- If the client has not been hydrated yet, ignore patches.
+				-- This is to prevent the client from patching incomplete state.
+				continue
+			end
+
+			ready = true
 
 			store.batch(function()
 				for key, state in next, payload.data do
