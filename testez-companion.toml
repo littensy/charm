@@ -1,1 +1,1 @@
-roots = ["ReplicatedStorage/Packages/charm/__tests__"]
+roots = ["ReplicatedStorage/DevPackages/Charm/__tests__"]

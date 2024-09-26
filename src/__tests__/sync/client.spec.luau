@@ -21,6 +21,13 @@ return function()
 		local client = sync.client({ atoms = { a = a } })
 
 		client:sync({
+			type = "init",
+			data = { a = a() },
+		})
+
+		expect(a()).to.equal(previous)
+
+		client:sync({
 			type = "patch",
 			data = { a = { b = 3 } },
 		})
@@ -33,6 +40,11 @@ return function()
 	it("fixes sparse array patches", function()
 		local a = atom({ 1 })
 		local client = sync.client({ atoms = { a = a } })
+
+		client:sync({
+			type = "init",
+			data = { a = a() },
+		})
 
 		-- This patch would be the result of a diff between { 1 } and { 1, 2 } that
 		-- was JSON-serialized and deserialized. The client should be able to catch
@@ -54,6 +66,11 @@ return function()
 		subscribe(a, function(value)
 			table.insert(calls, value)
 		end)
+
+		client:sync({
+			type = "init",
+			data = { a = a() },
+		})
 
 		client:sync({
 			type = "patch",
@@ -81,6 +98,11 @@ return function()
 		subscribe(b, function()
 			states.a = a()
 		end)
+
+		client:sync({
+			type = "init",
+			data = { a = a(), b = b() },
+		})
 
 		client:sync({
 			type = "patch",

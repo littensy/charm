@@ -4,12 +4,11 @@
 		"$className": "DataModel",
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
-			"Packages": {
-				"$path": "Packages",
-				"ReactLua": { "$path": "Packages" },
-				"charm": { "$path": "src" }
+			"DevPackages": {
+				"$path": "DevPackages",
+				"Charm": { "$path": "src" }
 			},
-			"DevPackages": { "$path": "DevPackages" }
+			"Packages": { "$path": "Packages" }
 		},
 		"TestService": {
 			"$className": "TestService",
