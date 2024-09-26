@@ -24,7 +24,7 @@ local function coerceDenseArray(array: { any })
 
 	for index in next, array do
 		if type(index) ~= "number" then
-			return
+			return array
 		end
 
 		if index > 2 ^ 16 then
