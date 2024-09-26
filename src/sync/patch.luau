@@ -10,6 +10,35 @@ local function isNone(value: any): boolean
 	return type(value) == "table" and value.__none == "__none"
 end
 
+--[=[
+	Some sparse arrays lose outlying values when serialized to JSON. For
+	example, `[1, 2, nil, nil, 5]` becomes `[1, 2]` in some cases. This loss of
+	data can cause hard-to-debug issues down the line.
+
+	This function coerces the input object into being interpreted as a dense
+	array, so that the aforementioned `[1, 2]` result would instead be
+	`[1, 2, nil, nil, 5]`.
+]=]
+local function coerceSparseArray(object: any)
+	-- The object must be a table with a numeric key
+	if type(object) ~= "table" or type((next(object))) ~= "number" then
+		return object
+	end
+
+	local maxn = table.maxn(object :: any)
+
+	-- If the table is already dense, return it as-is
+	if maxn == #object then
+		return object
+	end
+
+	local result = table.create(maxn, 0)
+
+	table.move(object, 1, maxn, 1, result)
+
+	return result
+end
+
 local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
 
@@ -24,6 +53,9 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 			patches[key] = diff(previous, next)
 		end
 	end
+
+	-- Coerce the patches into being interpreted as dense arrays.
+	patches = coerceSparseArray(patches)
 
 	if _G.__DEV__ then
 		for key, value in next, prevState do
