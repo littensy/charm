@@ -12,76 +12,49 @@ end
 
 --[=[
 	JSON serialization can drop the last values of a sparse array. For example,
-	`{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. This loss of data can
-	cause hard-to-debug issues down the line, so we need to ensure that all
-	arrays are dense.
+	`{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. Ambiguity in the
+	serialization of sparse arrays can be resolved by converting them to
+	dictionaries with string keys.
 
-	This function coerces the input object into being interpreted as a dense
-	array, so that the above result would instead be `[1, null, 3]`.
+	The `apply` function will convert these dictionaries back into arrays as
+	long as the target array is not sparse. This function ensures that the diff
+	function produces a patch that can be correctly applied.
 ]=]
-local function coerceDenseArray(array: { any })
-	local maxn = -1
+local function stringifySparseArray(object: { any }): { [string | number]: any }
+	local maxn = table.maxn(object)
 
-	for index in next, array do
-		if type(index) ~= "number" then
-			return array
-		end
-
-		if index > 2 ^ 16 then
-			-- The object is too large to be considered a dense array
-			if _G.__DEV__ then
-				warn(
-					"Charm encountered an array that may not be synced reliably. This can happen for any of the following reasons:",
-					"\n1. The array is too large (more than 2^16 elements).",
-					"\n2. The array has large gaps between elements (e.g. { [1] = foo, [100000] = bar }).",
-					"\n3. The array is keyed by large numbers (e.g. { [1234] = foo, [5678] = bar }).",
-					"\nTo resolve this issue, consider using string keys instead of an array.",
-					`\n\tat index {index} of array`,
-					array
-				)
-			end
-
-			return array
-		end
-
-		maxn = math.max(maxn, index)
+	if maxn == 0 or maxn == #object then
+		-- The object is either not an array or a dense array
+		return object
 	end
 
-	if maxn == -1 or maxn == #array then
-		-- If the table is already dense, return it as-is
-		return array
+	local dictionary = {}
+
+	for index, value in next, object do
+		dictionary[tostring(index)] = value
 	end
 
-	local result = table.create(maxn)
-
-	table.move(array, 1, maxn, 1, result)
-
-	return result
+	return dictionary
 end
 
 local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
-	local numeric = true
 
 	for key, previous in next, prevState do
-		local next = nextState[key]
+		local current = nextState[key]
 
-		if numeric and type(key) ~= "number" then
-			numeric = false
-		end
-
-		if previous == next then
+		if previous == current then
 			patches[key] = nil
-		elseif next == nil then
+		elseif current == nil then
 			patches[key] = NONE
-		elseif type(previous) == "table" and type(next) == "table" then
-			patches[key] = diff(previous, next)
+		elseif type(previous) == "table" and type(current) == "table" then
+			patches[key] = diff(previous, current)
 		end
 	end
 
-	if numeric then
-		-- Coerce sparse array patches into being interpreted as dense arrays
-		patches = coerceDenseArray(patches)
+	-- Coerce sparse array patches into dictionaries
+	if prevState[1] ~= nil or nextState[1] ~= nil then
+		patches = stringifySparseArray(patches)
 	end
 
 	if _G.__DEV__ then
