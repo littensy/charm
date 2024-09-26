@@ -1,8 +1,8 @@
 local validate = require(script.Parent.validate)
 
 --[=[
-	A special value that denotes the absence of a value. Used to represent
-	undefined values in patches.
+	A special symbol that denotes the absence of a value. Used to represent
+	deleted values in patches.
 ]=]
 local NONE = { __none = "__none" }
 
@@ -11,39 +11,64 @@ local function isNone(value: any): boolean
 end
 
 --[=[
-	Some sparse arrays lose outlying values when serialized to JSON. For
-	example, `[1, 2, nil, nil, 5]` becomes `[1, 2]` in some cases. This loss of
-	data can cause hard-to-debug issues down the line.
+	JSON serialization can drop the last values of a sparse array. For example,
+	`{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. This loss of data can
+	cause hard-to-debug issues down the line, so we need to ensure that all
+	arrays are dense.
 
 	This function coerces the input object into being interpreted as a dense
-	array, so that the aforementioned `[1, 2]` result would instead be
-	`[1, 2, nil, nil, 5]`.
+	array, so that the above result would instead be `[1, null, 3]`.
 ]=]
-local function coerceSparseArray(object: any)
-	-- The object must be a table with a numeric key
-	if type(object) ~= "table" or type((next(object))) ~= "number" then
-		return object
+local function coerceDenseArray(array: { any })
+	local maxn = -1
+
+	for index in next, array do
+		if type(index) ~= "number" then
+			return
+		end
+
+		if index > 2 ^ 16 then
+			-- The object is too large to be considered a dense array
+			if _G.__DEV__ then
+				warn(
+					"Charm encountered an array that may not be synced reliably. This can happen for any of the following reasons:",
+					"\n1. The array is too large (more than 2^16 elements).",
+					"\n2. The array has large gaps between elements (e.g. { [1] = foo, [100000] = bar }).",
+					"\n3. The array is keyed by large numbers (e.g. { [1234] = foo, [5678] = bar }).",
+					"\nTo resolve this issue, consider using string keys instead of an array.",
+					`\n\tat index {index} of array`,
+					array
+				)
+			end
+
+			return array
+		end
+
+		maxn = math.max(maxn, index)
 	end
 
-	local maxn = table.maxn(object :: any)
-
-	-- If the table is already dense, return it as-is
-	if maxn == #object then
-		return object
+	if maxn == -1 or maxn == #array then
+		-- If the table is already dense, return it as-is
+		return array
 	end
 
-	local result = table.create(maxn, 0)
+	local result = table.create(maxn)
 
-	table.move(object, 1, maxn, 1, result)
+	table.move(array, 1, maxn, 1, result)
 
 	return result
 end
 
 local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
+	local numeric = true
 
 	for key, previous in next, prevState do
 		local next = nextState[key]
+
+		if numeric and type(key) ~= "number" then
+			numeric = false
+		end
 
 		if previous == next then
 			patches[key] = nil
@@ -54,8 +79,10 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 		end
 	end
 
-	-- Coerce the patches into being interpreted as dense arrays.
-	patches = coerceSparseArray(patches)
+	if numeric then
+		-- Coerce sparse array patches into being interpreted as dense arrays
+		patches = coerceDenseArray(patches)
+	end
 
 	if _G.__DEV__ then
 		for key, value in next, prevState do
