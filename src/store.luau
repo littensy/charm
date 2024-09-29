@@ -4,9 +4,14 @@ type Set<T> = types.Set<T>
 type WeakMap<K, V> = types.WeakMap<K, V>
 
 local listeners: WeakMap<Atom<any>, WeakMap<() -> (), unknown>> = setmetatable({}, { __mode = "k" })
-local capturing: Set<Set<Atom<any>>> = {}
+
 local batched: Set<() -> ()> = {}
 local batching = false
+
+local capturing = {
+	stack = {} :: { Set<Atom<any>> },
+	index = 0,
+}
 
 --[=[
 	Calls the given function and returns the result. If the function yields or
@@ -29,7 +34,9 @@ local function try<T, U...>(callback: (U...) -> T | any, finally: (() -> ())?, .
 
 		if coroutine.status(thread) == "suspended" then
 			local source, line, name = debug.info(callback, "sln")
+
 			coroutine.close(thread)
+
 			error(
 				"Yielding is not allowed in atom functions. Consider wrapping this code in a Promise or task.defer instead."
 					.. `\nFunction defined at: {source}:{line}`
@@ -37,6 +44,7 @@ local function try<T, U...>(callback: (U...) -> T | any, finally: (() -> ())?, .
 			)
 		elseif not success then
 			local source, line, name = debug.info(callback, "sln")
+
 			error(
 				"An error occurred while running an atom function"
 					.. `\nFunction defined at: {source}:{line}`
@@ -53,6 +61,7 @@ local function try<T, U...>(callback: (U...) -> T | any, finally: (() -> ())?, .
 	end
 
 	local success, result = pcall(callback, ...)
+
 	finally()
 	assert(success, result)
 
@@ -88,6 +97,34 @@ local function notify(atom: Atom<any>)
 end
 
 --[=[
+	Returns the result of the function without subscribing to changes. If a
+	non-function value is provided, it is returned as is.
+	
+	@param molecule The atom or molecule to get the state of.
+	@param args Arguments to pass to the molecule.
+	@return The current state.
+]=]
+local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
+	if type(callback) ~= "function" then
+		return callback
+	end
+
+	if capturing.index == 0 then
+		return callback(...)
+	end
+
+	capturing.index += 1
+	capturing.stack[capturing.index] = {}
+
+	local result = try(callback, function()
+		capturing.stack[capturing.index] = nil
+		capturing.index -= 1
+	end, ...)
+
+	return result
+end
+
+--[=[
 	Captures all atoms that are read during the function call and returns them
 	along with the result of the function. Useful for tracking dependencies.
 	
@@ -96,14 +133,17 @@ end
 ]=]
 local function capture<T>(molecule: () -> T): (Set<Atom<any>>, T)
 	if listeners[molecule] then
-		return { [molecule] = true }, molecule()
+		return { [molecule] = true }, peek(molecule)
 	end
 
 	local dependencies: Set<Atom<any>> = {}
-	capturing[dependencies] = true
+
+	capturing.index += 1
+	capturing.stack[capturing.index] = dependencies
 
 	local result = try(molecule, function()
-		capturing[dependencies] = nil
+		capturing.stack[capturing.index] = nil
+		capturing.index -= 1
 	end)
 
 	return dependencies, result
@@ -131,36 +171,6 @@ local function batch(callback: () -> ())
 	end
 
 	table.clear(batched)
-end
-
---[=[
-	Returns the result of the function without subscribing to changes. If a
-	non-function value is provided, it is returned as is.
-	
-	@param molecule The atom or molecule to get the state of.
-	@param args Arguments to pass to the molecule.
-	@return The current state.
-]=]
-local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
-	if type(callback) ~= "function" then
-		return callback
-	end
-
-	if not next(capturing) then
-		return callback(...)
-	end
-
-	local snapshot = table.clone(capturing)
-
-	table.clear(capturing)
-
-	local result = try(callback, function()
-		for set in next, snapshot do
-			capturing[set] = true
-		end
-	end, ...)
-
-	return result
 end
 
 --[=[

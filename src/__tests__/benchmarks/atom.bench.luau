@@ -1,7 +1,7 @@
 -- This file is for use by Benchmarker
 -- https://boatbomber.itch.io/benchmarker
 
-local Package = game:GetService("ReplicatedStorage").Packages.charm
+local Package = game:GetService("ReplicatedStorage").DevPackages.Charm
 
 local atom = require(Package.atom)
 local computed = require(Package.computed)
@@ -11,19 +11,19 @@ local function parameterGenerator()
 end
 
 local benchmarks = {
-	atom = function(_, source: any)
+	atom = function(_, state: any)
 		for _ = 1, 500 do
-			source(math.random(1, 2))
+			state(math.random(1, 2))
 		end
 	end,
 
-	computed = function(_, source: any)
+	computed = function(_, state: any)
 		computed(function()
-			return 2 * source()
+			return 2 * state()
 		end)
 
 		for _ = 1, 500 do
-			source(math.random(1, 2))
+			state(math.random(1, 2))
 		end
 	end,
 }

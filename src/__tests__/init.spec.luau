@@ -13,5 +13,7 @@ return function()
 
 	afterEach(function()
 		table.clear(store.listeners :: any)
+		table.clear(store.capturing.stack)
+		store.capturing.index = 0
 	end)
 end

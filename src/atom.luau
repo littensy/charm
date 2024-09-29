@@ -15,8 +15,10 @@ local function atom<T>(state: T, options: AtomOptions<T>?): Atom<T>
 
 	local function atom(...)
 		if select("#", ...) == 0 then
-			for set in next, store.capturing do
-				set[atom] = true
+			local index = store.capturing.index
+
+			if index > 0 then
+				store.capturing.stack[index][atom] = true
 			end
 
 			return state
