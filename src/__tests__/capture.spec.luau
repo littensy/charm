@@ -1,5 +1,6 @@
 local atom = require(script.Parent.Parent.atom)
 local store = require(script.Parent.Parent.store)
+local subscribe = require(script.Parent.Parent.subscribe)
 
 return function()
 	it("gracefully handles yielding", function()
@@ -29,7 +30,7 @@ return function()
 		expect(result).to.equal(1)
 	end)
 
-	it("allows nested captures", function()
+	it("skips atoms in inner capture calls", function()
 		local a = atom(1)
 		local b = atom(1)
 		local inner
@@ -41,8 +42,20 @@ return function()
 		end)
 
 		assert(outer[a], "outer did not capture a")
-		assert(outer[b], "outer did not capture b")
+		assert(outer[b] == nil, "outer captured b")
 		assert(inner[a] == nil, "inner captured a")
 		assert(inner[b], "inner did not capture b")
+	end)
+
+	it("should not capture notified dependents", function()
+		local state = atom(1)
+
+		subscribe(state, function() end)
+
+		local deps = store.capture(function()
+			return state(2)
+		end)
+
+		expect(deps[state]).to.never.be.ok()
 	end)
 end
