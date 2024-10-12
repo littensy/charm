@@ -1,0 +1,6 @@
+{
+	"name": "charm-sync",
+	"tree": {
+		"$path": "src"
+	}
+}

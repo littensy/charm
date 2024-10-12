@@ -6,14 +6,25 @@
 			"$className": "ReplicatedStorage",
 			"DevPackages": {
 				"$path": "DevPackages",
-				"Charm": { "$path": "src" }
-			},
-			"Packages": { "$path": "Packages" }
+				"Charm": {
+					"$path": "packages/charm"
+				},
+				"CharmSync": {
+					"$path": "packages/charm-sync"
+				},
+				"ReactCharm": {
+					"$path": "packages/react"
+				}
+			}
 		},
 		"TestService": {
 			"$className": "TestService",
-			"$properties": { "ExecuteWithStudioRun": true },
-			"spec": { "$path": "bin/spec.server.luau" }
+			"$properties": {
+				"ExecuteWithStudioRun": true
+			},
+			"Tests": {
+				"$path": "tests"
+			}
 		}
 	}
 }

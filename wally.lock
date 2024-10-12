@@ -3,11 +3,6 @@
 registry = "test"
 
 [[package]]
-name = "evaera/promise"
-version = "4.0.0"
-dependencies = []
-
-[[package]]
 name = "jsdotlua/boolean"
 version = "1.2.6"
 dependencies = [["number", "jsdotlua/number@1.2.6"]]
@@ -95,7 +90,7 @@ dependencies = [["collections", "jsdotlua/collections@1.2.6"]]
 [[package]]
 name = "littensy/charm"
 version = "0.1.0"
-dependencies = [["Promise", "evaera/promise@4.0.0"], ["React", "jsdotlua/react@17.1.0"], ["ReactRoblox", "jsdotlua/react-roblox@17.1.0"], ["TestEZ", "roblox/testez@0.4.1"]]
+dependencies = [["React", "jsdotlua/react@17.1.0"], ["ReactRoblox", "jsdotlua/react-roblox@17.1.0"], ["TestEZ", "roblox/testez@0.4.1"]]
 
 [[package]]
 name = "roblox/testez"
