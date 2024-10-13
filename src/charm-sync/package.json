@@ -1,6 +1,6 @@
 {
 	"name": "@rbxts/charm-sync",
-	"version": "0.1.0-beta.2",
+	"version": "0.1.0",
 	"description": "Sync server state with clients using Charm",
 	"repository": "littensy/charm",
 	"license": "MIT",
