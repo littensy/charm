@@ -1,6 +1,6 @@
 curl -o bin/roblox.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.lua
 
-rojo sourcemap dev.project.json -o sourcemap.json
+rojo sourcemap -o sourcemap.json
 
 check() {
 	echo "Checking $1"

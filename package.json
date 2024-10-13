@@ -3,7 +3,7 @@
 	"scripts": {
 		"lint": "sh bin/check.sh",
 		"build": "sh bin/build.sh",
-		"wally": "wally install && rojo sourcemap dev.project.json --output sourcemap.json"
+		"wally": "wally install && rojo sourcemap --output sourcemap.json"
 	},
 	"devDependencies": {
 		"@rbxts/compiler-types": "3.0.0-types.0",

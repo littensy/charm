@@ -1,5 +1,5 @@
 {
-	"name": "charm-dev",
+	"name": "charm-test",
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
