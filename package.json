@@ -3,7 +3,6 @@
 	"scripts": {
 		"build": "sh bin/build.sh",
 		"check": "sh bin/check.sh",
-		"pack": "sh bin/pack.sh",
 		"wally": "wally install && rojo sourcemap --output sourcemap.json"
 	},
 	"devDependencies": {
