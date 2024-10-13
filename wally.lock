@@ -3,8 +3,8 @@
 registry = "test"
 
 [[package]]
-name = "evaera/promise"
-version = "4.0.0"
+name = "centau/vide"
+version = "0.3.1"
 dependencies = []
 
 [[package]]
@@ -54,27 +54,27 @@ dependencies = []
 
 [[package]]
 name = "jsdotlua/react"
-version = "17.1.0"
-dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["shared", "jsdotlua/shared@17.1.0"]]
+version = "17.2.0"
+dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["shared", "jsdotlua/shared@17.2.0"]]
 
 [[package]]
 name = "jsdotlua/react-reconciler"
-version = "17.1.0"
-dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["promise", "jsdotlua/promise@3.5.2"], ["react", "jsdotlua/react@17.1.0"], ["scheduler", "jsdotlua/scheduler@17.1.0"], ["shared", "jsdotlua/shared@17.1.0"]]
+version = "17.2.0"
+dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["promise", "jsdotlua/promise@3.5.2"], ["react", "jsdotlua/react@17.2.0"], ["scheduler", "jsdotlua/scheduler@17.2.0"], ["shared", "jsdotlua/shared@17.2.0"]]
 
 [[package]]
 name = "jsdotlua/react-roblox"
-version = "17.1.0"
-dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["react", "jsdotlua/react@17.1.0"], ["react-reconciler", "jsdotlua/react-reconciler@17.1.0"], ["scheduler", "jsdotlua/scheduler@17.1.0"], ["shared", "jsdotlua/shared@17.1.0"]]
+version = "17.2.0"
+dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["react", "jsdotlua/react@17.2.0"], ["react-reconciler", "jsdotlua/react-reconciler@17.2.0"], ["scheduler", "jsdotlua/scheduler@17.2.0"], ["shared", "jsdotlua/shared@17.2.0"]]
 
 [[package]]
 name = "jsdotlua/scheduler"
-version = "17.1.0"
-dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["shared", "jsdotlua/shared@17.1.0"]]
+version = "17.2.0"
+dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"], ["shared", "jsdotlua/shared@17.2.0"]]
 
 [[package]]
 name = "jsdotlua/shared"
-version = "17.1.0"
+version = "17.2.0"
 dependencies = [["luau-polyfill", "jsdotlua/luau-polyfill@1.2.6"]]
 
 [[package]]
@@ -95,7 +95,7 @@ dependencies = [["collections", "jsdotlua/collections@1.2.6"]]
 [[package]]
 name = "littensy/charm"
 version = "0.1.0"
-dependencies = [["Promise", "evaera/promise@4.0.0"], ["React", "jsdotlua/react@17.1.0"], ["ReactRoblox", "jsdotlua/react-roblox@17.1.0"], ["TestEZ", "roblox/testez@0.4.1"]]
+dependencies = [["React", "jsdotlua/react@17.2.0"], ["ReactRoblox", "jsdotlua/react-roblox@17.2.0"], ["TestEZ", "roblox/testez@0.4.1"], ["Vide", "centau/vide@0.3.1"]]
 
 [[package]]
 name = "roblox/testez"

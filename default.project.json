@@ -1,6 +1,30 @@
 {
-	"name": "charm",
+	"name": "charm-test",
 	"tree": {
-		"$path": "src"
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"DevPackages": {
+				"$path": "DevPackages",
+				"Charm": {
+					"$path": "src/charm"
+				},
+				"CharmSync": {
+					"$path": "src/charm-sync"
+				},
+				"ReactCharm": {
+					"$path": "src/react"
+				},
+				"VideCharm": {
+					"$path": "src/vide"
+				}
+			}
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"Tests": {
+				"$path": "Tests"
+			}
+		}
 	}
 }

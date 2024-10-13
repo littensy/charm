@@ -1,7 +1,13 @@
 /node_modules
-/Packages
-/DevPackages
+/build
+/devpackages
+/packages
+/src/**/node_modules
+/src/**/wally.lock
+/src/**/README.md
+/src/**/LICENSE.md
 /sourcemap.json
 *.tsbuildinfo
 *.tgz
+*.rbxm
 .DS_Store

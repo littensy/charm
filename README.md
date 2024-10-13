@@ -298,14 +298,31 @@ batch(() => {
 
 ---
 
-## 📘 React
+## 📦 React
+
+### Setup
+
+Install the React bindings for Charm using your package manager of choice.
+
+```sh
+npm install @rbxts/react-charm
+yarn add @rbxts/react-charm
+pnpm add @rbxts/react-charm
+```
+
+```toml
+[dependencies]
+ReactCharm = "littensy/react-charm@VERSION"
+```
+
+---
 
 ### `useAtom(atom, dependencies?)`
 
 Call `useAtom` at the top-level of a React component to read from an atom.
 
 ```tsx
-import { useAtom } from "@rbxts/charm";
+import { useAtom } from "@rbxts/react-charm";
 import { todosAtom } from "./todos-atom";
 
 function TodosApp() {
@@ -317,7 +334,7 @@ function TodosApp() {
 By default, the atom is subscribed to once when the component initially mounts. Optionally, you may pass an array of dependencies to `useAtom` if your atom should be memoized based on other values.
 
 ```tsx
-const todos = useAtom(searchTodos(filter), [filter]);
+const todos = useAtom(() => searchTodos(filter), [filter]);
 ```
 
 #### Parameters
@@ -332,27 +349,87 @@ const todos = useAtom(searchTodos(filter), [filter]);
 
 ---
 
+## 📦 Vide
+
+### Setup
+
+Install the Vide bindings for Charm using your package manager of choice.
+
+```sh
+npm install @rbxts/vide-charm
+yarn add @rbxts/vide-charm
+pnpm add @rbxts/vide-charm
+```
+
+```toml
+[dependencies]
+VideCharm = "littensy/vide-charm@VERSION"
+```
+
+---
+
+### `useAtom(atom)`
+
+Call `useAtom` in a any scope to create a Vide source that reads from an atom.
+
+```tsx
+import { useAtom } from "@rbxts/vide-charm";
+import { todosAtom } from "./todos-atom";
+
+function TodosApp() {
+	const todos = useAtom(todosAtom);
+	// ...
+}
+```
+
+#### Parameters
+
+- `atom`: An atom or molecule that you want to read from. This can be an atom, or a function that reads from one or more atoms.
+
+#### Returns
+
+`useAtom` returns a Vide source.
+
+---
+
 ## 📗 Charm Sync
 
-### `sync.server(options)`
+### Setup
 
-Call `sync.server` to create a server sync object. The object handles sending state updates to clients at a specified interval, and hydrating clients with the initial state.
+The Charm Sync package provides server-client synchronization for your Charm atoms. Install it using your package manager of choice.
+
+```sh
+npm install @rbxts/charm-sync
+yarn add @rbxts/charm-sync
+pnpm add @rbxts/charm-sync
+```
+
+```toml
+[dependencies]
+CharmSync = "littensy/charm-sync@VERSION"
+```
+
+---
+
+### `server(options)`
+
+Call `server` to create a server sync object. The syncer handles sending minimal state patches to clients at a specified interval, and hydrating clients with the initial state.
 
 ```ts
-import { sync } from "@rbxts/charm";
+import { server } from "@rbxts/charm-sync";
 
-const server = sync.server({
+const syncer = server({
 	atoms: atomsToSync,
 	interval: 0,
 	preserveHistory: false,
 });
 
-server.connect((player, ...payloads) => {
+syncer.connect((player, ...payloads) => {
 	remotes.syncState.fire(player, ...payloads);
 });
 
 remotes.requestState.connect((player) => {
-	server.hydrate(player);
+	syncer.hydrate(player);
 });
 ```
 
@@ -368,11 +445,11 @@ remotes.requestState.connect((player) => {
 
 #### Returns
 
-`sync.server` returns a server sync object. The sync object has the following methods:
+`server` returns a server sync object. The sync object has the following methods:
 
-- `server.connect(callback)` registers a callback to send state updates to clients. The callback will receive the player and the payload to send, and should send the payload to the client. The payload should not be mutated, so changes should be applied to a copy of the payload.
+- `syncer.connect(callback)` registers a callback to send state updates to clients. The callback will receive the player and the payload to send, and should send the payload to the client. The payload should not be mutated, so changes should be applied to a copy of the payload.
 
-- `server.hydrate(player)` sends the initial state to a player. This calls the function passed to `connect` with a payload containing the initial state.
+- `syncer.hydrate(player)` sends the initial state to a player. This calls the function passed to `connect` with a payload containing the initial state.
 
 #### Caveats
 
@@ -382,17 +459,17 @@ remotes.requestState.connect((player) => {
 
 ---
 
-### `sync.client(options)`
+### `client(options)`
 
-Call `sync.client` to create a client sync object. The object will sync the client's copy of the state with the server's state.
+Call `client` to create a client sync object. The syncer will hydrate the client's copy of the state with the server's state.
 
 ```ts
-import { sync } from "@rbxts/charm";
+import { client } from "@rbxts/charm-sync";
 
-const client = sync.client({ atoms: atomsToSync });
+const syncer = client({ atoms: atomsToSync });
 
 remotes.syncState.connect((...payloads) => {
-	client.sync(...payloads);
+	syncer.sync(...payloads);
 });
 
 remotes.requestState.fire();
@@ -406,9 +483,9 @@ remotes.requestState.fire();
 
 #### Returns
 
-`sync.client` returns a client sync object. The sync object has the following methods:
+`client` returns a client sync object. The sync object has the following methods:
 
-- `client.sync(...payloads)` applies a state update from the server.
+- `syncer.sync(...payloads)` applies a state update from the server.
 
 #### Caveats
 
@@ -416,18 +493,18 @@ remotes.requestState.fire();
 
 ---
 
-### `sync.isNone(value)`
-
-State patches represent the _difference_ between the current state and next state, excluding unchanged values. However, this means both unchanged and removed values would be `nil` in the patch. In these cases, Charm uses the `None` marker to represent a removed value.
+### `isNone(value)`
 
 Call `sync.isNone` to check if a value is `None`.
 
+State patches represent the _difference_ between the current state and next state, excluding unchanged values. However, this means both unchanged and removed values would be `nil` in the patch. In these cases, Charm uses the `None` marker to represent a removed value.
+
 ```ts
-import { sync } from "@rbxts/charm";
+import { isNone, server } from "@rbxts/charm-sync";
 
-const server = sync.server({ atoms: atomsToSync });
+const syncer = server({ atoms: atomsToSync });
 
-server.connect((player, payload) => {
+syncer.connect((player, payload) => {
 	if (payload.type === "patch" && sync.isNone(payload.data.todosAtom?.eggs)) {
 		// 'eggs' will be removed from the client's todos atom
 	}
@@ -437,11 +514,11 @@ server.connect((player, payload) => {
 
 #### Parameters
 
-- `value`: Any value. If the value is `None`, `sync.isNone` will return `true`.
+- `value`: Any value. If the value is `None`, `isNone` will return `true`.
 
 #### Returns
 
-`sync.isNone` returns a boolean.
+`isNone` returns a boolean.
 
 ---
 
@@ -466,23 +543,45 @@ counterAtom(1); // 2
 counterAtom((count) => count + 1); // 4
 ```
 
-### Counter component
+### React component
 
 ```tsx
 import React from "@rbxts/react";
-import { useAtom } from "@rbxts/charm";
+import { useAtom } from "@rbxts/react-charm";
 import { counterAtom, incrementCounter } from "./counter-atom";
 
 function Counter() {
 	const count = useAtom(counterAtom);
 
 	return (
-		<textlabel
+		<textbutton
 			Text={`Count: ${count}`}
 			Size={new UDim2(0, 100, 0, 50)}
 			Event={{
 				Activated: () => incrementCounter(),
 			}}
+		/>
+	);
+}
+```
+
+### Vide component
+
+```tsx
+import Vide from "@rbxts/vide";
+import { useAtom } from "@rbxts/vide-charm";
+import { counterAtom, incrementCounter } from "./counter-atom";
+
+function Counter() {
+	const count = useAtom(counterAtom);
+
+	return (
+		<textbutton
+			Activated={() => {
+				incrementCounter();
+			}}
+			Text={() => `Count: ${count()}`}
+			Size={new UDim2(0, 100, 0, 50)}
 		/>
 	);
 }
@@ -502,35 +601,35 @@ Then, on the server, create a server sync object and pass in the atoms to sync. 
 Note that if `preserveHistory` is `true`, the server will send multiple payloads to the client, so the callback passed to `connect` should accept a `...payloads` parameter. Otherwise, you only need to handle a single `payload` parameter.
 
 ```ts
-import { sync } from "@rbxts/charm";
+import { server } from "@rbxts/charm-sync";
 import { remotes } from "./remotes";
 import * as atoms from "./atoms";
 
-const server = sync.server({ atoms });
+const syncer = server({ atoms });
 
 // Broadcast a state update to a specific player
-server.connect((player, ...payloads) => {
+syncer.connect((player, ...payloads) => {
 	remotes.syncState.fire(player, ...payloads);
 });
 
 // Send initial state to a player upon request
 remotes.requestState.connect((player) => {
-	server.hydrate(player);
+	syncer.hydrate(player);
 });
 ```
 
 Finally, on the client, create a client sync object and apply incoming state changes.
 
 ```ts
-import { sync } from "@rbxts/charm";
+import { client } from "@rbxts/charm-sync";
 import { remotes } from "./remotes";
 import * as atoms from "./atoms";
 
-const client = sync.client({ atoms });
+const syncer = sync.client({ atoms });
 
 // Listen for incoming state changes from the server
 remotes.syncState.connect((...payloads) => {
-	client.sync(...payloads);
+	syncer.sync(...payloads);
 });
 
 // Request initial state from the server
