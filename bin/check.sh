@@ -18,8 +18,8 @@ check() {
 	stylua --check $1
 }
 
-eslint modules
-check modules/*/src
+eslint src
+check src/*/src
 check tests
 
 rm bin/roblox.d.luau

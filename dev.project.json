@@ -7,16 +7,16 @@
 			"DevPackages": {
 				"$path": "DevPackages",
 				"Charm": {
-					"$path": "modules/charm"
+					"$path": "src/charm"
 				},
 				"CharmSync": {
-					"$path": "modules/charm-sync"
+					"$path": "src/charm-sync"
 				},
 				"ReactCharm": {
-					"$path": "modules/react"
+					"$path": "src/react"
 				},
 				"VideCharm": {
-					"$path": "modules/vide"
+					"$path": "src/vide"
 				}
 			}
 		},
