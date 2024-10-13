@@ -5,7 +5,7 @@
 		"check": "sh bin/check.sh",
 		"wally": "wally install && rojo sourcemap --output sourcemap.json",
 		"publish:npm": "pnpm publish -r --access public",
-		"publish:wally": "pnpm -r publish:wally"
+		"publish:wally": "pnpm -r --workspace-concurrency 1 publish:wally"
 	},
 	"devDependencies": {
 		"@rbxts/compiler-types": "3.0.0-types.0",
