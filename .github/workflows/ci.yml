@@ -25,7 +25,7 @@ jobs:
         run: pnpm install
 
       - name: Check code quality
-        run: pnpm lint
+        run: pnpm check
 
       - name: Build models
         run: pnpm build
