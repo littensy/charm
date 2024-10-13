@@ -13,11 +13,11 @@ jobs:
         with:
           version: 9.12.1
 
+      - name: Publish to NPM
+        run: pnpm --recursive publish --access public
+
       - name: Install Rokit
         uses: CompeyDev/setup-rokit@v0.1.2
-
-      - name: Install dependencies
-        run: wally install
 
       - name: Build models
         run: pnpm build
@@ -27,9 +27,6 @@ jobs:
         with:
           files: "build/*"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to NPM
-        run: pnpm --recursive publish --access public
 
       - name: Publish to Wally
         run: pnpm --recursive publish:wally
