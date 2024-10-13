@@ -3,7 +3,9 @@
 	"scripts": {
 		"build": "sh bin/build.sh",
 		"check": "sh bin/check.sh",
-		"wally": "wally install && rojo sourcemap --output sourcemap.json"
+		"wally": "wally install && rojo sourcemap --output sourcemap.json",
+		"publish:npm": "pnpm publish -r --access public",
+		"publish:wally": "pnpm -r publish:wally"
 	},
 	"devDependencies": {
 		"@rbxts/compiler-types": "3.0.0-types.0",
