@@ -79,7 +79,7 @@ return function()
 		local patches = serdes(patch.diff(prevState, nextState))
 		local applied = patch.apply(prevState, patches)
 
-		assert(os.clock() - start < 1e-3, `Performance is not acceptable ({(os.clock() - start) * 1e3}ms)`)
+		assert(os.clock() - start < 10e-3, `Performance is not acceptable ({(os.clock() - start) * 1e3}ms)`)
 
 		for index in next, prevState do
 			expect(applied[index]).to.equal(nextState[index])

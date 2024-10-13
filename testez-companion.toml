@@ -1,1 +1,1 @@
-roots = ["TestService/Tests"]
+roots = ["ServerScriptService/Tests"]

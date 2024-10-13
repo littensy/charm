@@ -16,10 +16,17 @@ jobs:
       - name: Install dependencies
         run: wally install
 
-      - name: Build model
-        run: rojo build -o charm.rbxm
+      - name: Build models
+        run: pnpm build
 
-      - uses: AButler/upload-release-assets@v3.0
+      - name: Upload release assets
+        uses: AButler/upload-release-assets@v3.0
         with:
-          files: "charm.rbxm"
+          files: "build/*"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to NPM
+        run: pnpm --recursive publish --access public
+
+      - name: Publish to Wally
+        run: pnpm --recursive publish:wally

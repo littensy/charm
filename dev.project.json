@@ -7,23 +7,23 @@
 			"DevPackages": {
 				"$path": "DevPackages",
 				"Charm": {
-					"$path": "packages/charm"
+					"$path": "modules/charm"
 				},
 				"CharmSync": {
-					"$path": "packages/charm-sync"
+					"$path": "modules/charm-sync"
 				},
 				"ReactCharm": {
-					"$path": "packages/react"
+					"$path": "modules/react"
+				},
+				"VideCharm": {
+					"$path": "modules/vide"
 				}
 			}
 		},
-		"TestService": {
-			"$className": "TestService",
-			"$properties": {
-				"ExecuteWithStudioRun": true
-			},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
 			"Tests": {
-				"$path": "tests"
+				"$path": "Tests"
 			}
 		}
 	}

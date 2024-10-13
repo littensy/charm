@@ -1,14 +1,14 @@
 {
-	"name": "@rbxts/react-charm",
+	"name": "@rbxts/charm-sync",
 	"version": "0.1.0",
-	"description": "React bindings for Charm",
+	"description": "Sync server state with clients using Charm",
 	"repository": "littensy/charm",
 	"license": "MIT",
 	"main": "src/init.luau",
 	"types": "src/index.d.ts",
 	"scripts": {
 		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
-		"wally:install": "wally install"
+		"publish:wally": "wally publish"
 	},
 	"dependencies": {
 		"@rbxts/charm": "workspace:*"

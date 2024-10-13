@@ -22,15 +22,10 @@ jobs:
         uses: CompeyDev/setup-rokit@v0.1.2
 
       - name: Install dependencies
-        run: |
-          pnpm install
-          pnpm wally
+        run: pnpm install
 
       - name: Check code quality
         run: pnpm lint
 
-      - name: Run ESLint
-        run: pnpm eslint
-
-      - name: Build model
-        run: rojo build -o charm.rbxm
+      - name: Build models
+        run: pnpm build

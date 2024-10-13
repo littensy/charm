@@ -2,7 +2,8 @@
 	"private": true,
 	"scripts": {
 		"lint": "sh bin/check.sh",
-		"wally:install": "pnpm recursive run wally:install && rojo sourcemap dev.project.json --output sourcemap.json"
+		"build": "sh bin/build.sh",
+		"wally": "wally install && rojo sourcemap dev.project.json --output sourcemap.json"
 	},
 	"devDependencies": {
 		"@rbxts/compiler-types": "3.0.0-types.0",
@@ -15,6 +16,6 @@
 		"eslint-plugin-roblox-ts": "^0.0.36",
 		"prettier": "^3.3.3",
 		"roblox-ts": "^3.0.0",
-		"typescript": "^5.6.2"
+		"typescript": "^5.5.3"
 	}
 }

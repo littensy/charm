@@ -8,6 +8,6 @@
 	"types": "src/index.d.ts",
 	"scripts": {
 		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
-		"wally:install": "wally install"
+		"publish:wally": "wally publish"
 	}
 }

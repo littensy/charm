@@ -1,5 +1,3 @@
-_G[script.modules.Promise] = _G[script]
-
 local atom = require(script.atom)
 local computed = require(script.computed)
 local effect = require(script.effect)
