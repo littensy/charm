@@ -575,7 +575,7 @@ end) --> 4
 ### React component
 
 ```luau
-local counter = require(script.Parent.counterAtom)
+local counter = require(script.Parent.counter)
 local counterAtom = counter.counterAtom
 local incrementCounter = counter.incrementCounter
 
@@ -593,7 +593,7 @@ end
 ### Vide component
 
 ```luau
-local counter = require(script.Parent.counterAtom)
+local counter = require(script.Parent.counter)
 local counterAtom = counter.counterAtom
 local incrementCounter = counter.incrementCounter
 
@@ -617,8 +617,8 @@ Charm is designed for both client and server use, but there are often cases wher
 Start by creating a set of atoms to sync between the server and clients. Export these atoms from a module to be shared between the server and client:
 
 ```luau
-local counter = require(script.Parent.counterAtom)
-local todos = require(script.Parent.todosAtom)
+local counter = require(script.Parent.counter)
+local todos = require(script.Parent.todos)
 
 return {
 	counterAtom = counter.counterAtom,
