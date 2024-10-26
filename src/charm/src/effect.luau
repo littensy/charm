@@ -9,7 +9,7 @@ type Cleanup = () -> ()
 	@param callback The function to run.
 	@return A function that unsubscribes the callback.
 ]=]
-local function effect(callback: () -> (() -> ())?): () -> ()
+local function effect(callback: () -> Cleanup?): Cleanup
 	local dependencies, cleanup = store.capture(callback)
 	local disconnected = false
 

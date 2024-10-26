@@ -1,6 +1,6 @@
 local effect = require(script.Parent.effect)
 local types = require(script.Parent.types)
-type Molecule<T> = types.Molecule<T>
+type Selector<T> = types.Selector<T>
 
 local function noop() end
 
@@ -13,7 +13,7 @@ local function noop() end
 	@param factory The function that tracks the lifecycle of each item.
 	@return A function that unsubscribes all instances.
 ]=]
-local function observe<K, V>(molecule: Molecule<{ [K]: V }>, factory: (value: V, key: K) -> (() -> ())?): () -> ()
+local function observe<K, V>(molecule: Selector<{ [K]: V }>, factory: (value: V, key: K) -> (() -> ())?): () -> ()
 	local connections: { [K]: () -> () } = {}
 
 	local unsubscribe = effect(function()

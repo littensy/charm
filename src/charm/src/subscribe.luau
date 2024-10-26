@@ -1,6 +1,6 @@
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
-type Molecule<T> = types.Molecule<T>
+type Selector<T> = types.Selector<T>
 
 --[=[
 	Subscribes to changes in the given atom or molecule. The callback is
@@ -11,7 +11,7 @@ type Molecule<T> = types.Molecule<T>
 	@param callback The function to call when the state changes.
 	@return A function that unsubscribes the callback.
 ]=]
-local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T) -> ()): () -> ()
+local function subscribe<T>(molecule: Selector<T>, callback: (state: T, prev: T) -> ()): () -> ()
 	local dependencies, state = store.capture(molecule)
 	local disconnected = false
 

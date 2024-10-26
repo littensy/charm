@@ -3,12 +3,12 @@ local effect = require(script.Parent.effect)
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
-type Molecule<T> = types.Molecule<T>
+type Selector<T> = types.Selector<T>
 
 type Map =
-	(<K0, V0, K1, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Molecule<{ [K1]: V1 }>)
-	& (<K0, V0, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Molecule<{ [K0]: V1 }>)
-	& (<K0, V0, K1, V1>(fn: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Molecule<{ [K1]: V1 }>)
+	(<K0, V0, K1, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Selector<{ [K1]: V1 }>)
+	& (<K0, V0, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Selector<{ [K0]: V1 }>)
+	& (<K0, V0, K1, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Selector<{ [K1]: V1 }>)
 
 --[=[
 	Maps each entry in the atom's state to a new key-value pair. If the `mapper`
@@ -16,11 +16,11 @@ type Map =
 	When the atom changes, the `mapper` is called for each entry in the state
 	to compute the new state.
 	
-	@param molecule The atom or molecule to map.
+	@param callback The atom or selector to map.
 	@param mapper The function that maps each entry.
 	@return A new atom with the mapped state.
 ]=]
-local function mapped<K0, V0, K1, V1>(molecule: Molecule<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Molecule<{ [K1]: V1 }>
+local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Selector<{ [K1]: V1 }>
 	local mappedAtom = atom({})
 	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
 	local prevMappedItems: { [K1]: V1 } = {}
@@ -31,7 +31,7 @@ local function mapped<K0, V0, K1, V1>(molecule: Molecule<{ [K0]: V0 }>, mapper: 
 			return unsubscribe()
 		end
 
-		local items = molecule()
+		local items = callback()
 		local mappedItems = table.clone(store.peek(mappedAtomRef.current))
 		local mappedKeys = {}
 
