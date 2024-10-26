@@ -57,10 +57,10 @@ Charm provides a debug mode to help you identify potential bugs in your project.
 
 Enabling `__DEV__` adds a few helpful features:
 
-- Better error handling for molecules, listeners, and batched functions:
+- Better error handling for selectors, subscriptions, and batched functions:
 
   - Errors provide the function's name and line number.
-  - Yielding in these functions will throw an error.
+  - Yielding in certain functions will throw an error.
 
 - Server state is validated for [remote event limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations) before being passed to the client.
 
@@ -72,11 +72,13 @@ Enabling debug mode in unit tests, storybooks, and other development environment
 
 ### `atom(state, options?)`
 
-Call `atom` to create a state container with the value `state`.
+Atoms are the building blocks of Charm. They are functions that hold a single value, and calling them can read or write to that value. Atoms, or any function that reads from atoms, can also be [subscribed](#subscribecallback-listener) to.
 
-```ts
-const nameAtom = atom("John");
-const todosAtom = atom<string[]>([]);
+Call `atom` to create a state container initialized with the value `state`.
+
+```luau
+local nameAtom = atom("John")
+local todosAtom: Atom<{ string }> = atom({})
 ```
 
 #### Parameters
@@ -85,7 +87,7 @@ const todosAtom = atom<string[]>([]);
 
 - **optional** `options`: An object that configures the behavior of this atom.
 
-  - **optional** `equals`: An equality function to determine whether the state has changed. By default, strict equality (`===`) is used.
+  - **optional** `equals`: An equality function to determine whether the state has changed. By default, strict equality (`==`) is used.
 
 #### Returns
 
@@ -94,43 +96,55 @@ The `atom` constructor returns an atom function with two possible operations:
 1. **Read the state.** Call the atom without arguments to get the current state.
 2. **Set the state.** Pass a new value or an updater function to change the state.
 
-```ts
-function newTodo() {
-	nameAtom("Jane");
-	nameAtom(); // "Jane"
-	todosAtom((todos) => [...todos, "New todo"]);
-}
+```luau
+local function newTodo()
+	nameAtom("Jane")
+
+	todosAtom(function(todos)
+		todos = table.clone(todos)
+		table.insert(todos, "Buy milk")
+		return todos
+	end)
+
+	print(nameAtom()) --> "Jane"
+end
 ```
 
 ---
 
-### `subscribe(atom, listener)`
+### `subscribe(callback, listener)`
 
-Call `subscribe` to listen for changes to an atom. Changes to the atom will immediately notify all subscribers, passing the new state and the previous state as arguments.
+Call `subscribe` to listen for changes in an atom or selector function. When the function's result changes, subscriptions are immediately called with the new state and the previous state.
 
-```ts
-const nameAtom = atom("John");
+```luau
+local nameAtom = atom("John")
 
-subscribe(nameAtom, (name, prevName) => {
-	print(name);
-});
+subscribe(nameAtom, function(name, prevName)
+	print(name)
+end)
+
+nameAtom("Jane") --> "Jane"
 ```
 
-You may also pass a _molecule_, or a function that derives a value from one or more atoms. The molecule will be memoized and only re-run when its dependencies change.
+You may also pass a selector function that calls other atoms. The function will be memoized and only runs when its atom dependencies update.
 
-```ts
-const getUppercase = () => nameAtom().upper();
+```luau
+local function getUppercase()
+	return string.upper(nameAtom())
+end
 
-subscribe(getUppercase, (name) => {
-	print(name);
-});
+subscribe(getUppercase, function(name)
+	print(name)
+end)
+
+nameAtom("Jane") --> "JANE"
 ```
 
 #### Parameters
 
-- `atom`: An atom or molecule that you want to subscribe to. This can be an atom, or a function that reads from one or more atoms.
+- `callback`: The function to subscribe to. This may be an atom or a selector function that depends on an atom.
 
-- `listener`: A function that will be called whenever the atom changes. The listener will receive the new state and the previous state as arguments.
+- `listener`: The listener is called when the result of the callback changes. It receives the new state and the previous state as arguments.
 
 #### Returns
 
@@ -140,22 +154,24 @@ subscribe(getUppercase, (name) => {
 
 ### `effect(callback)`
 
-Call `effect` to declare a side effect that runs when any atom that it depends on changes. The effect will run immediately and whenever its dependencies change.
+Call `effect` to track state changes in all atoms read within the callback. The callback will run once to retrieve its dependencies, and then again whenever they change. Your callback may return a cleanup function to run when the effect is removed or about to re-run.
 
-```ts
-const nameAtom = atom("John");
+```luau
+local nameAtom = atom("John")
 
-effect(() => {
-	print(nameAtom());
-	return () => {
-		print("Changing name!");
-	};
-});
+effect(function()
+	print(nameAtom())
+	return function()
+		print("Cleanup function called!")
+	end
+end)
 ```
+
+Because `effect` implicitly tracks all atoms read within the callback, it might be useful to exclude atoms that should not trigger a re-run. You can use [`peek`](#peekvalue) to read from atoms without tracking them as dependencies.
 
 #### Parameters
 
-- `callback`: The function that runs your effect. The function is called once to retrieve its dependencies, and then again whenever they change. Your callback may return a cleanup function to run when the effect is removed or about to re-run.
+- `callback`: The function to track for state changes. The callback will run once to retrieve its dependencies, and then again whenever they change.
 
 #### Returns
 
@@ -163,22 +179,28 @@ effect(() => {
 
 ---
 
-### `computed(molecule, options?)`
+### `computed(callback, options?)`
 
-Call `computed` when you want to derive an expensive value from one or more atoms. The derived value will be memoized and only re-run when its dependencies change.
+Call `computed` when you want to derive a new atom from one or more atoms. The callback will be memoized, meaning that subsequent calls to the atom return a cached value that is only re-calculated when the dependencies change.
 
-```ts
-const todosAtom = atom<string[]>([]);
-const mapToUppercase = computed(() => {
-	return todosAtom().map((todo) => todo.upper());
-});
+```luau
+local todosAtom: Atom<{ string }> = atom({})
+local mapToUppercase = computed(function()
+	local result = table.clone(todosAtom())
+	for key, todo in result do
+		result[key] = string.upper(todo)
+	end
+	return result
+end)
 ```
 
-`computed` is useful when you have multiple subscribers that depend on the same derived value. By memoizing the value, you can avoid re-calculating it for each subscriber.
+Because `computed` implicitly tracks all atoms read within the callback, it might be useful to exclude atoms that should not trigger a re-run. You can use [`peek`](#peekvalue) to read from atoms without tracking them as dependencies.
+
+This function is also useful for optimizing `effect` calls that depend on multiple atoms. For instance, if an effect derives some value from two atoms, it will run twice if both atoms change at the same time. Using `computed` can group these dependencies together and avoid re-running side effects.
 
 #### Parameters
 
-- `molecule`: A function that reads from one or more atoms and returns a derived value.
+- `callback`: A function that returns a new value depending on one or more atoms.
 
 - **optional** [`options`](#parameters): An object that configures the behavior of this atom.
 
@@ -188,59 +210,56 @@ const mapToUppercase = computed(() => {
 
 ---
 
-### `observe(atom, factory)`
+### `observe(callback, factory)`
 
-Call `observe` to run the factory when a key is added to the atom's state. Your factory can return a cleanup function to run when the key is removed or the observer is disposed.
+Call `observe` to create an instance of `factory` for each key present in a dictionary or array. Your factory can return a cleanup function to run when the key is removed or the observer is cleaned up.
 
-```ts
-const todosAtom = atom<{ [Id in string]?: Todo }>({});
+> [!NOTE]
+> Because `observe` tracks the lifetime of each key in your data, your keys must be unique and unchanging. If your data is not keyed by unique and stable identifiers, consider using [`mapped`](#mappedcallback-mapper) to transform it into a keyed object before passing it to `observe`.
 
-observe(todosAtom, (todo, key) => {
-	print(todo);
-	return () => {
-		print("Removing todo!");
-	};
-});
+```luau
+local todosAtom: Atom<{ [string]: string }> = atom({})
+
+observe(todosAtom, function(todo, key)
+	print(`Added {todo}`)
+	return function()
+		print(`Removed {todo}`)
+	end
+end)
 ```
 
 #### Parameters
 
-- `atom`: An atom or molecule that you want to observe. This can be a primitive atom, or a function that reads from one or more atoms. The atom should return a dictionary or an array of objects.
+- `callback`: An atom or selector function that returns a dictionary or an array of values. When a key is added to the state, the factory will be called with the new key and its initial value.
 
-- `factory`: A function called for each key in the atom's state. The factory will receive the entry as an argument and should return a cleanup function.
+- `factory`: A function that will be called whenever a key is added or removed from the atom's state. The callback will receive the key and the entry's initial value as arguments, and may return a cleanup function.
 
 #### Returns
 
 `observe` returns a cleanup function.
 
-#### Caveats
-
-- The factory will only run when a key is added or removed, not when the value at that key changes. If your data is not keyed by a unique and stable identifier, consider using `mapped` to transform it into a keyed object before passing it to `observe`.
-
 ---
 
-### `mapped(atom, mapper)`
+### `mapped(callback, mapper)`
 
-Call `mapped` to transform the key-value pairs of an atom's state. The mapper function will be called for each key-value pair in the atom's state, and the result will be stored in a new atom.
+Call `mapped` to transform the keys and values of your state. The `mapper` function will be called for each key-value pair in the atom's state, and the new keys and atoms will be stored in a new atom.
 
-```ts
-const todosAtom = atom<Todo[]>([]);
-const todosById = mapped(todosAtom, (todo, index) => {
-	return $tuple(todo, todo.id);
-});
+```luau
+local todosAtom: Atom<{ Todo }> = atom({})
+local todosById = mapped(todosAtom, function(todo, index)
+	return todo, todo.id
+end)
 ```
 
 #### Parameters
 
-- `atom`: An atom or molecule that you want to map. This can be a primitive atom, or a function that reads from one or more atoms. The atom should return a dictionary or an array of objects.
+- `callback`: The function whose result you want to map over. This can be an atom or a selector function that reads from atoms.
 
-- `mapper`: A function called for each key-value pair in the atom's state. The mapper will receive the entry as an argument and should return a new key-value pair. The value you return determines the type of the mapped atom:
+- `mapper`: The mapper is called for each key in your state. Given the current value and key, it should return a new corresponding value and key:
 
-  - If you return a tuple, the mapped atom returns a dictionary with the first element as the value and the second element as the key.
-
-  - If you return a value without a key, the mapped atom returns an array of the given values in the order they were mapped.
-
-  - If the first element is `undefined`, the entry will be omitted from the mapped atom.
+  1. Return a single value to map the table's original key to a new value.
+  2. Return two values, the first being the value and the second being the key, to update both keys and values.
+  3. Return `nil` for the value to remove the key from the resulting table.
 
 #### Returns
 
@@ -248,49 +267,49 @@ const todosById = mapped(todosAtom, (todo, index) => {
 
 ---
 
-### `peek(value)`
+### `peek(value, ...)`
 
-Call `peek` to get the current state of an atom without tracking it as a dependency in functions like `effect` and `subscribe`.
+Call `peek` to call a function without tracking it as the dependency of an effect or a selector function.
 
-```ts
-const nameAtom = atom("John");
-const ageAtom = atom(25);
+```luau
+local nameAtom = atom("John")
+local ageAtom = atom(25)
 
-effect(() => {
-	const name = nameAtom();
-	const age = peek(ageAtom);
-});
+effect(function()
+	local name = nameAtom()
+	local age = peek(ageAtom)
+end)
 ```
 
 #### Parameters
 
-- `value`: Any value. If the value is an atom, `peek` will return the current state of the atom without tracking it. Otherwise, it will return the value as-is.
+- `value`: Any value. If the value is a function, `peek` will call it without tracking dependencies and return the result.
 
 - **optional** `...args`: Additional arguments to pass to the value if it is a function.
 
 #### Returns
 
-`peek` returns the current state of the atom. If the value is not a function, it will return the value as-is.
+`peek` returns the result of the given function. If the value is not a function, it will return the value as-is.
 
 ---
 
 ### `batch(callback)`
 
-Call `batch` to group multiple state changes into a single update. The callback will run immediately and listeners will only be notified once all changes have been applied.
+Call `batch` to defer state changes until after the callback has run. This is useful when you need to make multiple changes to the state and only want listeners to be notified once.
 
-```ts
-const nameAtom = atom("John");
-const ageAtom = atom(25);
+```luau
+local nameAtom = atom("John")
+local ageAtom = atom(25)
 
-batch(() => {
-	nameAtom("Jane");
-	ageAtom(26);
-});
+batch(function()
+	nameAtom("Jane")
+	ageAtom(26)
+end)
 ```
 
 #### Parameters
 
-- `callback`: A function that makes multiple state changes. The changes will be batched together and listeners will only be notified once all changes have been applied.
+- `callback`: A function that updates atoms. Listeners will only be notified once all changes have been applied.
 
 #### Returns
 
@@ -317,31 +336,32 @@ ReactCharm = "littensy/react-charm@VERSION"
 
 ---
 
-### `useAtom(atom, dependencies?)`
+### `useAtom(callback, dependencies?)`
 
-Call `useAtom` at the top-level of a React component to read from an atom.
+Call `useAtom` at the top-level of a React component to read from an atom or selector. The component will re-render when the value changes.
 
-```tsx
-import { useAtom } from "@rbxts/react-charm";
-import { todosAtom } from "./todos-atom";
+```luau
+local todosAtom = require(script.Parent.todosAtom)
 
-function TodosApp() {
-	const todos = useAtom(todosAtom);
-	// ...
+local function Todos() {
+	local todos = useAtom(todosAtom)
+	-- ...
 }
 ```
 
-By default, the atom is subscribed to once when the component initially mounts. Optionally, you may pass an array of dependencies to `useAtom` if your atom should be memoized based on other values.
+If your selector depends on the component's state or props, remember to pass them in a dependency array. This prevents skipped updates when an untracked parameter of the selector changes.
 
-```tsx
-const todos = useAtom(() => searchTodos(filter), [filter]);
+```luau
+local todos = useAtom(function()
+	return searchTodos(props.filter)
+end, { props.filter })
 ```
 
 #### Parameters
 
-- `atom`: An atom or molecule that you want to read from. This can be an atom, or a function that reads from one or more atoms.
+- `callback`: An atom or selector function that depends on an atom.
 
-- **optional** `dependencies`: An array of values that the atom depends on. If the dependencies change, the atom will be re-subscribed to.
+- **optional** `dependencies`: An array of outside values that the selector depends on. If the dependencies change, the subscription is re-created and the component re-renders with the new state.
 
 #### Returns
 
@@ -368,23 +388,22 @@ VideCharm = "littensy/vide-charm@VERSION"
 
 ---
 
-### `useAtom(atom)`
+### `useAtom(callback)`
 
-Call `useAtom` in a any scope to create a Vide source that reads from an atom.
+Call `useAtom` in any scope to create a Vide source that returns the current state of an atom or selector.
 
-```tsx
-import { useAtom } from "@rbxts/vide-charm";
-import { todosAtom } from "./todos-atom";
+```luau
+local todosAtom = require(script.Parent.todosAtom)
 
-function TodosApp() {
-	const todos = useAtom(todosAtom);
-	// ...
-}
+local function Todos()
+	local todos = useAtom(todosAtom)
+	-- ...
+end
 ```
 
 #### Parameters
 
-- `atom`: An atom or molecule that you want to read from. This can be an atom, or a function that reads from one or more atoms.
+- `callback`: An atom or selector function that depends on an atom.
 
 #### Returns
 
@@ -413,79 +432,85 @@ CharmSync = "littensy/charm-sync@VERSION"
 
 ### `server(options)`
 
-Call `server` to create a server sync object. The syncer handles sending minimal state patches to clients at a specified interval, and hydrating clients with the initial state.
+Call `server` to create a server sync object. This synchronizes every client's atoms with the server's state by sending partial patches that the client merges into its state.
 
-```ts
-import { server } from "@rbxts/charm-sync";
+```luau
+local syncer = CharmSync.server({
+	atoms = atomsToSync,     -- A dictionary of the atoms to sync, matching the client's
+	interval = 0,            -- The minimum interval between state updates
+	preserveHistory = false, -- Whether to send a full history of changes made to the atoms (slower)
+})
 
-const syncer = server({
-	atoms: atomsToSync,
-	interval: 0,
-	preserveHistory: false,
-});
+-- Sends state updates to clients when a synced atom changes.
+-- Omitting sensitive information and data serialization can be done here.
+syncer:connect(function(player, ...)
+	remotes.syncState:fire(player, ...)
+end)
 
-syncer.connect((player, ...payloads) => {
-	remotes.syncState.fire(player, ...payloads);
-});
-
-remotes.requestState.connect((player) => {
-	syncer.hydrate(player);
-});
+-- Sends the initial state to a player upon request. This should fire when a
+-- player joins the game.
+remotes.requestState:connect(function(player)
+	syncer:hydrate(player)
+end)
 ```
 
 #### Parameters
 
-- `options`: An object to configure the server syncer.
+- `options`: An object to configure sync behavior.
 
-  - `atoms`: An object containing the atoms to sync. The keys should match the keys on the client.
+  - `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the client.
 
-  - **optional** `interval`: The interval at which to send state updates to clients. Defaults to `0`, meaning updates are sent on the next frame.
+  - **optional** `interval`: The interval at which to batch state updates to clients. Defaults to `0`, meaning updates are batched every frame.
 
-  - **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance reasons.
+  - **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
 
 #### Returns
 
-`server` returns a server sync object. The sync object has the following methods:
+`server` returns an object with the following methods:
 
-- `syncer.connect(callback)` registers a callback to send state updates to clients. The callback will receive the player and the payload to send, and should send the payload to the client. The payload should not be mutated, so changes should be applied to a copy of the payload.
+- `syncer:connect(callback)`: Registers a callback to send state updates to clients. The callback will receive the player and the payload(s) to send, and should fire a remote event. The payload is read-only, so any changes should be applied to a copy of the payload.
 
-- `syncer.hydrate(player)` sends the initial state to a player. This calls the function passed to `connect` with a payload containing the initial state.
+- `syncer:hydrate(player)`: Sends the player a full state update for all synced atoms.
 
 #### Caveats
 
 - By default, Charm omits the individual changes made to atoms between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
 
-- The server sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes sending the initial state, which is implemented via `requestState` in the example above.
+- Charm does not handle network communication. You must implement your own network layer to send and receive state updates. This is implemented via the `remotes` namespace in the example above.
 
 ---
 
 ### `client(options)`
 
-Call `client` to create a client sync object. The syncer will hydrate the client's copy of the state with the server's state.
+Call `client` to create a client sync object. This synchronizes the client's atoms with the server's state by merging partial patches sent by the server into each atom.
 
-```ts
-import { client } from "@rbxts/charm-sync";
+```luau
+local syncer = CharmSync.client({
+	atoms = atomsToSync, -- A dictionary of the atoms to sync, matching the server's
+})
 
-const syncer = client({ atoms: atomsToSync });
+-- Applies state updates from the server to the client's atoms.
+-- Data deserialization can be done here.
+remotes.syncState:connect(function(...)
+	syncer:sync(...)
+end)
 
-remotes.syncState.connect((...payloads) => {
-	syncer.sync(...payloads);
-});
-
-remotes.requestState.fire();
+-- Requests the initial state from the server when the client joins the game.
+-- Before this runs, the client uses the atoms' default values.
+remotes.requestState:fire()
 ```
 
 #### Parameters
 
-- `options`: An object to configure the client syncer.
+- `options`: An object to configure sync behavior.
 
-  - `atoms`: An object containing the atoms to sync. The keys should match the keys on the server.
+  - `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the server.
 
 #### Returns
 
-`client` returns a client sync object. The sync object has the following methods:
+`client` returns an object with the following methods:
 
-- `syncer.sync(...payloads)` applies a state update from the server.
+- `syncer:sync(...payloads)` applies a state update from the server.
 
 #### Caveats
 
@@ -495,21 +520,23 @@ remotes.requestState.fire();
 
 ### `isNone(value)`
 
-Call `sync.isNone` to check if a value is `None`.
+Call `isNone` to check if a value is `None`. Charm's partial state patches omit values that did not change between sync events, so to mark keys for deletion, Charm uses the `None` marker.
 
-State patches represent the _difference_ between the current state and next state, excluding unchanged values. However, this means both unchanged and removed values would be `nil` in the patch. In these cases, Charm uses the `None` marker to represent a removed value.
+This function can be used to check whether a value is about to be removed from an atom.
 
-```ts
-import { isNone, server } from "@rbxts/charm-sync";
+```luau
+local syncer = CharmSync.server({ atoms = atomsToSync })
 
-const syncer = server({ atoms: atomsToSync });
-
-syncer.connect((player, payload) => {
-	if (payload.type === "patch" && sync.isNone(payload.data.todosAtom?.eggs)) {
-		// 'eggs' will be removed from the client's todos atom
-	}
-	remotes.syncState.fire(player, payload);
-});
+syncer:connect(function(player, payload)
+	if
+		payload.type === "patch"
+		and payload.data.todosAtom
+		and CharmSync.isNone(payload.data.todosAtom.eggs)
+	then
+		-- 'eggs' will be removed from the client's todo list
+	end
+	remotes.syncState.fire(player, payload)
+end)
 ```
 
 #### Parameters
@@ -526,114 +553,117 @@ syncer.connect((player, payload) => {
 
 ### Counter atom
 
-```ts
-import { atom, subscribe } from "@rbxts/charm";
+```luau
+local counterAtom = atom(0)
 
-const counterAtom = atom(0);
+-- Create a selector that returns double the counter value
+local function doubleCounter()
+	return counterAtom() * 2
+end
 
-// Create a derived atom that returns double the counter value
-const doubleCounterAtom = () => counterAtom() * 2;
+-- Runs after counterAtom is updated and prints double the new value
+subscribe(doubleCounter, function(value)
+	print(value)
+end)
 
-// Runs after counterAtom is updated and prints double the new value
-subscribe(doubleCounterAtom, (value) => {
-	print(value);
-});
-
-counterAtom(1); // 2
-counterAtom((count) => count + 1); // 4
+counterAtom(1) --> 2
+counterAtom(function(count)
+	return count + 1
+end) --> 4
 ```
 
 ### React component
 
-```tsx
-import React from "@rbxts/react";
-import { useAtom } from "@rbxts/react-charm";
-import { counterAtom, incrementCounter } from "./counter-atom";
+```luau
+local counter = require(script.Parent.counterAtom)
+local counterAtom = counter.counterAtom
+local incrementCounter = counter.incrementCounter
 
-function Counter() {
-	const count = useAtom(counterAtom);
+local function Counter()
+	local count = useAtom(counterAtom)
 
-	return (
-		<textbutton
-			Text={`Count: ${count}`}
-			Size={new UDim2(0, 100, 0, 50)}
-			Event={{
-				Activated: () => incrementCounter(),
-			}}
-		/>
-	);
-}
+	return React.createElement("TextButton", {
+		[React.Event.Activated] = incrementCounter,
+		Text = `Count: {count}`,
+		Size = UDim2.new(0, 100, 0, 50),
+	})
+end
 ```
 
 ### Vide component
 
-```tsx
-import Vide from "@rbxts/vide";
-import { useAtom } from "@rbxts/vide-charm";
-import { counterAtom, incrementCounter } from "./counter-atom";
+```luau
+local counter = require(script.Parent.counterAtom)
+local counterAtom = counter.counterAtom
+local incrementCounter = counter.incrementCounter
 
-function Counter() {
-	const count = useAtom(counterAtom);
+local function Counter()
+	local count = useAtom(counterAtom)
 
-	return (
-		<textbutton
-			Activated={() => {
-				incrementCounter();
-			}}
-			Text={() => `Count: ${count()}`}
-			Size={new UDim2(0, 100, 0, 50)}
-		/>
-	);
-}
+	return create "TextButton" {
+		Activated = incrementCounter,
+		Text = function()
+			return `Count: {count()}`
+		end,
+		Size = UDim2.new(0, 100, 0, 50),
+	}
+end
 ```
 
 ### Server-client sync
 
-Charm provides client and server objects for synchronizing state between the server and clients. Start by defining a module (or creating an object) exporting the atoms you want to sync:
+Charm is designed for both client and server use, but there are often cases where the client needs to reference state that lives on the server. The CharmSync package provides a way to synchronize atoms between the server and its clients using remote events.
 
-```ts
-export { counterAtom } from "./counter-atom";
-export { writerAtom } from "./writer-atom";
+Start by creating a set of atoms to sync between the server and clients. Export these atoms from a module to be shared between the server and client:
+
+```luau
+local counter = require(script.Parent.counterAtom)
+local todos = require(script.Parent.todosAtom)
+
+return {
+	counterAtom = counter.counterAtom,
+	todosAtom = todos.todosAtom,
+}
 ```
 
 Then, on the server, create a server sync object and pass in the atoms to sync. Use remote events to broadcast state updates and send initial state to clients upon request.
 
-Note that if `preserveHistory` is `true`, the server will send multiple payloads to the client, so the callback passed to `connect` should accept a `...payloads` parameter. Otherwise, you only need to handle a single `payload` parameter.
+> [!NOTE]
+> If `preserveHistory` is `true`, the server will send multiple payloads to the client, so the callback passed to `connect` should accept a variadic `...payloads` parameter. Otherwise, you only need to handle a single `payload` parameter.
 
-```ts
-import { server } from "@rbxts/charm-sync";
-import { remotes } from "./remotes";
-import * as atoms from "./atoms";
+```luau
+local atoms = require(script.Parent.atoms)
 
-const syncer = server({ atoms });
+local syncer = CharmSync.server({ atoms = atoms })
 
-// Broadcast a state update to a specific player
-syncer.connect((player, ...payloads) => {
-	remotes.syncState.fire(player, ...payloads);
-});
+-- Sends state updates to clients when a synced atom changes.
+-- Omitting sensitive information and data serialization can be done here.
+syncer:connect(function(player, payload)
+	remotes.syncState.fire(player, payload)
+end)
 
-// Send initial state to a player upon request
-remotes.requestState.connect((player) => {
-	syncer.hydrate(player);
-});
+-- Sends the initial state to a player upon request. This should fire when a
+-- player joins the game.
+remotes.requestState:connect(function(player)
+	syncer:hydrate(player)
+end)
 ```
 
-Finally, on the client, create a client sync object and apply incoming state changes.
+Finally, on the client, create a client sync object and use it to apply incoming state changes.
 
-```ts
-import { client } from "@rbxts/charm-sync";
-import { remotes } from "./remotes";
-import * as atoms from "./atoms";
+```luau
+local atoms = require(script.Parent.atoms)
 
-const syncer = sync.client({ atoms });
+local syncer = CharmSync.client({ atoms = atoms })
 
-// Listen for incoming state changes from the server
-remotes.syncState.connect((...payloads) => {
-	syncer.sync(...payloads);
-});
+-- Applies state updates from the server to the client's atoms.
+remotes.syncState:connect(function(payload)
+	syncer:sync(payload)
+end)
 
-// Request initial state from the server
-remotes.requestState.fire();
+-- Requests the initial state from the server when the client joins the game.
+-- Before this runs, the client uses the atoms' default values.
+remotes.requestState:fire()
 ```
 
 ---
