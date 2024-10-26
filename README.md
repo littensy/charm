@@ -20,6 +20,8 @@
 
 **Charm** is an atomic state management library inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Store your immutable state in atoms, and write intuitive functions that read, write, and subscribe to state.
 
+See an example of Charm's features in [this example repository](https://github.com/littensy/charm-example).
+
 ## 🍀 Features
 
 - ⚛️ **Manage state with _atoms_.** Decompose state into tiny, composable containers called _atoms_, as opposed to combining them into a single store.
@@ -617,6 +619,7 @@ Charm is designed for both client and server use, but there are often cases wher
 Start by creating a set of atoms to sync between the server and clients. Export these atoms from a module to be shared between the server and client:
 
 ```luau
+-- atoms.luau
 local counter = require(script.Parent.counter)
 local todos = require(script.Parent.todos)
 
@@ -632,6 +635,7 @@ Then, on the server, create a server sync object and pass in the atoms to sync. 
 > If `preserveHistory` is `true`, the server will send multiple payloads to the client, so the callback passed to `connect` should accept a variadic `...payloads` parameter. Otherwise, you only need to handle a single `payload` parameter.
 
 ```luau
+-- sync.server.luau
 local atoms = require(script.Parent.atoms)
 
 local syncer = CharmSync.server({ atoms = atoms })
@@ -652,6 +656,7 @@ end)
 Finally, on the client, create a client sync object and use it to apply incoming state changes.
 
 ```luau
+-- sync.client.luau
 local atoms = require(script.Parent.atoms)
 
 local syncer = CharmSync.client({ atoms = atoms })
