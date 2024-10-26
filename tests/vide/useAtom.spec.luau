@@ -20,7 +20,7 @@ return function()
 		cleanup()
 	end)
 
-	it("accepts a molecule", function()
+	it("accepts a selector", function()
 		local state = atom(0)
 		local source
 		local cleanup = root(function()

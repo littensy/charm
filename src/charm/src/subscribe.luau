@@ -1,41 +1,41 @@
 local store = require(script.Parent.store)
 local types = require(script.Parent.types)
-type Molecule<T> = types.Molecule<T>
+type Selector<T> = types.Selector<T>
 
 --[=[
-	Subscribes to changes in the given atom or molecule. The callback is
+	Subscribes to changes in the given atom or selector. The callback is
 	called with the current state and the previous state immediately after a
 	change occurs.
 	
-	@param molecule The atom or molecule to subscribe to.
-	@param callback The function to call when the state changes.
+	@param callback The atom or selector to subscribe to.
+	@param listener The function to call when the state changes.
 	@return A function that unsubscribes the callback.
 ]=]
-local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T) -> ()): () -> ()
-	local dependencies, state = store.capture(molecule)
+local function subscribe<T>(callback: Selector<T>, listener: (state: T, prev: T) -> ()): () -> ()
+	local dependencies, state = store.capture(callback)
 	local disconnected = false
 
-	local function listener()
+	local function handler()
 		local prevState = state
 
-		store.disconnect(dependencies, listener)
-		dependencies, state = store.capture(molecule)
+		store.disconnect(dependencies, handler)
+		dependencies, state = store.capture(callback)
 
 		if not disconnected then
-			store.connect(dependencies, listener)
+			store.connect(dependencies, handler)
 		end
 
 		if state ~= prevState then
-			callback(state, prevState)
+			listener(state, prevState)
 		end
 	end
 
-	store.connect(dependencies, listener)
+	store.connect(dependencies, handler)
 
 	return function()
 		if not disconnected then
 			disconnected = true
-			store.disconnect(dependencies, listener)
+			store.disconnect(dependencies, handler)
 		end
 	end
 end

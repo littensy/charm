@@ -4,23 +4,23 @@ local React = if script.Parent:FindFirstChild("react")
 	else require(script.Parent.React)
 
 --[=[
-	A hook that subscribes to changes in the given atom or molecule. The
+	A hook that subscribes to changes in the given atom or selector. The
 	component is re-rendered whenever the state changes.
 	
 	If the `dependencies` array is provided, the subscription to the atom or
-	molecule is re-created whenever the dependencies change. Otherwise, the
+	selector is re-created whenever the dependencies change. Otherwise, the
 	subscription is created once when the component is mounted.
 	
-	@param molecule The atom or molecule to subscribe to.
+	@param callback The atom or selector to subscribe to.
 	@param dependencies An array of values that the subscription depends on.
 	@return The current state.
 ]=]
-local function useAtom<State>(molecule: Charm.Molecule<State>, dependencies: { any }?): State
-	local state, setState = React.useState(molecule)
+local function useAtom<State>(callback: Charm.Selector<State>, dependencies: { any }?): State
+	local state, setState = React.useState(callback)
 
 	React.useEffect(function()
-		setState(molecule())
-		return Charm.subscribe(molecule, setState)
+		setState(callback())
+		return Charm.subscribe(callback, setState)
 	end, dependencies or {})
 
 	return state

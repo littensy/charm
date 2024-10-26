@@ -6,12 +6,12 @@ local Vide = if script.Parent:FindFirstChild("vide")
 --[=[
 	Subscribes to the state of an atom and returns a Vide source.
 	
-	@param molecule The atom or molecule to subscribe to.
+	@param callback The atom or selector to subscribe to.
 	@return The reactive source.
 ]=]
-local function useAtom<State>(molecule: () -> State): State
-	local state = Vide.source(molecule())
-	local unsubscribe = Charm.subscribe(molecule, function(value)
+local function useAtom<State>(callback: () -> State): State
+	local state = Vide.source(callback())
+	local unsubscribe = Charm.subscribe(callback, function(value)
 		task.spawn(state, value)
 	end)
 

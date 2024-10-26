@@ -17,7 +17,7 @@ declare namespace Charm {
 	 * @param state The next state or a function that produces the next state.
 	 * @returns The current state, if no arguments are provided.
 	 */
-	interface Atom<State> extends Molecule<State> {
+	interface Atom<State> extends Selector<State> {
 		/**
 		 * @deprecated This property is not meant to be accessed directly.
 		 */
@@ -26,21 +26,29 @@ declare namespace Charm {
 		 * @param state The next state or a function that produces the next state.
 		 * @returns The current state, if no arguments are provided.
 		 */
-		(state: State | ((prev: State) => State)): void;
+		(state?: State | ((prev: State) => State)): State;
 	}
 
 	/**
-	 * A function that depends on one or more atoms and produces a state. Can be
+	 * A function that depends on one or more atoms and produces a value. Can be
 	 * used to derive state from atoms.
 	 *
 	 * @returns The current state.
 	 */
-	type Molecule<State> = () => State;
+	type Selector<State> = () => State;
 
 	/**
-	 * Infers the type of the state produced by the given molecule.
+	 * A function that depends on one or more atoms and produces a value. Can be
+	 * used to derive state from atoms.
+	 *
+	 * @returns The current state.
 	 */
-	type StateOf<T> = T extends Molecule<infer State> ? State : never;
+	type Molecule<State> = Selector<State>;
+
+	/**
+	 * Infers the type of the state produced by the given function.
+	 */
+	type StateOf<T> = T extends Selector<infer State> ? State : never;
 
 	interface AtomOptions<State> {
 		/**
@@ -66,24 +74,24 @@ declare namespace Charm {
 	/**
 	 * Creates a read-only atom that derives its state from one or more atoms.
 	 * Used to avoid unnecessary recomputations if multiple listeners depend on
-	 * the same molecule.
+	 * the same atoms.
 	 *
-	 * @param molecule The function that produces the state.
+	 * @param callback The function that produces the state.
 	 * @param options Optional configuration.
 	 * @returns A new read-only atom.
 	 */
-	function computed<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
+	function computed<State>(callback: Selector<State>, options?: AtomOptions<State>): Selector<State>;
 
 	/**
-	 * Subscribes to changes in the given atom or molecule. The callback is
+	 * Subscribes to changes in the given atom or selector. The callback is
 	 * called with the current state and the previous state immediately after a
 	 * change occurs.
 	 *
-	 * @param molecule The atom or molecule to subscribe to.
-	 * @param callback The function to call when the state changes.
+	 * @param callback The atom or selector to subscribe to.
+	 * @param listener The function to call when the state changes.
 	 * @returns A function that unsubscribes the callback.
 	 */
-	function subscribe<State>(molecule: Molecule<State>, callback: (state: State, prev: State) => void): Cleanup;
+	function subscribe<State>(callback: Selector<State>, listener: (state: State, prev: State) => void): Cleanup;
 
 	/**
 	 * Runs the given callback immediately and whenever any atom it depends on
@@ -98,11 +106,11 @@ declare namespace Charm {
 	 * Returns the result of the function without subscribing to changes. If a
 	 * non-function value is provided, it is returned as is.
 	 *
-	 * @param molecule The atom or molecule to get the state of.
-	 * @param args Arguments to pass to the molecule.
+	 * @param callback The atom or selector to get the state of.
+	 * @param args Arguments to pass to the function.
 	 * @returns The current state.
 	 */
-	function peek<State, Args extends unknown[]>(molecule: State | ((...args: Args) => State), ...args: Args): State;
+	function peek<State, Args extends unknown[]>(callback: State | ((...args: Args) => State), ...args: Args): State;
 
 	/**
 	 * Returns whether the given value is an atom.
@@ -124,13 +132,14 @@ declare namespace Charm {
 	 * Captures all atoms that are read during the function call and returns them
 	 * along with the result of the function. Useful for tracking dependencies.
 	 *
-	 * @param molecule The function to run.
+	 * @param callback The function to run.
 	 * @returns A tuple containing the captured atoms and the result of the function.
 	 */
-	function capture<State>(molecule: Molecule<State>): LuaTuple<[dependencies: Set<Atom<unknown>>, state: State]>;
+	function capture<State>(callback: Selector<State>): LuaTuple<[dependencies: Set<Atom<unknown>>, state: State]>;
 
 	/**
 	 * Notifies all subscribers of the given atom that the state has changed.
+	 * Mainly for running effects, since subscriptions check for equality.
 	 *
 	 * @param atom The atom to notify.
 	 */
@@ -141,17 +150,17 @@ declare namespace Charm {
 	 * cleans up the instance when the item is removed. Returns a cleanup function
 	 * that unsubscribes all instances.
 	 *
-	 * @param molecule The atom or molecule to observe.
+	 * @param callback The atom or selector to observe.
 	 * @param factory The function that tracks the lifecycle of each item.
 	 * @returns A function that unsubscribes all instances.
 	 */
 	function observe<Item>(
-		molecule: Molecule<readonly Item[]>,
+		callback: Selector<readonly Item[]>,
 		factory: (item: Item, index: number) => Cleanup | void,
 	): Cleanup;
 
 	function observe<Key, Item>(
-		molecule: Molecule<AnyMap<Key, Item>>,
+		callback: Selector<AnyMap<Key, Item>>,
 		factory: (item: Item, key: Key) => Cleanup | void,
 	): Cleanup;
 
@@ -161,22 +170,22 @@ declare namespace Charm {
 	 * When the atom changes, the `mapper` is called for each entry in the state
 	 * to compute the new state.
 	 *
-	 * @param molecule The atom or molecule to map.
+	 * @param callback The atom or selector to map.
 	 * @param mapper The function that maps each entry.
 	 * @returns A new atom with the mapped state.
 	 */
 	function mapped<V0, K1, V1>(
-		molecule: Molecule<readonly V0[]>,
+		callback: Selector<readonly V0[]>,
 		mapper: (value: V0, index: number) => LuaTuple<[value: V1 | undefined, key: K1]>,
-	): Molecule<ReadonlyMap<K1, V1>>;
+	): Selector<ReadonlyMap<K1, V1>>;
 
 	function mapped<V0, V1>(
-		molecule: Molecule<readonly V0[]>,
+		callback: Selector<readonly V0[]>,
 		mapper: (value: V0, index: number) => V1,
-	): Molecule<readonly V1[]>;
+	): Selector<readonly V1[]>;
 
 	function mapped<K0, V0, K1 = K0, V1 = V0>(
-		molecule: Molecule<AnyMap<K0, V0>>,
+		callback: Selector<AnyMap<K0, V0>>,
 		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
-	): Molecule<ReadonlyMap<K1, V1>>;
+	): Selector<ReadonlyMap<K1, V1>>;
 }

@@ -1,4 +1,4 @@
-import { Atom, Molecule } from "@rbxts/charm";
+import { Atom, Selector } from "@rbxts/charm";
 
 export = CharmSync;
 export as namespace CharmSync;
@@ -8,13 +8,18 @@ type Cleanup = () => void;
 declare namespace CharmSync {
 	type AtomMap = Record<string, Atom<any>>;
 
-	type MoleculeMap = Record<string, Molecule<any>>;
+	/**
+	 * @deprecated Use `SelectorMap` instead.
+	 */
+	type MoleculeMap = Record<string, Selector<any>>;
+
+	type SelectorMap = Record<string, Selector<any>>;
 
 	/**
-	 * Recursively infers the type of the state produced by a map of molecules.
+	 * Infers the type of the return values produced by a map of functions.
 	 */
 	type StateOfMap<T> = {
-		[P in keyof T]: T[P] extends Molecule<infer State> ? State : never;
+		[P in keyof T]: T[P] extends Selector<infer State> ? State : never;
 	};
 
 	/**
@@ -45,7 +50,7 @@ declare namespace CharmSync {
 	 * @param options The atoms to synchronize with the client.
 	 * @returns A `ServerSyncer` object.
 	 */
-	function server<Molecules extends MoleculeMap>(options: ServerOptions<Molecules>): ServerSyncer<Molecules>;
+	function server<Selectors extends SelectorMap>(options: ServerOptions<Selectors>): ServerSyncer<Selectors>;
 
 	/**
 	 * Checks whether a value is `None`. If `true`, the value is scheduled to be
@@ -90,9 +95,9 @@ declare namespace CharmSync {
 	 * A payload that can be sent from the server to the client to synchronize
 	 * state between the two.
 	 */
-	type SyncPayload<Molecules extends MoleculeMap> =
-		| { type: "init"; data: StateOfMap<Molecules> }
-		| { type: "patch"; data: SyncPatch<StateOfMap<Molecules>> };
+	type SyncPayload<Selectors extends SelectorMap> =
+		| { type: "init"; data: StateOfMap<Selectors> }
+		| { type: "patch"; data: SyncPatch<StateOfMap<Selectors>> };
 
 	interface ClientOptions<Atoms extends AtomMap> {
 		/**
@@ -106,11 +111,11 @@ declare namespace CharmSync {
 		ignoreUnhydrated?: boolean;
 	}
 
-	interface ServerOptions<Molecules extends MoleculeMap> {
+	interface ServerOptions<Selectors extends SelectorMap> {
 		/**
 		 * The atoms to synchronize with the client.
 		 */
-		atoms: Molecules;
+		atoms: Selectors;
 		/**
 		 * The interval at which to send patches to the client, in seconds.
 		 * Defaults to `0` (patches are sent up to once per frame). Set to a
@@ -139,7 +144,7 @@ declare namespace CharmSync {
 		sync(...payloads: SyncPayload<Atoms>[]): void;
 	}
 
-	interface ServerSyncer<Molecules extends MoleculeMap> {
+	interface ServerSyncer<Selectors extends SelectorMap> {
 		/**
 		 * Sets up a subscription to each atom that schedules a patch to be sent to
 		 * the client whenever the state changes. When a change occurs, the `callback`
@@ -151,7 +156,7 @@ declare namespace CharmSync {
 		 * @param callback The function to call when the state changes.
 		 * @returns A cleanup function that unsubscribes all listeners.
 		 */
-		connect(callback: (player: Player, ...payloads: SyncPayload<Molecules>[]) => void): Cleanup;
+		connect(callback: (player: Player, ...payloads: SyncPayload<Selectors>[]) => void): Cleanup;
 		/**
 		 * Hydrates the client's state with the server's state. This should be
 		 * called when a player joins the game and requires the server's state.

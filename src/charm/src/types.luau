@@ -9,7 +9,7 @@ export type WeakMap<K, V> = typeof(setmetatable({} :: { [K]: V }, { __mode = "k"
 	@param state The next state or a function that produces the next state.
 	@return The current state, if no arguments are provided.
 ]=]
-export type Atom<T> = (() -> T) & (state: T | (T) -> T) -> T
+export type Atom<T> = (state: (T | (T) -> T)?) -> T
 
 --[=[
 	A function that depends on one or more atoms and produces a state. Can be
@@ -18,7 +18,7 @@ export type Atom<T> = (() -> T) & (state: T | (T) -> T) -> T
 	@template State The type of the state.
 	@return The current state.
 ]=]
-export type Molecule<T> = () -> T
+export type Selector<T> = () -> T
 
 --[=[
 	Optional configuration for creating an atom.
