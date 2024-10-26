@@ -18,17 +18,17 @@
 
 </div>
 
-**Charm** is an atomic state management library inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Designed to be a more composable alternative to Reflex, Charm aims to address common criticisms of Rodux-like state containers to better address certain use cases.
+**Charm** is an atomic state management library inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Store your immutable state in _atoms_, and write intuitive functions that read, write, and subscribe to state.
 
 ## 🍀 Features
 
-- ⚛️ **Manage state with _atoms_.** Decompose state into small, distinct containers called _atoms_, as opposed to combining them into a single store.
+- ⚛️ **Manage state with _atoms_.** Decompose state into tiny, composable containers called _atoms_, as opposed to combining them into a single store.
 
 - 💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
 
 - 🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
 
-- 🦄 **Like magic.** Selector functions can be subscribed to as-is — their memoization and dependencies are resolved for you.
+- 🦄 **Like magic.** Selector functions can be subscribed to as-is — with implicit dependency tracking, atoms are captured and memoized for you.
 
 ---
 
