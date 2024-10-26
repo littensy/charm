@@ -38,6 +38,14 @@ declare namespace Charm {
 	type Selector<State> = () => State;
 
 	/**
+	 * A function that depends on one or more atoms and produces a value. Can be
+	 * used to derive state from atoms.
+	 *
+	 * @returns The current state.
+	 */
+	type Molecule<State> = Selector<State>;
+
+	/**
 	 * Infers the type of the state produced by the given function.
 	 */
 	type StateOf<T> = T extends Selector<infer State> ? State : never;

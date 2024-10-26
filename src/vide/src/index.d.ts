@@ -1,9 +1,9 @@
-import { Molecule } from "@rbxts/charm";
+import { Selector } from "@rbxts/charm";
 
 /**
  * Subscribes to the state of an atom and returns a Vide source.
  *
- * @param molecule The atom or molecule to subscribe to.
+ * @param callback The atom or selector to subscribe to.
  * @returns The reactive source.
  */
-export function useAtom<T>(atom: Molecule<T>): () => T;
+export function useAtom<T>(callback: Selector<T>): () => T;

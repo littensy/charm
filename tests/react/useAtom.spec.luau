@@ -17,7 +17,7 @@ return function()
 		expect(hook.result).to.equal(1)
 	end)
 
-	it("accepts a molecule", function()
+	it("accepts a selector", function()
 		local state = atom(0)
 		local hook = renderHook(function()
 			return useAtom(function()

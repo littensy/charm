@@ -100,8 +100,8 @@ end
 	Returns the result of the function without subscribing to changes. If a
 	non-function value is provided, it is returned as is.
 	
-	@param molecule The atom or molecule to get the state of.
-	@param args Arguments to pass to the molecule.
+	@param callback The atom or selector to get the state of.
+	@param args Arguments to pass to the function.
 	@return The current state.
 ]=]
 local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
@@ -128,12 +128,12 @@ end
 	Captures all atoms that are read during the function call and returns them
 	along with the result of the function. Useful for tracking dependencies.
 	
-	@param molecule The function to run.
+	@param callback The function to run.
 	@return A tuple containing the captured atoms and the result of the function.
 ]=]
-local function capture<T>(molecule: () -> T): (Set<Atom<any>>, T)
-	if listeners[molecule] then
-		return { [molecule] = true }, peek(molecule)
+local function capture<T>(callback: () -> T): (Set<Atom<any>>, T)
+	if listeners[callback] then
+		return { [callback] = true }, peek(callback)
 	end
 
 	local dependencies: Set<Atom<any>> = {}
@@ -141,7 +141,7 @@ local function capture<T>(molecule: () -> T): (Set<Atom<any>>, T)
 	capturing.index += 1
 	capturing.stack[capturing.index] = dependencies
 
-	local result = try(molecule, function()
+	local result = try(callback, function()
 		capturing.stack[capturing.index] = nil
 		capturing.index -= 1
 	end)
