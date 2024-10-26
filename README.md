@@ -218,12 +218,12 @@ Call `observe` to create an instance of `factory` for each key present in a dict
 > Because `observe` tracks the lifetime of each key in your data, your keys must be unique and unchanging. If your data is not keyed by unique and stable identifiers, consider using [`mapped`](#mappedcallback-mapper) to transform it into a keyed object before passing it to `observe`.
 
 ```luau
-local todosAtom: Atom<{ [string]: string }> = atom({})
+local todosAtom: Atom<{ [string]: Todo }> = atom({})
 
 observe(todosAtom, function(todo, key)
-	print(`Added {todo}`)
+	print(`Added {key}: {todo.name}`)
 	return function()
-		print(`Removed {todo}`)
+		print(`Removed {key}`)
 	end
 end)
 ```
@@ -343,10 +343,10 @@ Call `useAtom` at the top-level of a React component to read from an atom or sel
 ```luau
 local todosAtom = require(script.Parent.todosAtom)
 
-local function Todos() {
+local function Todos()
 	local todos = useAtom(todosAtom)
 	-- ...
-}
+end
 ```
 
 If your selector depends on the component's state or props, remember to pass them in a dependency array. This prevents skipped updates when an untracked parameter of the selector changes.
