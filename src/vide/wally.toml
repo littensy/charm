@@ -1,9 +1,9 @@
 [package]
 name = "littensy/vide-charm"
-version = "0.1.0"
+version = "0.1.1"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
 [dependencies]
-Charm = "littensy/charm@0.8.0"
-Vide = "centau/vide@0.3.1"
+Charm = "littensy/charm@^0.8"
+Vide = "centau/vide@^0.3"

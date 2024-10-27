@@ -1,8 +1,8 @@
 [package]
 name = "littensy/charm-sync"
-version = "0.1.0"
+version = "0.1.1"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
 [dependencies]
-Charm = "littensy/charm@0.8.0"
+Charm = "littensy/charm@^0.8"
