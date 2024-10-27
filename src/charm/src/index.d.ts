@@ -159,7 +159,7 @@ declare namespace Charm {
 		factory: (item: Item, index: number) => Cleanup | void,
 	): Cleanup;
 
-	function observe<Key, Item>(
+	function observe<Key = any, Item = any>(
 		callback: Selector<AnyMap<Key, Item>>,
 		factory: (item: Item, key: Key) => Cleanup | void,
 	): Cleanup;
@@ -184,7 +184,7 @@ declare namespace Charm {
 		mapper: (value: V0, index: number) => V1,
 	): Selector<readonly V1[]>;
 
-	function mapped<K0, V0, K1 = K0, V1 = V0>(
+	function mapped<K0 = any, V0 = any, K1 = K0, V1 = V0>(
 		callback: Selector<AnyMap<K0, V0>>,
 		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
 	): Selector<ReadonlyMap<K1, V1>>;
