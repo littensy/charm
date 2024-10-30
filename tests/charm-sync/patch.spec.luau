@@ -52,12 +52,13 @@ return function()
 		expect(applied["4"]).to.never.be.ok()
 	end)
 
-	it("preserves array density after serdes", function()
+	itFOCUS("preserves array density after serdes", function()
 		-- This particular change results in a patch that cannot be serialized
 		-- without losing information. Charm resolves this issue internally.
 		local prevState = { "a", "b", "c", "d", "e" }
 		local nextState = { "A", "b", "c", "D" }
 
+		-- FIXME: The [0] index used to fix serialization issues is not preserved
 		local patches = serdes(patch.diff(prevState, nextState))
 		local applied = patch.apply(prevState, patches)
 

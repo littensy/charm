@@ -441,6 +441,7 @@ local syncer = CharmSync.server({
 	atoms = atomsToSync,     -- A dictionary of the atoms to sync, matching the client's
 	interval = 0,            -- The minimum interval between state updates
 	preserveHistory = false, -- Whether to send a full history of changes made to the atoms (slower)
+	convertArrays = true,    -- Safety measures for arrays, should be false when using ByteNet or Zap
 })
 
 -- Sends state updates to clients when a synced atom changes.
@@ -466,6 +467,8 @@ end)
 
   - **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
 
+  - **optional** `convertArrays`: Whether to convert sparse arrays to dictionaries before firing remote events. Because arrays in state patches can have holes, extra work is required to send them over a remote event intact. Defaults to `true`, but should be `false` if payloads are serialized (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
+
 #### Returns
 
 `server` returns an object with the following methods:
@@ -476,9 +479,11 @@ end)
 
 #### Caveats
 
-- By default, Charm omits the individual changes made to atoms between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
+- **Do not use values that cannot be sent over remotes** in your shared atoms. This includes functions, threads, and non-string keys in dictionaries.
 
-- Charm does not handle network communication. You must implement your own network layer to send and receive state updates. This is implemented via the `remotes` namespace in the example above.
+- **By default, Charm omits the individual changes made to atoms** between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
+
+- **Charm does not handle network communication.** You must use remote events to send sync payloads and set `convertArrays` accordingly. This is implemented via the `remotes` namespace in the example above.
 
 ---
 
@@ -489,6 +494,7 @@ Call `client` to create a client sync object. This synchronizes the client's ato
 ```luau
 local syncer = CharmSync.client({
 	atoms = atomsToSync, -- A dictionary of the atoms to sync, matching the server's
+	ignoreUnhydrated = true, -- Whether to ignore state updates before the initial update
 })
 
 -- Applies state updates from the server to the client's atoms.
@@ -507,6 +513,8 @@ remotes.requestState:fire()
 - `options`: An object to configure sync behavior.
 
   - `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the server.
+
+  - **optional** `ignoreUnhydrated`: Whether to ignore state updates before setting the initial state. Defaults to `true`.
 
 #### Returns
 

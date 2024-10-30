@@ -10,51 +10,32 @@ local function isNone(value: any): boolean
 	return type(value) == "table" and value.__none == "__none"
 end
 
---[=[
-	JSON serialization can drop the last values of a sparse array. For example,
-	`{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. Ambiguity in the
-	serialization of sparse arrays can be resolved by converting them to
-	dictionaries with string keys.
-
-	The `apply` function will convert these dictionaries back into arrays as
-	long as the target array is not sparse. This function ensures that the diff
-	function produces a patch that can be correctly applied.
-]=]
-local function stringifySparseArray(object: { any }): { [string | number]: any }
-	local maxn = table.maxn(object)
-
-	if maxn == 0 or maxn == #object then
-		-- The object is either not an array or a dense array
-		return object
+local function diff(prevState: { [any]: any }, nextState: { [any]: any }, convertArrays: boolean?)
+	if convertArrays == nil then
+		convertArrays = true
 	end
 
-	local dictionary = {}
-
-	for index, value in next, object do
-		dictionary[tostring(index)] = value
-	end
-
-	return dictionary
-end
-
-local function diff(prevState: { [any]: any }, nextState: { [any]: any })
-	local patches = table.clone(nextState)
+	local patch = table.clone(nextState)
 
 	for key, previous in next, prevState do
 		local current = nextState[key]
 
 		if previous == current then
-			patches[key] = nil
+			patch[key] = nil
 		elseif current == nil then
-			patches[key] = None
+			patch[key] = None
 		elseif type(previous) == "table" and type(current) == "table" then
-			patches[key] = diff(previous, current)
+			patch[key] = diff(previous, current, convertArrays)
 		end
 	end
 
-	-- Coerce sparse array patches into dictionaries
-	if prevState[1] ~= nil or nextState[1] ~= nil then
-		patches = stringifySparseArray(patches)
+	-- JSON serialization can drop the last values of a sparse array. For example,
+	-- `{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. Ambiguity in the
+	-- serialization of sparse arrays can be resolved by coercing remote events
+	-- to convert these arrays into dictionaries.
+	if convertArrays and (prevState[1] ~= nil or nextState[1] ~= nil) then
+		-- Set to an existing value to satisfy serialization
+		patch[0] = prevState[1] or nextState[1]
 	end
 
 	if _G.__DEV__ then
@@ -69,35 +50,39 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 		end
 	end
 
-	return patches
+	return patch
 end
 
-local function apply(state: any, patches: any): any
-	if type(patches) == "table" and patches.__none == "__none" then
+local function apply(state: any, patch: any): any
+	if type(patch) == "table" and patch.__none == "__none" then
 		return nil
-	elseif type(state) ~= "table" or type(patches) ~= "table" then
-		return patches
+	elseif type(state) ~= "table" or type(patch) ~= "table" then
+		return patch
 	end
 
-	local nextState = table.clone(state)
-	local stateIsArray = state[1] ~= nil
+	local result = table.clone(state)
+	local numeric = state[1] ~= nil
 
-	for key, patch in next, patches do
+	for key, value in next, patch do
 		-- Diff-checking an array produces a sparse array, which will not be
 		-- preserved when converted to JSON. To prevent this, we turn string
 		-- keys back into numeric keys.
-		if stateIsArray and type(key) == "string" then
+		if numeric then
+			if key == "0" or key == 0 then
+				continue
+			end
+
 			key = tonumber(key) or key
 		end
 
-		nextState[key] = apply(nextState[key], patch)
+		result[key] = apply(result[key], value)
 	end
 
-	return nextState
+	return result
 end
 
 return {
-	NONE = None,
+	None = None,
 	isNone = isNone,
 	diff = diff,
 	apply = apply,

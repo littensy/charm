@@ -3,7 +3,7 @@ local Charm = require(script.Parent.Parent.Charm)
 local SAFE_KEYS = { string = true, number = true }
 local SAFE_VALUES = { string = true, number = true, boolean = true, table = true, userdata = true }
 
-local function isUnsafeTable(object: { [any]: any })
+local function isTableUnsafe(object: { [any]: any })
 	local keyType = nil
 	local objectSize = 0
 
@@ -49,7 +49,7 @@ local function validate(value: any, key: any)
 			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
 		elseif Charm.isAtom(value) then
 			error(`Cannot sync nested atoms! Got atom at key '{key}'`)
-		elseif isUnsafeTable(value) then
+		elseif isTableUnsafe(value) then
 			error(
 				`Cannot sync tables unsupported by remote events! The value has the key '{key}'.\n\n`
 					.. "This can be for the following reasons:\n"

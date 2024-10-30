@@ -132,6 +132,15 @@ declare namespace CharmSync {
 		 * to reconstruct the state's changes over time.
 		 */
 		preserveHistory?: boolean;
+		/**
+		 * When this is enabled, arrays are coerced into dictionaries by adding a
+		 * key of `0`, which prevents Roblox from incorrectly sending sparse arrays
+		 * over a vanilla remote event. Defaults to `true`.
+		 *
+		 * Should be disabled when using network libraries like ByteNet and Zap,
+		 * since they can represent numeric keys.
+		 */
+		convertArrays?: boolean;
 	}
 
 	interface ClientSyncer<Atoms extends AtomMap> {

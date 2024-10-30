@@ -23,6 +23,15 @@ type ServerOptions = {
 		per frame, where each individual change is important. Defaults to `false`.
 	]=]
 	preserveHistory: boolean?,
+	--[=[
+		When this is enabled, arrays are coerced into dictionaries by adding a
+		key of `0`, which prevents Roblox from incorrectly sending sparse arrays
+		over a vanilla remote event. Defaults to `true`.
+
+		Should be disabled when using network libraries like ByteNet and Zap,
+		since they can represent numeric keys.
+	]=]
+	convertArrays: boolean?,
 }
 
 type ServerSyncer = {
@@ -127,7 +136,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 					table.insert(payloads, {
 						type = "patch",
-						data = patch.diff(snapshots[index - 1], snapshot),
+						data = patch.diff(snapshots[index - 1], snapshot, options.convertArrays),
 					})
 				end
 
@@ -164,7 +173,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 				table.insert(payloads, {
 					type = "patch",
-					data = patch.diff(snapshots[index - 1], snapshot),
+					data = patch.diff(snapshots[index - 1], snapshot, options.convertArrays),
 				})
 			end
 
@@ -199,7 +208,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 				local payload: SyncPayload = {
 					type = "patch",
-					data = patch.diff(previousSnapshot, currentSnapshot),
+					data = patch.diff(previousSnapshot, currentSnapshot, options.convertArrays),
 				}
 
 				previousSnapshot = table.clone(currentSnapshot)
@@ -228,7 +237,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			local payload: SyncPayload = {
 				type = "patch",
-				data = patch.diff(previousSnapshot, currentSnapshot),
+				data = patch.diff(previousSnapshot, currentSnapshot, options.convertArrays),
 			}
 
 			previousSnapshot = table.clone(currentSnapshot)
