@@ -8,29 +8,19 @@ type Cleanup = () => void;
 declare namespace CharmSync {
 	type AtomMap = Record<string, Atom<any>>;
 
+	type SelectorMap = Record<string, Selector<any>>;
+
 	/**
 	 * @deprecated Use `SelectorMap` instead.
 	 */
-	type MoleculeMap = Record<string, Selector<any>>;
-
-	type SelectorMap = Record<string, Selector<any>>;
+	type MoleculeMap = SelectorMap;
 
 	/**
 	 * Infers the type of the return values produced by a map of functions.
 	 */
 	type StateOfMap<T> = {
-		[P in keyof T]: T[P] extends Selector<infer State> ? State : never;
+		readonly [P in keyof T]: T[P] extends Selector<infer State> ? State : never;
 	};
-
-	/**
-	 * A special value that denotes the absence of a value. Used to represent
-	 * removed values in patches.
-	 */
-	interface None {
-		readonly __none: "__none";
-	}
-
-	type MaybeNone<T> = undefined extends T ? None : never;
 
 	/**
 	 * Creates a `ClientSyncer` object that receives patches from the server and
@@ -53,51 +43,27 @@ declare namespace CharmSync {
 	function server<Selectors extends SelectorMap>(options: ServerOptions<Selectors>): ServerSyncer<Selectors>;
 
 	/**
-	 * Checks whether a value is `None`. If `true`, the value is scheduled to be
-	 * removed from the state when the patch is applied.
-	 *
-	 * @param value The value to check.
-	 * @returns `true` if the value is `None`, otherwise `false`.
-	 */
-	function isNone(value: unknown): value is None;
-
-	type DataTypes = {
-		[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];
-	};
-
-	/**
 	 * A type that should not be made partial in patches.
 	 */
-	type DataType = DataTypes[keyof DataTypes];
+	type DataType = CheckableTypes[keyof Omit<CheckableTypes, "table" | "userdata" | "nil">];
 
 	/**
-	 * A partial patch that can be applied to the state to update it. Represents
-	 * the difference between the current state and the next state.
-	 *
-	 * If a value was removed, it is replaced with `None`. This can be checked
-	 * using the `sync.isNone` function.
+	 * A packet representing a modified value in the state.
 	 */
-	type SyncPatch<State> =
-		| MaybeNone<State>
-		| (State extends ReadonlyMap<infer K, infer V> | Map<infer K, infer V>
-				? ReadonlyMap<K, SyncPatch<V> | None>
-				: State extends Set<infer T> | ReadonlySet<infer T>
-					? ReadonlyMap<T, true | None>
-					: State extends readonly (infer T)[]
-						? readonly (SyncPatch<T> | None | undefined)[]
-						: State extends DataType
-							? State
-							: State extends object
-								? { readonly [P in keyof State]?: SyncPatch<State[P]> }
-								: State);
+	type SyncPacket<Selectors extends SelectorMap> = {
+		readonly path: SyncPacketPath<StateOfMap<Selectors>>;
+		readonly value: unknown;
+	};
+
+	type SyncPacketPath<T> = T extends DataType ? readonly [] : readonly [keyof T, ...SyncPacketPath<T[keyof T]>];
 
 	/**
 	 * A payload that can be sent from the server to the client to synchronize
 	 * state between the two.
 	 */
 	type SyncPayload<Selectors extends SelectorMap> =
-		| { type: "init"; data: StateOfMap<Selectors> }
-		| { type: "patch"; data: SyncPatch<StateOfMap<Selectors>> };
+		| { readonly type: "init"; readonly data: StateOfMap<Selectors> }
+		| { readonly type: "patch"; readonly data: readonly SyncPacket<Selectors>[] };
 
 	interface ClientOptions<Atoms extends AtomMap> {
 		/**
@@ -132,15 +98,6 @@ declare namespace CharmSync {
 		 * to reconstruct the state's changes over time.
 		 */
 		preserveHistory?: boolean;
-		/**
-		 * When this is enabled, arrays are coerced into dictionaries by adding a
-		 * key of `0`, which prevents Roblox from incorrectly sending sparse arrays
-		 * over a vanilla remote event. Defaults to `true`.
-		 *
-		 * Should be disabled when using network libraries like ByteNet and Zap,
-		 * since they can represent numeric keys.
-		 */
-		convertArrays?: boolean;
 	}
 
 	interface ClientSyncer<Atoms extends AtomMap> {

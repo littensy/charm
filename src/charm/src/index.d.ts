@@ -10,24 +10,13 @@ type AnyMap<K, V> =
 
 declare namespace Charm {
 	/**
-	 * A primitive state container that can be read from and written to. When the
-	 * state changes, all subscribers are notified.
+	 * A primitive state container that can be read from or written to. When
+	 * the state changes, all subscribers are notified.
 	 *
-	 * @template State The type of the state.
 	 * @param state The next state or a function that produces the next state.
 	 * @returns The current state, if no arguments are provided.
 	 */
-	interface Atom<State> extends Selector<State> {
-		/**
-		 * @deprecated This property is not meant to be accessed directly.
-		 */
-		readonly __nominal: unique symbol;
-		/**
-		 * @param state The next state or a function that produces the next state.
-		 * @returns The current state, if no arguments are provided.
-		 */
-		(state?: State | ((prev: State) => State)): State;
-	}
+	type Atom<State> = (state?: State | ((prev: State) => State)) => State;
 
 	/**
 	 * A function that depends on one or more atoms and produces a value. Can be

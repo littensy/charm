@@ -1,9 +1,10 @@
 local client = require(script.client)
-local patch = require(script.patch)
+local packets = require(script.packets)
 local server = require(script.server)
 local types = require(script.types)
 
 export type SyncPayload = types.SyncPayload
+export type Packet = packets.Packet
 
 --[=[
 	Synchronizes state between the client and server. The server sends patches
@@ -12,5 +13,4 @@ export type SyncPayload = types.SyncPayload
 return {
 	client = client,
 	server = server,
-	isNone = patch.isNone,
 }

@@ -19,6 +19,30 @@ return function()
 		expect(a()).to.equal(2)
 	end)
 
+	it("requires init by default", function()
+		local a = atom(1)
+		local client = client({ atoms = { a = a } })
+
+		client:sync({
+			type = "patch",
+			data = { { path = { "a" }, data = 2 } },
+		})
+
+		expect(a()).to.equal(1)
+	end)
+
+	it("can ignore init requirement", function()
+		local a = atom(1)
+		local client = client({ atoms = { a = a }, ignoreUnhydrated = false })
+
+		client:sync({
+			type = "patch",
+			data = { { path = { "a" }, data = 2 } },
+		})
+
+		expect(a()).to.equal(2)
+	end)
+
 	it("syncs state patch", function()
 		local a = atom({ b = 1, c = 2 })
 		local previous = a()
@@ -33,33 +57,12 @@ return function()
 
 		client:sync({
 			type = "patch",
-			data = { a = { b = 3 } },
+			data = { { path = { "a", "b" }, data = 3 } },
 		})
 
 		expect(a()).to.never.equal(previous)
 		expect(a().b).to.equal(3)
 		expect(a().c).to.equal(2)
-	end)
-
-	it("fixes sparse array patches", function()
-		local a = atom({ 1 })
-		local client = client({ atoms = { a = a } })
-
-		client:sync({
-			type = "init",
-			data = { a = a() },
-		})
-
-		-- This patch would be the result of a diff between { 1 } and { 1, 2 } that
-		-- was JSON-serialized and deserialized. The client should be able to catch
-		-- this and convert the string key back to a number.
-		client:sync({
-			type = "patch",
-			data = { a = { ["2"] = 2 } },
-		})
-
-		expect(a()["2" :: any]).to.never.be.ok()
-		expect(a()[2]).to.equal(2)
 	end)
 
 	it("applies multiple patches", function()
@@ -78,10 +81,10 @@ return function()
 
 		client:sync({
 			type = "patch",
-			data = { a = 2 },
+			data = { { path = { "a" }, data = 2 } },
 		}, {
 			type = "patch",
-			data = { a = 3 },
+			data = { { path = { "a" }, data = 3 } },
 		})
 
 		expect(a()).to.equal(3)
@@ -110,7 +113,10 @@ return function()
 
 		client:sync({
 			type = "patch",
-			data = { a = 1, b = 2 },
+			data = {
+				{ path = { "a" }, data = 1 },
+				{ path = { "b" }, data = 2 },
+			},
 		})
 
 		expect(a()).to.equal(1)
