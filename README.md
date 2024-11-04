@@ -55,7 +55,7 @@ Charm = "littensy/charm@VERSION"
 
 ## 🐛 Debugging
 
-Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true` at the entry point of your project.
+Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true` before importing Charm.
 
 Enabling `__DEV__` adds a few helpful features:
 
