@@ -2,8 +2,7 @@ local Players = game:GetService("Players")
 
 local Charm = require(script.Parent.Parent.Charm)
 local interval = require(script.Parent.interval)
-local packets = require(script.Parent.packets)
-type Packet = packets.Packet
+local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
 type SyncPayload = types.SyncPayload
 
@@ -24,6 +23,15 @@ type ServerOptions = {
 		per frame, where each individual change is important. Defaults to `false`.
 	]=]
 	preserveHistory: boolean?,
+	--[=[
+		Whether to convert problematic sparse arrays into dictionaries with
+		string keys. Defaults to `true`.
+
+		While this is mandatory for safely syncing arrays over vanilla Roblox
+		remotes, it can be disabled if your network library uses a custom
+		serialization method (i.e. Zap, ByteNet).
+	]=]
+	serializeArrays: boolean?,
 }
 
 type ServerSyncer = {
@@ -136,7 +144,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 					table.insert(payloads, {
 						type = "patch",
-						data = packets.diff(snapshots[index - 1], snapshot),
+						data = patch.diff(snapshots[index - 1], snapshot, options.serializeArrays),
 					})
 				end
 
@@ -173,7 +181,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 				table.insert(payloads, {
 					type = "patch",
-					data = packets.diff(snapshots[index - 1], snapshot),
+					data = patch.diff(snapshots[index - 1], snapshot, options.serializeArrays),
 				})
 			end
 
@@ -210,7 +218,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			local payload: SyncPayload = {
 				type = "patch",
-				data = packets.diff(previousSnapshot, currentSnapshot),
+				data = patch.diff(previousSnapshot, currentSnapshot, options.serializeArrays),
 			}
 
 			previousSnapshot = table.clone(currentSnapshot)
@@ -239,7 +247,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 		local payload: SyncPayload = {
 			type = "patch",
-			data = packets.diff(previousSnapshot, currentSnapshot),
+			data = patch.diff(previousSnapshot, currentSnapshot, options.serializeArrays),
 		}
 
 		previousSnapshot = table.clone(currentSnapshot)

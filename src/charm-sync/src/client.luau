@@ -1,6 +1,5 @@
 local Charm = require(script.Parent.Parent.Charm)
-local packets = require(script.Parent.packets)
-type Packet = packets.Packet
+local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
 type SyncPayload = types.SyncPayload
 
@@ -49,14 +48,14 @@ local function client(options: ClientOptions): ClientSyncer
 		end
 	end
 
-	local function patch(data: { Packet })
+	local function apply(data: { [string | number]: any })
 		local target = {}
 
 		for key, atom in next, atoms do
 			target[key] = atom()
 		end
 
-		target = packets.apply(target, data)
+		target = patch.apply(target, data)
 
 		for key, atom in next, atoms do
 			atom(target[key])
@@ -71,7 +70,7 @@ local function client(options: ClientOptions): ClientSyncer
 				if payload.type == "init" then
 					hydrate(payload.data)
 				elseif not ignoreUnhydrated or hydrated then
-					patch(payload.data)
+					apply(payload.data)
 				end
 			end)
 		end

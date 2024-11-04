@@ -24,13 +24,13 @@ See an example of Charm's features in [this example repository](https://github.c
 
 ## 🍀 Features
 
-- ⚛️ **Manage state with _atoms_.** Decompose state into tiny, composable containers called _atoms_, as opposed to combining them into a single store.
+-   ⚛️ **Manage state with _atoms_.** Decompose state into tiny, composable containers called _atoms_, as opposed to combining them into a single store.
 
-- 💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
+-   💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
 
-- 🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
+-   🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
 
-- 🦄 **Like magic.** Selector functions can be subscribed to as-is — with implicit dependency tracking, atoms are captured and memoized for you.
+-   🦄 **Like magic.** Selector functions can be subscribed to as-is — with implicit dependency tracking, atoms are captured and memoized for you.
 
 ---
 
@@ -59,12 +59,12 @@ Charm provides a debug mode to help you identify potential bugs in your project.
 
 Enabling `__DEV__` adds a few helpful features:
 
-- Better error handling for selectors, subscriptions, and batched functions:
+-   Better error handling for selectors, subscriptions, and batched functions:
 
-  - Errors provide the function's name and line number.
-  - Yielding in certain functions will throw an error.
+    -   Errors provide the function's name and line number.
+    -   Yielding in certain functions will throw an error.
 
-- Server state is validated for [remote event limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations) before being passed to the client.
+-   Server state is validated for [remote event limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations) before being passed to the client.
 
 Enabling debug mode in unit tests, storybooks, and other development environments can help you catch potential issues early. However, remember to turn off debug mode in production to avoid the performance overhead.
 
@@ -85,11 +85,11 @@ local todosAtom: Atom<{ string }> = atom({})
 
 #### Parameters
 
-- `state`: The value to assign to the atom initially.
+-   `state`: The value to assign to the atom initially.
 
-- **optional** `options`: An object that configures the behavior of this atom.
+-   **optional** `options`: An object that configures the behavior of this atom.
 
-  - **optional** `equals`: An equality function to determine whether the state has changed. By default, strict equality (`==`) is used.
+    -   **optional** `equals`: An equality function to determine whether the state has changed. By default, strict equality (`==`) is used.
 
 #### Returns
 
@@ -144,9 +144,9 @@ nameAtom("Jane") --> "JANE"
 
 #### Parameters
 
-- `callback`: The function to subscribe to. This may be an atom or a selector function that depends on an atom.
+-   `callback`: The function to subscribe to. This may be an atom or a selector function that depends on an atom.
 
-- `listener`: The listener is called when the result of the callback changes. It receives the new state and the previous state as arguments.
+-   `listener`: The listener is called when the result of the callback changes. It receives the new state and the previous state as arguments.
 
 #### Returns
 
@@ -173,7 +173,7 @@ Because `effect` implicitly tracks all atoms read within the callback, it might 
 
 #### Parameters
 
-- `callback`: The function to track for state changes. The callback will run once to retrieve its dependencies, and then again whenever they change.
+-   `callback`: The function to track for state changes. The callback will run once to retrieve its dependencies, and then again whenever they change.
 
 #### Returns
 
@@ -202,9 +202,9 @@ This function is also useful for optimizing `effect` calls that depend on multip
 
 #### Parameters
 
-- `callback`: A function that returns a new value depending on one or more atoms.
+-   `callback`: A function that returns a new value depending on one or more atoms.
 
-- **optional** [`options`](#parameters): An object that configures the behavior of this atom.
+-   **optional** [`options`](#parameters): An object that configures the behavior of this atom.
 
 #### Returns
 
@@ -232,9 +232,9 @@ end)
 
 #### Parameters
 
-- `callback`: An atom or selector function that returns a dictionary or an array of values. When a key is added to the state, the factory will be called with the new key and its initial value.
+-   `callback`: An atom or selector function that returns a dictionary or an array of values. When a key is added to the state, the factory will be called with the new key and its initial value.
 
-- `factory`: A function that will be called whenever a key is added or removed from the atom's state. The callback will receive the key and the entry's initial value as arguments, and may return a cleanup function.
+-   `factory`: A function that will be called whenever a key is added or removed from the atom's state. The callback will receive the key and the entry's initial value as arguments, and may return a cleanup function.
 
 #### Returns
 
@@ -255,13 +255,13 @@ end)
 
 #### Parameters
 
-- `callback`: The function whose result you want to map over. This can be an atom or a selector function that reads from atoms.
+-   `callback`: The function whose result you want to map over. This can be an atom or a selector function that reads from atoms.
 
-- `mapper`: The mapper is called for each key in your state. Given the current value and key, it should return a new corresponding value and key:
+-   `mapper`: The mapper is called for each key in your state. Given the current value and key, it should return a new corresponding value and key:
 
-  1. Return a single value to map the table's original key to a new value.
-  2. Return two values, the first being the value and the second being the key, to update both keys and values.
-  3. Return `nil` for the value to remove the key from the resulting table.
+    1. Return a single value to map the table's original key to a new value.
+    2. Return two values, the first being the value and the second being the key, to update both keys and values.
+    3. Return `nil` for the value to remove the key from the resulting table.
 
 #### Returns
 
@@ -285,9 +285,9 @@ end)
 
 #### Parameters
 
-- `value`: Any value. If the value is a function, `peek` will call it without tracking dependencies and return the result.
+-   `value`: Any value. If the value is a function, `peek` will call it without tracking dependencies and return the result.
 
-- **optional** `...args`: Additional arguments to pass to the value if it is a function.
+-   **optional** `...args`: Additional arguments to pass to the value if it is a function.
 
 #### Returns
 
@@ -311,7 +311,7 @@ end)
 
 #### Parameters
 
-- `callback`: A function that updates atoms. Listeners will only be notified once all changes have been applied.
+-   `callback`: A function that updates atoms. Listeners will only be notified once all changes have been applied.
 
 #### Returns
 
@@ -361,9 +361,9 @@ end, { props.filter })
 
 #### Parameters
 
-- `callback`: An atom or selector function that depends on an atom.
+-   `callback`: An atom or selector function that depends on an atom.
 
-- **optional** `dependencies`: An array of outside values that the selector depends on. If the dependencies change, the subscription is re-created and the component re-renders with the new state.
+-   **optional** `dependencies`: An array of outside values that the selector depends on. If the dependencies change, the subscription is re-created and the component re-renders with the new state.
 
 #### Returns
 
@@ -405,7 +405,7 @@ end
 
 #### Parameters
 
-- `callback`: An atom or selector function that depends on an atom.
+-   `callback`: An atom or selector function that depends on an atom.
 
 #### Returns
 
@@ -441,7 +441,7 @@ local syncer = CharmSync.server({
 	atoms = atomsToSync,     -- A dictionary of the atoms to sync, matching the client's
 	interval = 0,            -- The minimum interval between state updates
 	preserveHistory = false, -- Whether to send a full history of changes made to the atoms (slower)
-	convertArrays = true,    -- Safety measures for arrays, should be false when using ByteNet or Zap
+	serializeArrays = true,  -- Safety measures for arrays, should be false when using ByteNet or Zap
 })
 
 -- Sends state updates to clients when a synced atom changes.
@@ -459,31 +459,31 @@ end)
 
 #### Parameters
 
-- `options`: An object to configure sync behavior.
+-   `options`: An object to configure sync behavior.
 
-  - `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the client.
+    -   `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the client.
 
-  - **optional** `interval`: The interval at which to batch state updates to clients. Defaults to `0`, meaning updates are batched every frame.
+    -   **optional** `interval`: The interval at which to batch state updates to clients. Defaults to `0`, meaning updates are batched every frame.
 
-  - **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
+    -   **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
 
-  - **optional** `convertArrays`: Whether to convert sparse arrays to dictionaries before firing remote events. Because arrays in state patches can have holes, extra work is required to send them over a remote event intact. Defaults to `true`, but should be `false` if payloads are serialized (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
+    -   **optional** `serializeArrays`: Whether to convert problematic arrays to dictionaries before firing remote events. Because arrays in state patches can have holes, extra work is required to send them over a remote event intact. Defaults to `true`, but should be `false` if payloads are serialized (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
 
 #### Returns
 
 `server` returns an object with the following methods:
 
-- `syncer:connect(callback)`: Registers a callback to send state updates to clients. The callback will receive the player and the payload(s) to send, and should fire a remote event. The payload is read-only, so any changes should be applied to a copy of the payload.
+-   `syncer:connect(callback)`: Registers a callback to send state updates to clients. The callback will receive the player and the payload(s) to send, and should fire a remote event. The payload is read-only, so any changes should be applied to a copy of the payload.
 
-- `syncer:hydrate(player)`: Sends the player a full state update for all synced atoms.
+-   `syncer:hydrate(player)`: Sends the player a full state update for all synced atoms.
 
 #### Caveats
 
-- **Do not use values that cannot be sent over remotes** in your shared atoms. This includes functions, threads, and non-string keys in dictionaries.
+-   **Do not use values that cannot be sent over remotes** in your shared atoms. This includes functions, threads, and non-string keys in dictionaries.
 
-- **By default, Charm omits the individual changes made to atoms** between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
+-   **By default, Charm omits the individual changes made to atoms** between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
 
-- **Charm does not handle network communication.** You must use remote events to send sync payloads and set `convertArrays` accordingly. This is implemented via the `remotes` namespace in the example above.
+-   **Charm does not handle network communication.** Use remote events or a network library to send sync payloads - and remember to set `serializeArrays` accordingly!
 
 ---
 
@@ -510,21 +510,21 @@ remotes.requestState:fire()
 
 #### Parameters
 
-- `options`: An object to configure sync behavior.
+-   `options`: An object to configure sync behavior.
 
-  - `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the server.
+    -   `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the server.
 
-  - **optional** `ignoreUnhydrated`: Whether to ignore state updates before setting the initial state. Defaults to `true`.
+    -   **optional** `ignoreUnhydrated`: Whether to ignore state updates before setting the initial state. Defaults to `true`.
 
 #### Returns
 
 `client` returns an object with the following methods:
 
-- `syncer:sync(...payloads)` applies a state update from the server.
+-   `syncer:sync(...payloads)` applies a state update from the server.
 
 #### Caveats
 
-- The client sync object does not handle network communication. You must implement your own network layer to send and receive state updates. This includes requesting the initial state, which is implemented via `requestState` in the example above.
+-   **Charm does not handle network communication.** Use remote events or a network library to receive sync payloads. This includes requesting the initial state, which is implemented via `requestState` in the example above.
 
 ---
 
@@ -551,7 +551,7 @@ end)
 
 #### Parameters
 
-- `value`: Any value. If the value is `None`, `isNone` will return `true`.
+-   `value`: Any value. If the value is `None`, `isNone` will return `true`.
 
 #### Returns
 

@@ -1,7 +1,5 @@
-local Charm = require(script.Parent.Parent.Charm)
-
 local SAFE_KEYS = { string = true, number = true }
-local SAFE_VALUES = { string = true, number = true, boolean = true, table = true, userdata = true }
+local SAFE_VALUES = { string = true, number = true, boolean = true, table = true, userdata = true, vector = true }
 
 local function isTableUnsafe(object: { [any]: any })
 	local keyType = nil
@@ -47,8 +45,6 @@ local function validate(value: any, key: any)
 	elseif typeOfValue == "table" then
 		if getmetatable(value) ~= nil then
 			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
-		elseif Charm.isAtom(value) then
-			error(`Cannot sync nested atoms! Got atom at key '{key}'`)
 		elseif isTableUnsafe(value) then
 			error(
 				`Cannot sync tables unsupported by remote events! The value has the key '{key}'.\n\n`
@@ -69,7 +65,7 @@ local function validate(value: any, key: any)
 	elseif typeOfKey == "number" then
 		if key == math.huge or key == -math.huge then
 			error("Cannot sync infinity as key")
-		elseif math.floor(key) ~= key then
+		elseif key ~= math.floor(key) then
 			error("Cannot sync non-integer number as key")
 		end
 	end
