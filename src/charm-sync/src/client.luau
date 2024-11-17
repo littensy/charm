@@ -7,7 +7,7 @@ type ClientOptions = {
 	--[=[
 		The atoms to synchronize with the server.
 	]=]
-	atoms: { [string]: Charm.Atom<any> },
+	atoms: { [string | number]: Charm.Atom<any> },
 	--[=[
 		Whether to ignore patches sent before the client has been hydrated.
 		Default is `true`.
@@ -33,33 +33,44 @@ type ClientSyncer = {
 	@return A `ClientSyncer` object.
 ]=]
 local function client(options: ClientOptions): ClientSyncer
+	local self = {} :: ClientSyncer
+
 	local atoms = options.atoms
 	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
-	local self = {} :: ClientSyncer
 	local hydrated = false
 
-	-- Apply the state changes sent by the server.
+	local function hydrate(state: { [string | number]: any })
+		hydrated = true
+
+		for key, value in next, state do
+			local atom = atoms[key]
+			atom(value)
+		end
+	end
+
+	local function apply(data: { [string | number]: any })
+		local target = {}
+
+		for key, atom in next, atoms do
+			target[key] = atom()
+		end
+
+		target = patch.apply(target, data)
+
+		for key, atom in next, atoms do
+			atom(target[key])
+		end
+	end
+
 	function self:sync(...)
 		for index = 1, select("#", ...) do
 			local payload: SyncPayload = select(index, ...)
 
-			if ignoreUnhydrated and payload.type == "patch" and not hydrated then
-				-- If the client is not initialized, ignore patches. This is
-				-- to prevent patching incomplete state.
-				continue
-			end
-
-			hydrated = true
-
 			Charm.batch(function()
-				for key, state in next, payload.data do
-					local atom = atoms[key]
-
-					if payload.type == "patch" then
-						atom(patch.apply(atom(), state))
-					else
-						atom(state)
-					end
+				if payload.type == "init" then
+					hydrate(payload.data)
+				elseif not ignoreUnhydrated or hydrated then
+					apply(payload.data)
 				end
 			end)
 		end

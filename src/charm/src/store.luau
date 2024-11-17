@@ -3,6 +3,8 @@ type Atom<T> = types.Atom<T>
 type Set<T> = types.Set<T>
 type WeakMap<K, V> = types.WeakMap<K, V>
 
+local __DEV__ = _G.__DEV__
+
 local listeners: WeakMap<Atom<any>, WeakMap<() -> (), unknown>> = setmetatable({}, { __mode = "k" })
 
 local batched: Set<() -> ()> = {}
@@ -24,7 +26,7 @@ local capturing = {
 	@return The result of the callback.
 ]=]
 local function try<T, U...>(callback: (U...) -> T | any, finally: (() -> ())?, ...: U...): T
-	if _G.__DEV__ then
+	if __DEV__ then
 		local thread = coroutine.create(callback)
 		local success, result = coroutine.resume(thread, ...)
 

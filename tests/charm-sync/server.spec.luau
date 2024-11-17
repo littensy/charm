@@ -49,7 +49,7 @@ return function()
 		server:_sendPatch(target)
 
 		expect(payload.data.a.b).to.never.be.ok()
-		expect(payload.data.a.c).to.equal(patch.NONE)
+		expect(patch.isNone(payload.data.a.c)).to.equal(true)
 		expect(payload.data.a.d).to.equal(1)
 
 		disconnect()

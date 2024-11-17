@@ -1,5 +1,7 @@
 local validate = require(script.Parent.validate)
 
+local __DEV__ = _G.__DEV__
+
 --[=[
 	A special symbol that denotes the absence of a value. Used to represent
 	deleted values in patches.
@@ -37,7 +39,16 @@ local function stringifySparseArray(object: { any }): { [string | number]: any }
 	return dictionary
 end
 
-local function diff(prevState: { [any]: any }, nextState: { [any]: any })
+--[=[
+	Compares two states and returns a patch that can be applied to the previous
+	state to produce the next state.
+
+	@param prevState The previous state.
+	@param nextState The next state.
+	@param serializeArrays Whether to convert sparse arrays into dictionaries. Defaults to `true`.
+	@returns A patch that can be applied to the previous state.
+]=]
+local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serializeArrays: boolean?)
 	local patches = table.clone(nextState)
 
 	for key, previous in next, prevState do
@@ -48,16 +59,16 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 		elseif current == nil then
 			patches[key] = None
 		elseif type(previous) == "table" and type(current) == "table" then
-			patches[key] = diff(previous, current)
+			patches[key] = diff(previous, current, serializeArrays)
 		end
 	end
 
 	-- Coerce sparse array patches into dictionaries
-	if prevState[1] ~= nil or nextState[1] ~= nil then
+	if serializeArrays ~= false and (prevState[1] ~= nil or nextState[1] ~= nil) then
 		patches = stringifySparseArray(patches)
 	end
 
-	if _G.__DEV__ then
+	if __DEV__ then
 		for key, value in next, prevState do
 			validate(value, key)
 		end
@@ -72,6 +83,13 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	return patches
 end
 
+--[=[
+	Applies a patch to a state and returns the next state.
+
+	@param state The current state.
+	@param patches The patches to apply.
+	@returns The next state.
+]=]
 local function apply(state: any, patches: any): any
 	if type(patches) == "table" and patches.__none == "__none" then
 		return nil
@@ -97,7 +115,6 @@ local function apply(state: any, patches: any): any
 end
 
 return {
-	NONE = None,
 	isNone = isNone,
 	diff = diff,
 	apply = apply,

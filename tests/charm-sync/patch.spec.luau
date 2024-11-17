@@ -98,4 +98,14 @@ return function()
 		expect(applied["2"]).to.be.ok()
 		expect(applied[2]).to.never.be.ok()
 	end)
+
+	it("optionally fixes sparse arrays", function()
+		for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
+			expect(index).to.be.a("string")
+		end
+
+		for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }, false) do
+			expect(index).to.be.a("number")
+		end
+	end)
 end

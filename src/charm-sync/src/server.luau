@@ -10,7 +10,7 @@ type ServerOptions = {
 	--[=[
 		The atoms to synchronize with the client.
 	]=]
-	atoms: { [string]: Charm.Atom<any> },
+	atoms: { [string | number]: Charm.Atom<any> },
 	--[=[
 		The interval at which to send patches to the client, in seconds.
 		Defaults to `0` (patches are sent up to once per frame). Set to a
@@ -23,6 +23,15 @@ type ServerOptions = {
 		per frame, where each individual change is important. Defaults to `false`.
 	]=]
 	preserveHistory: boolean?,
+	--[=[
+		Whether to convert problematic sparse arrays into dictionaries with
+		string keys. Defaults to `true`.
+
+		While this is mandatory for safely syncing arrays over vanilla Roblox
+		remotes, it can be disabled if your network library uses a custom
+		serialization method (i.e. Zap, ByteNet).
+	]=]
+	serializeArrays: boolean?,
 }
 
 type ServerSyncer = {
@@ -63,7 +72,7 @@ local function server(options: ServerOptions): ServerSyncer
 	local sync: (player: Player, payload: SyncPayload) -> ()
 
 	local function createSnapshot()
-		local snapshot: { [string]: any } = {}
+		local snapshot = {}
 
 		for key, atom in next, options.atoms do
 			snapshot[key] = atom()
@@ -72,10 +81,20 @@ local function server(options: ServerOptions): ServerSyncer
 		return snapshot
 	end
 
+	-- Send the initial state to a player when they join the server.
+	function self:hydrate(player)
+		assert(sync, "connect() must be called before hydrate()")
+
+		sync(player, {
+			type = "init",
+			data = createSnapshot(),
+		})
+	end
+
+	-- If the history of state changes should be preserved, keep a list of
+	-- previous snapshots and diff-check each one from the last.
 	if options.preserveHistory then
-		-- Preserve a history of every state change to allow for more granular
-		-- syncing with the client.
-		local snapshots: { { [string]: any } } = {}
+		local snapshots = { createSnapshot() }
 		local changed = false
 
 		function self:connect(callback)
@@ -83,7 +102,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			sync = callback
 
-			local function pushSnapshot(key: string, current: any, previous: any)
+			local function pushSnapshot(key: string | number, current: any, previous: any)
 				local lastSnapshot = snapshots[#snapshots]
 				local previousSnapshot = snapshots[#snapshots - 1]
 
@@ -108,8 +127,6 @@ local function server(options: ServerOptions): ServerSyncer
 				end)
 			end
 
-			snapshots[1] = createSnapshot()
-
 			local disconnect = interval(function()
 				if not changed then
 					return
@@ -127,7 +144,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 					table.insert(payloads, {
 						type = "patch",
-						data = patch.diff(snapshots[index - 1], snapshot),
+						data = patch.diff(snapshots[index - 1], snapshot, options.serializeArrays),
 					})
 				end
 
@@ -164,7 +181,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 				table.insert(payloads, {
 					type = "patch",
-					data = patch.diff(snapshots[index - 1], snapshot),
+					data = patch.diff(snapshots[index - 1], snapshot, options.serializeArrays),
 				})
 			end
 
@@ -173,79 +190,70 @@ local function server(options: ServerOptions): ServerSyncer
 
 			sync(player, unpack(payloads))
 		end
-	else
-		-- Only send the most recent state to the client.
-		local previousSnapshot = createSnapshot()
-		local currentSnapshot = table.clone(previousSnapshot)
-		local changed = false
 
-		function self:connect(callback)
-			local subscriptions = {}
+		return self
+	end
 
-			sync = callback
+	local previousSnapshot = createSnapshot()
+	local currentSnapshot = table.clone(previousSnapshot)
+	local changed = false
 
-			-- Subscribe to each atom and update the state when one changes.
-			for key, atom in next, options.atoms do
-				subscriptions[key] = Charm.subscribe(atom, function(state)
-					currentSnapshot[key] = state
-					changed = true
-				end)
-			end
+	function self:connect(callback)
+		local subscriptions = {}
 
-			local disconnect = interval(function()
-				if not changed then
-					return
-				end
+		sync = callback
 
-				local payload: SyncPayload = {
-					type = "patch",
-					data = patch.diff(previousSnapshot, currentSnapshot),
-				}
-
-				previousSnapshot = table.clone(currentSnapshot)
-				changed = false
-
-				for _, player in next, Players:GetPlayers() do
-					callback(player, payload)
-				end
-			end, options.interval or 0)
-
-			return function()
-				disconnect()
-
-				for _, unsubscribe in next, subscriptions do
-					unsubscribe()
-				end
-			end
+		-- Subscribe to each atom and update the state when one changes.
+		for key, atom in next, options.atoms do
+			subscriptions[key] = Charm.subscribe(atom, function(state)
+				currentSnapshot[key] = state
+				changed = true
+			end)
 		end
 
-		function self:_sendPatch(player: Player)
-			assert(sync, "connect() must be called before _sendPatch()")
-
+		local disconnect = interval(function()
 			if not changed then
 				return
 			end
 
 			local payload: SyncPayload = {
 				type = "patch",
-				data = patch.diff(previousSnapshot, currentSnapshot),
+				data = patch.diff(previousSnapshot, currentSnapshot, options.serializeArrays),
 			}
 
 			previousSnapshot = table.clone(currentSnapshot)
 			changed = false
 
-			sync(player, payload)
+			for _, player in next, Players:GetPlayers() do
+				callback(player, payload)
+			end
+		end, options.interval or 0)
+
+		return function()
+			disconnect()
+
+			for _, unsubscribe in next, subscriptions do
+				unsubscribe()
+			end
 		end
 	end
 
-	-- Send the initial state to a player when they join the server.
-	function self:hydrate(player)
-		assert(sync, "connect() must be called before hydrate()")
+	function self:_sendPatch(player)
+		assert(sync, "connect() must be called before _sendPatch()")
 
-		sync(player, {
-			type = "init",
-			data = createSnapshot(),
-		})
+		if not changed then
+			return
+		end
+
+		local payload: SyncPayload = {
+			type = "patch",
+			data = patch.diff(previousSnapshot, currentSnapshot, options.serializeArrays),
+		}
+
+		previousSnapshot = table.clone(currentSnapshot)
+		changed = false
+
+		sync(player, payload)
 	end
 
 	return self

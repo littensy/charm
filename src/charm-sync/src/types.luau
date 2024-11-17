@@ -3,8 +3,11 @@
 	state between the two.
 ]=]
 export type SyncPayload = {
-	type: "patch" | "init",
-	data: { [any]: any },
+	type: "init",
+	data: { [string | number]: any },
+} | {
+	type: "patch",
+	data: { [string | number]: any },
 }
 
 return nil

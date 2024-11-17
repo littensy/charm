@@ -8,23 +8,22 @@ type Cleanup = () => void;
 declare namespace CharmSync {
 	type AtomMap = Record<string, Atom<any>>;
 
+	type SelectorMap = Record<string, Selector<any>>;
+
 	/**
 	 * @deprecated Use `SelectorMap` instead.
 	 */
-	type MoleculeMap = Record<string, Selector<any>>;
-
-	type SelectorMap = Record<string, Selector<any>>;
+	type MoleculeMap = SelectorMap;
 
 	/**
 	 * Infers the type of the return values produced by a map of functions.
 	 */
 	type StateOfMap<T> = {
-		[P in keyof T]: T[P] extends Selector<infer State> ? State : never;
+		readonly [P in keyof T]: T[P] extends Selector<infer State> ? State : never;
 	};
 
 	/**
-	 * A special value that denotes the absence of a value. Used to represent
-	 * removed values in patches.
+	 * Represents the removal of a value from the state.
 	 */
 	interface None {
 		readonly __none: "__none";
@@ -96,8 +95,8 @@ declare namespace CharmSync {
 	 * state between the two.
 	 */
 	type SyncPayload<Selectors extends SelectorMap> =
-		| { type: "init"; data: StateOfMap<Selectors> }
-		| { type: "patch"; data: SyncPatch<StateOfMap<Selectors>> };
+		| { readonly type: "init"; readonly data: StateOfMap<Selectors> }
+		| { readonly type: "patch"; readonly data: SyncPatch<StateOfMap<Selectors>> };
 
 	interface ClientOptions<Atoms extends AtomMap> {
 		/**
@@ -132,6 +131,15 @@ declare namespace CharmSync {
 		 * to reconstruct the state's changes over time.
 		 */
 		preserveHistory?: boolean;
+		/**
+		 * When `true`, convert problematic sparse arrays into dictionaries
+		 * with string keys. Defaults to `true`.
+		 *
+		 * While this is mandatory for safely syncing arrays over vanilla Roblox
+		 * remotes, it can be disabled if your network library uses a custom
+		 * serialization method (i.e. Zap, ByteNet).
+		 */
+		serializeArrays?: boolean;
 	}
 
 	interface ClientSyncer<Atoms extends AtomMap> {
