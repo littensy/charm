@@ -1,11 +1,10 @@
 /node_modules
 /build
-/devpackages
-/packages
-/src/**/node_modules
-/src/**/wally.lock
-/src/**/README.md
-/src/**/LICENSE.md
+/modules/DevPackages
+/packages/**/node_modules
+/packages/**/wally.lock
+/packages/**/README.md
+/packages/**/LICENSE.md
 /sourcemap.json
 *.tsbuildinfo
 *.tgz

@@ -42,57 +42,31 @@ importers:
         specifier: ~5.5.4
         version: 5.5.4
 
-  modules/charm: {}
+  packages/charm: {}
 
-  modules/charm-sync:
+  packages/charm-sync:
     dependencies:
       '@rbxts/charm':
         specifier: workspace:*
         version: link:../charm
 
-  modules/react:
-    dependencies:
-      '@rbxts/charm':
-        specifier: workspace:*
-        version: link:../charm
-      '@rbxts/react':
-        specifier: '*'
-        version: 17.2.1
-
-  modules/vide:
-    dependencies:
-      '@rbxts/charm':
-        specifier: workspace:*
-        version: link:../charm
-      '@rbxts/vide':
-        specifier: '*'
-        version: 0.4.6
-
-  src/charm: {}
-
-  src/charm-sync:
-    dependencies:
-      '@rbxts/charm':
-        specifier: workspace:*
-        version: link:../charm
-
-  src/react:
+  packages/react:
     dependencies:
       '@rbxts/charm':
         specifier: workspace:*
         version: link:../charm
       '@rbxts/react':
         specifier: '*'
-        version: 17.2.1
+        version: 17.2.3
 
-  src/vide:
+  packages/vide:
     dependencies:
       '@rbxts/charm':
         specifier: workspace:*
         version: link:../charm
       '@rbxts/vide':
         specifier: '*'
-        version: 0.4.6
+        version: 0.5.3
 
 packages:
 
@@ -146,17 +120,17 @@ packages:
   '@rbxts/compiler-types@3.0.0-types.0':
     resolution: {integrity: sha512-VGOHJPoL7+56NTatMGqQj3K7xWuzEV+aP4QD5vZiHu+bcff3kiTmtoadaF6NkJrmwfFAvbsd4Dg764ZjWNceag==}
 
-  '@rbxts/react-vendor@17.2.1':
-    resolution: {integrity: sha512-7DxFweCbhhso4M4tl1pO7Kil9SZrvOl1SoZ4lnwUfoxdHvSmWgeKgaUqd+ZS3/u1E8kRraqGQ56Q8zjUEEUzlA==}
+  '@rbxts/react-vendor@17.2.3':
+    resolution: {integrity: sha512-dWCiVelvTK6h920geaFH/OQ5zoWHyhyqyfH51hKx2/iVZ6OiiyNVJ5UqEIkJMG4HsJ8JnkTORizV3+MtQ41BtA==}
 
-  '@rbxts/react@17.2.1':
-    resolution: {integrity: sha512-iu0RsVvfHroI7l+QXjwE0FiWV2rXoKMxuznDZ8vnx2BsFqrPnCqFjXuNeGYZwibibZC6jbyq7uKl+/8cz7XlsA==}
+  '@rbxts/react@17.2.3':
+    resolution: {integrity: sha512-IoOB8e2W8MxT0MKWFf0Ls0vT61ImYL6ctHQgz5+oazma6z8bqFtJjgPxOuy6jmMSuyfBe7rYp/muou0kIjZT+Q==}
 
   '@rbxts/types@1.0.811':
     resolution: {integrity: sha512-MPhs5lxzxvDqie34Y9FzJ1R+k+33jjrkj03agX2y2WzBKyGmO0rD/kPuUaKXQgEiACXuk36C5FxUTYgkKJPbvA==}
 
-  '@rbxts/vide@0.4.6':
-    resolution: {integrity: sha512-xYtvCS05nGq1YU7fyQVmp4z1CcvuOR+VKpKj/Y7lFPvKobQ3oHTQEzZiJFEMZ+iSeHxwZhwpzVjrP+6+e2EoQw==}
+  '@rbxts/vide@0.5.3':
+    resolution: {integrity: sha512-evaZbBRZzaqU8ibddTMaomb30pmW5OhWTT7ba1PLSA/iGBCid0eOF6BX1o0ArKPyMFnNj6pMM2yMTQzL5b9cIA==}
 
   '@roblox-ts/luau-ast@2.0.0':
     resolution: {integrity: sha512-cmMi093IdwBOLVxwuordhM8AmtbyTIyRpsTbB0D/JauidW4SXsQRQowSwWjHo4QP0DRJBXvOIlxtqEQi50uNzQ==}
@@ -932,15 +906,15 @@ snapshots:
 
   '@rbxts/compiler-types@3.0.0-types.0': {}
 
-  '@rbxts/react-vendor@17.2.1': {}
+  '@rbxts/react-vendor@17.2.3': {}
 
-  '@rbxts/react@17.2.1':
+  '@rbxts/react@17.2.3':
     dependencies:
-      '@rbxts/react-vendor': 17.2.1
+      '@rbxts/react-vendor': 17.2.3
 
   '@rbxts/types@1.0.811': {}
 
-  '@rbxts/vide@0.4.6': {}
+  '@rbxts/vide@0.5.3': {}
 
   '@roblox-ts/luau-ast@2.0.0': {}
 

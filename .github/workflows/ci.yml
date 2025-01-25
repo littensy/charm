@@ -15,12 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          run_install: true
 
       - name: Install Rokit
         uses: CompeyDev/setup-rokit@v0.1.2
 
-      - name: Install dependencies
-        run: pnpm install
+      - name: Install Wally dependencies
+        run: pnpm wally
 
       - name: Check code quality
         run: pnpm check

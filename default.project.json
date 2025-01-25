@@ -5,18 +5,18 @@
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
 			"DevPackages": {
-				"$path": "DevPackages",
+				"$path": "modules/DevPackages",
 				"Charm": {
-					"$path": "src/charm"
+					"$path": "packages/charm"
 				},
 				"CharmSync": {
-					"$path": "src/charm-sync"
+					"$path": "packages/charm-sync"
 				},
 				"ReactCharm": {
-					"$path": "src/react"
+					"$path": "packages/react"
 				},
 				"VideCharm": {
-					"$path": "src/vide"
+					"$path": "packages/vide"
 				}
 			}
 		},
