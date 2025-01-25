@@ -19,7 +19,11 @@ check() {
 }
 
 eslint src
-check src/*/src
+
+for i in src/*/src; do
+	check $i
+done
+
 check tests
 
 rm bin/roblox.d.luau
