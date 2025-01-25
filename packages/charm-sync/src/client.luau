@@ -33,10 +33,10 @@ type ClientSyncer = {
 	@return A `ClientSyncer` object.
 ]=]
 local function client(options: ClientOptions): ClientSyncer
-	local self = {} :: ClientSyncer
-
 	local atoms = options.atoms
 	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
+
+	local self = {} :: ClientSyncer
 	local hydrated = false
 
 	local function hydrate(state: { [string | number]: any })

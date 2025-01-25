@@ -67,13 +67,18 @@ type ServerSyncer = {
 	@return A `ServerSyncer` object.
 ]=]
 local function server(options: ServerOptions): ServerSyncer
+	local atoms = options.atoms
+	local autoSerialize = options.autoSerialize ~= false
+	local preserveHistory = options.preserveHistory
+	local syncRate = options.interval or 0
+
 	local self = {} :: ServerSyncer
 	local sync: (player: Player, payload: SyncPayload) -> ()
 
 	local function createSnapshot()
 		local snapshot = {}
 
-		for key, atom in next, options.atoms do
+		for key, atom in next, atoms do
 			snapshot[key] = atom()
 		end
 
@@ -92,7 +97,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 	-- If the history of state changes should be preserved, keep a list of
 	-- previous snapshots and diff-check each one from the last.
-	if options.preserveHistory then
+	if preserveHistory then
 		local snapshots = { createSnapshot() }
 		local changed = false
 
@@ -119,7 +124,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			-- Populate the snapshot with the initial state of each atom.
 			-- Subscribe to each atom and update the state when it changes.
-			for key, atom in next, options.atoms do
+			for key, atom in next, atoms do
 				subscriptions[key] = Charm.subscribe(atom, function(current, previous)
 					pushSnapshot(key, current, previous)
 					changed = true
@@ -143,7 +148,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 					table.insert(payloads, {
 						type = "patch",
-						data = patch.diff(snapshots[index - 1], snapshot, options.autoSerialize),
+						data = patch.diff(snapshots[index - 1], snapshot, autoSerialize),
 					})
 				end
 
@@ -153,7 +158,7 @@ local function server(options: ServerOptions): ServerSyncer
 				for _, player in next, Players:GetPlayers() do
 					callback(player, unpack(payloads))
 				end
-			end, options.interval or 0)
+			end, syncRate)
 
 			return function()
 				disconnect()
@@ -180,7 +185,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 				table.insert(payloads, {
 					type = "patch",
-					data = patch.diff(snapshots[index - 1], snapshot, options.autoSerialize),
+					data = patch.diff(snapshots[index - 1], snapshot, autoSerialize),
 				})
 			end
 
@@ -203,7 +208,7 @@ local function server(options: ServerOptions): ServerSyncer
 		sync = callback
 
 		-- Subscribe to each atom and update the state when one changes.
-		for key, atom in next, options.atoms do
+		for key, atom in next, atoms do
 			subscriptions[key] = Charm.subscribe(atom, function(state)
 				currentSnapshot[key] = state
 				changed = true
@@ -217,7 +222,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			local payload: SyncPayload = {
 				type = "patch",
-				data = patch.diff(previousSnapshot, currentSnapshot, options.autoSerialize),
+				data = patch.diff(previousSnapshot, currentSnapshot, autoSerialize),
 			}
 
 			previousSnapshot = table.clone(currentSnapshot)
@@ -226,7 +231,7 @@ local function server(options: ServerOptions): ServerSyncer
 			for _, player in next, Players:GetPlayers() do
 				callback(player, payload)
 			end
-		end, options.interval or 0)
+		end, syncRate)
 
 		return function()
 			disconnect()
@@ -246,7 +251,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 		local payload: SyncPayload = {
 			type = "patch",
-			data = patch.diff(previousSnapshot, currentSnapshot, options.autoSerialize),
+			data = patch.diff(previousSnapshot, currentSnapshot, autoSerialize),
 		}
 
 		previousSnapshot = table.clone(currentSnapshot)
