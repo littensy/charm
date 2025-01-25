@@ -61,7 +61,9 @@ local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: 
 
 	unsubscribe = subscribe(callback, listener)
 
-	listener(store.peek(callback))
+	store.peek(function(): ()
+		listener(callback())
+	end)
 
 	return mappedAtom
 end

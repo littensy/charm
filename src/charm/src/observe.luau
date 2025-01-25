@@ -34,7 +34,9 @@ local function observe<K, V>(callback: Selector<{ [K]: V }>, factory: (value: V,
 
 	local unsubscribe = subscribe(callback, listener)
 
-	listener(store.peek(callback))
+	store.peek(function(): ()
+		listener(callback())
+	end)
 
 	return function()
 		unsubscribe()
