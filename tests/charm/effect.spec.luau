@@ -93,4 +93,19 @@ return function()
 		a(2)
 		a(3)
 	end)
+
+	it("allows immediate self-cleanup", function()
+		local a = atom(1)
+		local cleanedUp = false
+
+		effect(function(cleanup)
+			assert(not cleanedUp, "cleanup ran twice")
+			cleanup()
+			cleanedUp = true
+			a()
+		end)
+
+		a(2)
+		a(3)
+	end)
 end

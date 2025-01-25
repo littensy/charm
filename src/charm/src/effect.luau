@@ -9,9 +9,11 @@ type Cleanup = () -> ()
 	@param callback The function to run.
 	@return A function that unsubscribes the callback.
 ]=]
-local function effect(callback: () -> Cleanup?): Cleanup
-	local dependencies, cleanup = store.capture(callback)
+local function effect(callback: (cleanup: Cleanup) -> Cleanup?): Cleanup
+	local dependencies = {}
+	local cleanup: Cleanup?
 	local disconnected = false
+	local disconnect
 
 	local function listener()
 		if cleanup then
@@ -19,16 +21,14 @@ local function effect(callback: () -> Cleanup?): Cleanup
 		end
 
 		store.disconnect(dependencies, listener)
-		dependencies, cleanup = store.capture(callback)
+		dependencies, cleanup = store.capture(callback, disconnect)
 
 		if not disconnected then
 			store.connect(dependencies, listener)
 		end
 	end
 
-	store.connect(dependencies, listener)
-
-	return function()
+	function disconnect()
 		if disconnected then
 			return
 		end
@@ -40,6 +40,14 @@ local function effect(callback: () -> Cleanup?): Cleanup
 			cleanup()
 		end
 	end
+
+	dependencies, cleanup = store.capture(callback, disconnect)
+
+	if not disconnected then
+		store.connect(dependencies, listener)
+	end
+
+	return disconnect
 end
 
-return effect :: (callback: (() -> ()) | (() -> Cleanup)) -> Cleanup
+return effect :: (callback: ((cleanup: Cleanup) -> ()) | ((cleanup: Cleanup) -> Cleanup?)) -> Cleanup

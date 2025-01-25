@@ -133,9 +133,10 @@ end
 	@param callback The function to run.
 	@return A tuple containing the captured atoms and the result of the function.
 ]=]
-local function capture<T>(callback: () -> T): (Set<Atom<any>>, T)
-	if listeners[callback] then
-		return { [callback] = true }, peek(callback)
+local function capture<T, U...>(callback: (U...) -> T, ...: U...): (Set<Atom<any>>, T)
+	-- If the callback is an atom, return it immediately
+	if listeners[callback :: any] then
+		return { [callback :: any] = true }, peek(callback)
 	end
 
 	local dependencies: Set<Atom<any>> = {}
@@ -146,7 +147,7 @@ local function capture<T>(callback: () -> T): (Set<Atom<any>>, T)
 	local result = try(callback, function()
 		capturing.stack[capturing.index] = nil
 		capturing.index -= 1
-	end)
+	end, ...)
 
 	return dependencies, result
 end
