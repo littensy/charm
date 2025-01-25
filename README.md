@@ -18,13 +18,13 @@
 
 </div>
 
-**Charm** is an atomic state management library inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Store your immutable state in atoms, and write intuitive functions that read, write, and subscribe to state.
+**Charm** is an atomic and immutable state management library, inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Store your state in atoms, and write your own functions to read, write, and observe state.
 
 See an example of Charm's features in [this example repository](https://github.com/littensy/charm-example).
 
 ## 🍀 Features
 
--   ⚛️ **Manage state with _atoms_.** Decompose state into tiny, composable containers called _atoms_, as opposed to combining them into a single store.
+-   ⚛️ **Manage state with _atoms_.** Decompose state into independent containers called _atoms_, as opposed to combining them into a single store.
 
 -   💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
 
