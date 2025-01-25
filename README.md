@@ -473,10 +473,11 @@ end)
     -   **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
 
     -   **optional** `autoSerialize`: Whether to apply validation and workarounds to certain [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#table-indexing). Defaults to `true`, but you should set it to `false` if you serialize remote arguments (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
-        > [!NOTE]
-        > Charm sends table updates in the form of partial tables, so arrays will contain `nil` values, which has undefined behavior in remotes without serialization.
-        >
-        > Charm's default behavior fixes this, but it can interfere with custom serialization, so disable this option if you use a custom network library.
+
+> [!NOTE]
+> Charm sends table updates in the form of partial tables, so arrays will contain `nil` values, which has undefined behavior in remotes without serialization.
+>
+> Charm's default `autoSerialize` behavior fixes this, but it can interfere with custom serialization. Disable this option if you use a custom network library.
 
 #### Returns
 
