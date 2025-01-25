@@ -18,9 +18,9 @@ check() {
 	stylua --check $1
 }
 
-eslint src
+eslint packages
 
-for i in src/*/src; do
+for i in packages/*/src; do
 	check $i
 done
 

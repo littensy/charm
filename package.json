@@ -3,7 +3,7 @@
 	"scripts": {
 		"build": "sh bin/build.sh",
 		"check": "sh bin/check.sh",
-		"wally": "wally install && rojo sourcemap --output sourcemap.json",
+		"wally": "sh bin/install.sh",
 		"publish:npm": "pnpm publish -r --access public",
 		"publish:wally": "pnpm -r --workspace-concurrency 1 publish:wally"
 	},
@@ -20,5 +20,5 @@
 		"roblox-ts": "^3.0.0",
 		"typescript": "~5.5.4"
 	},
-	"packageManager": "pnpm@9.12.1"
+	"packageManager": "pnpm@9.15.4"
 }
