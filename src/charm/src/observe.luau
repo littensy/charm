@@ -1,3 +1,4 @@
+local store = require(script.Parent.store)
 local subscribe = require(script.Parent.subscribe)
 local types = require(script.Parent.types)
 type Selector<T> = types.Selector<T>
@@ -16,7 +17,7 @@ local function noop() end
 local function observe<K, V>(callback: Selector<{ [K]: V }>, factory: (value: V, key: K) -> (() -> ())?): () -> ()
 	local connections: { [K]: () -> () } = {}
 
-	local unsubscribe = subscribe(callback, function(state)
+	local function listener(state: { [K]: V })
 		for key, disconnect in next, connections do
 			if state[key] == nil then
 				connections[key] = nil
@@ -29,17 +30,19 @@ local function observe<K, V>(callback: Selector<{ [K]: V }>, factory: (value: V,
 				connections[key] = factory(value, key) or noop
 			end
 		end
-	end)
+	end
 
-	local function cleanup()
+	local unsubscribe = subscribe(callback, listener)
+
+	listener(store.peek(callback))
+
+	return function()
 		unsubscribe()
 		for _, disconnect in next, connections do
 			disconnect()
 		end
 		table.clear(connections)
 	end
-
-	return cleanup
 end
 
 return observe
