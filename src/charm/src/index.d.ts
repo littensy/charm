@@ -3,11 +3,6 @@ export as namespace Charm;
 
 type Cleanup = () => void;
 
-type AnyMap<K, V> =
-	| Map<K, V>
-	| ReadonlyMap<K, V>
-	| (K extends string | number | symbol ? { readonly [Key in K]: V } : never);
-
 declare namespace Charm {
 	/**
 	 * A primitive state container that can be read from or written to. When
@@ -53,7 +48,6 @@ declare namespace Charm {
 	/**
 	 * Creates a new atom with the given state.
 	 *
-	 * @template State The type of the state.
 	 * @param state The initial state.
 	 * @param options Optional configuration.
 	 * @returns A new atom.
@@ -151,8 +145,13 @@ declare namespace Charm {
 		factory: (item: Item, index: number) => Cleanup | void,
 	): Cleanup;
 
-	function observe<Key = any, Item = any>(
-		callback: Selector<AnyMap<Key, Item>>,
+	function observe<Key, Item>(
+		callback: Selector<Map<Key, Item> | ReadonlyMap<Key, Item>>,
+		factory: (item: Item, key: Key) => Cleanup | void,
+	): Cleanup;
+
+	function observe<Key extends string | number | symbol, Item>(
+		callback: Selector<{ readonly [P in Key]: Item }>,
 		factory: (item: Item, key: Key) => Cleanup | void,
 	): Cleanup;
 
@@ -176,8 +175,13 @@ declare namespace Charm {
 		mapper: (value: V0, index: number) => V1,
 	): Selector<readonly V1[]>;
 
-	function mapped<K0 = any, V0 = any, K1 = K0, V1 = V0>(
-		callback: Selector<AnyMap<K0, V0>>,
+	function mapped<K0, V0, K1 = K0, V1 = V0>(
+		callback: Selector<Map<K0, V0> | ReadonlyMap<K0, V0>>,
+		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
+	): Selector<ReadonlyMap<K1, V1>>;
+
+	function mapped<K0 extends string | number | symbol, V0, K1 = K0, V1 = V0>(
+		callback: Selector<{ readonly [P in K0]: V0 }>,
 		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
 	): Selector<ReadonlyMap<K1, V1>>;
 }
