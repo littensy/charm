@@ -1,4 +1,4 @@
-local effect = require(script.Parent.effect)
+local subscribe = require(script.Parent.subscribe)
 local types = require(script.Parent.types)
 type Selector<T> = types.Selector<T>
 
@@ -16,9 +16,7 @@ local function noop() end
 local function observe<K, V>(callback: Selector<{ [K]: V }>, factory: (value: V, key: K) -> (() -> ())?): () -> ()
 	local connections: { [K]: () -> () } = {}
 
-	local unsubscribe = effect(function()
-		local state = callback()
-
+	local unsubscribe = subscribe(callback, function(state)
 		for key, disconnect in next, connections do
 			if state[key] == nil then
 				connections[key] = nil

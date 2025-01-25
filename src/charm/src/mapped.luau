@@ -1,6 +1,6 @@
 local atom = require(script.Parent.atom)
-local effect = require(script.Parent.effect)
 local store = require(script.Parent.store)
+local subscribe = require(script.Parent.subscribe)
 local types = require(script.Parent.types)
 type Atom<T> = types.Atom<T>
 type Selector<T> = types.Selector<T>
@@ -26,12 +26,11 @@ local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: 
 	local prevMappedItems: { [K1]: V1 } = {}
 	local unsubscribe
 
-	unsubscribe = effect(function()
+	unsubscribe = subscribe(callback, function(items)
 		if not mappedAtomRef.current then
 			return unsubscribe()
 		end
 
-		local items = callback()
 		local mappedItems = table.clone(store.peek(mappedAtomRef.current))
 		local mappedKeys = {}
 
