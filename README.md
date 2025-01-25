@@ -477,7 +477,7 @@ end)
 > [!NOTE]
 > Charm sends table updates in the form of partial tables, so arrays will contain `nil` values, which has undefined behavior in remotes without serialization.
 >
-> Charm's default `autoSerialize` behavior fixes this, but it can interfere with custom serialization. Disable this option if you use a custom network library.
+> Charm's default `autoSerialize` behavior fixes this, but it can interfere with custom serialization. Disable this option if you use a network library that serializes remote event arguments.
 
 #### Returns
 
