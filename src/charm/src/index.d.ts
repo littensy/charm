@@ -9,11 +9,10 @@ declare namespace Charm {
 	 * the state changes, all subscribers are notified.
 	 *
 	 * @param state The next state or a function that produces the next state.
-	 * @returns The current state, if no arguments are provided.
+	 * @returns The current state.
 	 */
-	interface Atom<State> {
-		(): State;
-		(nextState: State | ((prevState: State) => State)): void;
+	interface Atom<State> extends Selector<State> {
+		(nextState: State | ((prevState: State) => State)): State;
 	}
 
 	/**
@@ -28,6 +27,7 @@ declare namespace Charm {
 	 * A function that depends on one or more atoms and produces a value. Can be
 	 * used to derive state from atoms.
 	 *
+	 * @deprecated Use `Selector<T>` instead.
 	 * @returns The current state.
 	 */
 	type Molecule<State> = Selector<State>;
