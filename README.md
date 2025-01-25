@@ -438,10 +438,15 @@ Call `server` to create a server sync object. This synchronizes every client's a
 
 ```luau
 local syncer = CharmSync.server({
-	atoms = atomsToSync,     -- A dictionary of the atoms to sync, matching the client's
-	interval = 0,            -- The minimum interval between state updates
-	preserveHistory = false, -- Whether to send a full history of changes made to the atoms (slower)
-	serializeArrays = true,  -- Safety measures for arrays, should be false when using ByteNet or Zap
+	-- A dictionary of the atoms to sync, matching the client's
+	atoms = atomsToSync,
+	-- The minimum interval between state updates
+	interval = 0,
+	-- Whether to send a full history of changes made to the atoms (slower)
+	preserveHistory = false,
+	-- Whether to apply fixes for remote event limitations. Disable this option
+	-- when using a network library with custom ser/des, like ByteNep or Zap.
+	autoSerialize = true,
 })
 
 -- Sends state updates to clients when a synced atom changes.
@@ -467,7 +472,12 @@ end)
 
     -   **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
 
-    -   **optional** `serializeArrays`: Whether to convert problematic arrays to dictionaries before firing remote events. Because arrays in state patches can have holes, extra work is required to send them over a remote event intact. Defaults to `true`, but should be `false` if payloads are serialized (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
+    -   **optional** `autoSerialize`: Whether to apply validation and workarounds to certain [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#table-indexing). Defaults to `true`, but you should set it to `false` if you serialize remote arguments (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
+
+> [!NOTE]
+> Charm sends table updates in the form of partial tables, so arrays will contain `nil` values, which has undefined behavior in remotes without serialization.
+>
+> Charm's default `autoSerialize` behavior fixes this, but it can interfere with custom serialization. Disable this option if you use a network library that serializes remote event arguments.
 
 #### Returns
 
@@ -479,11 +489,11 @@ end)
 
 #### Caveats
 
--   **Do not use values that cannot be sent over remotes** in your shared atoms. This includes functions, threads, and non-string keys in dictionaries.
+-   **Do not use values that cannot be sent over remotes** in your shared atoms. This includes functions, threads, and non-string keys in dictionaries. [Read more about argument limitations in remotes.](https://create.roblox.com/docs/scripting/events/remote#argument-limitations)
 
 -   **By default, Charm omits the individual changes made to atoms** between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
 
--   **Charm does not handle network communication.** Use remote events or a network library to send sync payloads - and remember to set `serializeArrays` accordingly!
+-   **Charm does not handle network communication.** Use remote events or a network library to send sync payloads - and remember to set `autoSerialize` accordingly!
 
 ---
 

@@ -100,12 +100,22 @@ return function()
 	end)
 
 	it("optionally fixes sparse arrays", function()
-		for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
+		for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }, true) do
 			expect(index).to.be.a("string")
 		end
 
 		for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }, false) do
 			expect(index).to.be.a("number")
 		end
+	end)
+
+	it("optionally validates state", function()
+		expect(function()
+			patch.diff({}, { [0.1] = true }, true)
+		end).to.throw()
+
+		expect(function()
+			patch.diff({}, { [0.1] = true }, false)
+		end).to.never.throw()
 	end)
 end

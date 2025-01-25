@@ -132,14 +132,13 @@ declare namespace CharmSync {
 		 */
 		preserveHistory?: boolean;
 		/**
-		 * When `true`, convert problematic sparse arrays into dictionaries
-		 * with string keys. Defaults to `true`.
+		 * When `true`, Charm will apply validation and serialize unsafe arrays
+		 * to address remote event argument limitations. Defaults to `true`.
 		 *
-		 * While this is mandatory for safely syncing arrays over vanilla Roblox
-		 * remotes, it can be disabled if your network library uses a custom
-		 * serialization method (i.e. Zap, ByteNet).
+		 * This option should be disabled if your network library uses a custom
+		 * serialization method (i.e. Zap, ByteNet) to prevent interference.
 		 */
-		serializeArrays?: boolean;
+		autoSerialize?: boolean;
 	}
 
 	interface ClientSyncer<Atoms extends AtomMap> {
