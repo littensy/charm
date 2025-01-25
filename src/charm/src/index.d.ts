@@ -16,7 +16,10 @@ declare namespace Charm {
 	 * @param state The next state or a function that produces the next state.
 	 * @returns The current state, if no arguments are provided.
 	 */
-	type Atom<State> = (state?: State | ((prev: State) => State)) => State;
+	interface Atom<State> {
+		(): State;
+		(nextState: State | ((prevState: State) => State)): void;
+	}
 
 	/**
 	 * A function that depends on one or more atoms and produces a value. Can be
