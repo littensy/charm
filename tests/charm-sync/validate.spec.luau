@@ -12,11 +12,8 @@ return function()
 			array_sparse_invalid = { value = { [1] = 0, [3] = 0 }, expected = false },
 
 			map_decimal_key = { value = { [1.5] = 0 }, expected = false },
+			map_infinity_key = { value = { [math.huge] = true }, expected = false },
 			map_mixed_key = { value = { [1] = 0, a = 0 }, expected = false },
-
-			number = { value = 1, expected = true },
-			number_infinity = { value = math.huge, expected = false },
-			number_nan = { value = 0 / 0, expected = false },
 
 			nested_atom = { value = atom(0), expected = false },
 		}

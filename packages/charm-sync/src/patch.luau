@@ -45,10 +45,12 @@ end
 
 	@param prevState The previous state.
 	@param nextState The next state.
-	@param serializeArrays Whether to convert sparse arrays into dictionaries. Defaults to `true`.
+	@param serialize Whether to convert sparse arrays into dictionaries. Defaults to `true`.
 	@returns A patch that can be applied to the previous state.
 ]=]
-local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serializeArrays: boolean?)
+local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serialize: boolean?)
+	serialize = serialize ~= false
+
 	local patches = table.clone(nextState)
 
 	for key, previous in next, prevState do
@@ -59,24 +61,18 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serial
 		elseif current == nil then
 			patches[key] = None
 		elseif type(previous) == "table" and type(current) == "table" then
-			patches[key] = diff(previous, current, serializeArrays)
+			patches[key] = diff(previous, current, serialize)
 		end
 	end
 
 	-- Coerce sparse array patches into dictionaries
-	if serializeArrays ~= false and (prevState[1] ~= nil or nextState[1] ~= nil) then
+	if serialize and (prevState[1] ~= nil or nextState[1] ~= nil) then
 		patches = stringifySparseArray(patches)
 	end
 
-	if __DEV__ then
-		for key, value in next, prevState do
+	if serialize and __DEV__ then
+		for key, value in next, patches do
 			validate(value, key)
-		end
-
-		for key, value in nextState do
-			if prevState[key] ~= value then
-				validate(value, key)
-			end
 		end
 	end
 

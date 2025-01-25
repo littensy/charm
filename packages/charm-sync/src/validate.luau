@@ -1,5 +1,5 @@
 local SAFE_KEYS = { string = true, number = true }
-local SAFE_VALUES = { string = true, number = true, boolean = true, table = true, userdata = true, vector = true }
+local UNSAFE_VALUES = { ["function"] = true, thread = true }
 
 local function isTableUnsafe(object: { [any]: any })
 	local keyType = nil
@@ -40,7 +40,7 @@ local function validate(value: any, key: any)
 
 	if not SAFE_KEYS[typeOfKey] then
 		error(`Invalid key type '{typeOfKey}' at key '{key}'`)
-	elseif not SAFE_VALUES[typeOfValue] then
+	elseif UNSAFE_VALUES[typeOfValue] then
 		error(`Invalid value type '{typeOfValue}' at key '{key}'`)
 	elseif typeOfValue == "table" then
 		if getmetatable(value) ~= nil then
@@ -56,13 +56,7 @@ local function validate(value: any, key: any)
 		end
 	end
 
-	if typeOfValue == "number" then
-		if value ~= value then
-			error(`Cannot sync NaN at key '{key}'`)
-		elseif value == math.huge or value == -math.huge then
-			error(`Cannot sync infinity at key '{key}'`)
-		end
-	elseif typeOfKey == "number" then
+	if typeOfKey == "number" then
 		if key == math.huge or key == -math.huge then
 			error("Cannot sync infinity as key")
 		elseif key ~= math.floor(key) then
