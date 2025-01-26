@@ -181,7 +181,7 @@ Because `effect` implicitly tracks all atoms read within the callback, it might 
 
 #### Caveats
 
--   **If your effect calls its own cleanup function, use the `cleanup` argument.** Because effects run immediately, your effect will run before a `cleanup` function is returned. To use `cleanup` from with in the effect, use the argument passed to your effect instead:
+-   **If your effect should disconnect itself, use the `cleanup` argument.** Because effects run immediately, your effect may run before a `cleanup` function is returned. To disconnect an effect from the inside, use the argument passed to your effect instead:
     ```lua
     effect(function(cleanup)
     	if condition() then
