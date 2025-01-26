@@ -5,6 +5,8 @@ export as namespace CharmSync;
 
 type Cleanup = () => void;
 
+type Key = string | number | symbol;
+
 declare namespace CharmSync {
 	type AtomMap = Record<string, Atom<any>>;
 
@@ -59,6 +61,39 @@ declare namespace CharmSync {
 	 * @returns `true` if the value is `None`, otherwise `false`.
 	 */
 	function isNone(value: unknown): value is None;
+
+	interface NestedAtomMap {
+		readonly [key: string]: NestedAtomMap | Atom<any>;
+	}
+
+	type AppendPath<Path extends Key | undefined, Name extends Key> = undefined extends Path
+		? Name
+		: Name extends string
+			? Path extends string
+				? `${Path}/${Name}`
+				: never
+			: never;
+
+	type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+
+	type IntersectValues<T> = UnionToIntersection<{ readonly [K in keyof T]: T[K] }[keyof T]>;
+
+	type FlattenNestedAtoms<Atoms extends NestedAtomMap, Path extends Key | undefined = undefined> = IntersectValues<{
+		readonly [Name in keyof Atoms as AppendPath<Path, Name>]: Atoms[Name] extends Atom<any>
+			? { readonly [K in AppendPath<Path, Name>]: Atoms[Name] }
+			: Atoms[Name] extends NestedAtomMap
+				? FlattenNestedAtoms<Atoms[Name], AppendPath<Path, Name>>
+				: never;
+	}>;
+
+	/**
+	 * Flattens a nested atom map into a single object with slash-separated
+	 * keys. Useful for recursively collecting atoms returned by modules.
+	 *
+	 * @param atoms The nested atom map to flatten.
+	 * @return A flattened atom map.
+	 */
+	function flatten<Atoms extends NestedAtomMap>(atoms: Atoms): FlattenNestedAtoms<Atoms>;
 
 	type DataTypes = {
 		[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];

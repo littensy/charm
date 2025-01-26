@@ -1,4 +1,5 @@
 local client = require(script.client)
+local flatten = require(script.flatten)
 local patch = require(script.patch)
 local server = require(script.server)
 local types = require(script.types)
@@ -12,5 +13,6 @@ export type SyncPayload = types.SyncPayload
 return {
 	client = client,
 	server = server,
+	flatten = flatten,
 	isNone = patch.isNone,
 }
