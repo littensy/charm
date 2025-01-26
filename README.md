@@ -456,7 +456,7 @@ local syncer = CharmSync.server({
 	-- Whether to send a full history of changes made to the atoms (slower)
 	preserveHistory = false,
 	-- Whether to apply fixes for remote event limitations. Disable this option
-	-- when using a network library with custom ser/des, like ByteNep or Zap.
+	-- when using a network library with custom ser/des, like ByteNet or Zap.
 	autoSerialize = true,
 })
 
