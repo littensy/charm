@@ -4,13 +4,14 @@ local Charm = require(script.Parent.Parent.Charm)
 local interval = require(script.Parent.interval)
 local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
+type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
 type ServerOptions = {
 	--[=[
 		The atoms to synchronize with the client.
 	]=]
-	atoms: { [string | number]: Charm.Atom<any> },
+	atoms: AtomMap,
 	--[=[
 		The interval at which to send patches to the client, in seconds.
 		Defaults to `0` (patches are sent up to once per frame). Set to a

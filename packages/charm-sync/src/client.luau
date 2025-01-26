@@ -1,13 +1,14 @@
 local Charm = require(script.Parent.Parent.Charm)
 local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
+type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
 type ClientOptions = {
 	--[=[
 		The atoms to synchronize with the server.
 	]=]
-	atoms: { [string | number]: Charm.Atom<any> },
+	atoms: AtomMap,
 	--[=[
 		Whether to ignore patches sent before the client has been hydrated.
 		Default is `true`.
