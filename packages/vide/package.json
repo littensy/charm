@@ -10,10 +10,8 @@
 		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
 		"publish:wally": "wally publish"
 	},
-	"dependencies": {
-		"@rbxts/charm": "workspace:*"
-	},
 	"peerDependencies": {
+		"@rbxts/charm": "workspace:*",
 		"@rbxts/vide": "*"
 	}
 }
