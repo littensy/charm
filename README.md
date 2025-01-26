@@ -121,7 +121,7 @@ Call `subscribe` to listen for changes in an atom or selector function. When the
 ```luau
 local nameAtom = atom("John")
 
-subscribe(nameAtom, function(name, prevName)
+local cleanup = subscribe(nameAtom, function(name, prevName)
 	print(name)
 end)
 
@@ -135,7 +135,7 @@ local function getUppercase()
 	return string.upper(nameAtom())
 end
 
-subscribe(getUppercase, function(name)
+local cleanup = subscribe(getUppercase, function(name)
 	print(name)
 end)
 
@@ -161,7 +161,7 @@ Call `effect` to track state changes in all atoms read within the callback. The 
 ```luau
 local nameAtom = atom("John")
 
-effect(function()
+local cleanup = effect(function()
 	print(nameAtom())
 	return function()
 		print("Cleanup function called!")
@@ -178,6 +178,17 @@ Because `effect` implicitly tracks all atoms read within the callback, it might 
 #### Returns
 
 `effect` returns a cleanup function.
+
+#### Caveats
+
+-   **If your effect calls its own cleanup function, use the `cleanup` argument.** Because effects run immediately, your effect will run before a `cleanup` function is returned. To use `cleanup` from with in the effect, use the argument passed to your effect instead:
+    ```lua
+    effect(function(cleanup)
+    	if condition() then
+    		cleanup()
+    	end
+    end)
+    ```
 
 ---
 
@@ -222,7 +233,7 @@ Call `observe` to create an instance of `factory` for each key present in a dict
 ```luau
 local todosAtom: Atom<{ [string]: Todo }> = atom({})
 
-observe(todosAtom, function(todo, key)
+local cleanup = observe(todosAtom, function(todo, key)
 	print(`Added {key}: {todo.name}`)
 	return function()
 		print(`Removed {key}`)
