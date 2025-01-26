@@ -12,9 +12,7 @@ local Vide = if script.Parent:FindFirstChild("vide")
 local function useAtom<State>(callback: () -> State): () -> State
 	local state = Vide.source(callback())
 	local unsubscribe = Charm.subscribe(callback, function(value)
-		task.spawn(function()
-			state(value)
-		end)
+		task.spawn(state :: (State) -> State, value)
 	end)
 
 	Vide.cleanup(unsubscribe)
