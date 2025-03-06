@@ -118,7 +118,7 @@ declare namespace CharmSync {
 				: State extends Set<infer T> | ReadonlySet<infer T>
 					? ReadonlyMap<T, true | None>
 					: State extends readonly (infer T)[]
-						? readonly (SyncPatch<T> | None | undefined)[]
+						? readonly (SyncPatch<T> | None | undefined)[] | ReadonlyMap<string, None>
 						: State extends DataType
 							? State
 							: State extends object
