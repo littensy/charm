@@ -1,11 +1,11 @@
 [package]
 name = "littensy/react-charm"
-version = "0.2.0"
+version = "0.3.0"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 exclude = ["package.json", "node_modules"]
 include = ["LICENSE.md"]
 
 [dependencies]
-charm = "littensy/charm@^0.9"
+charm = "littensy/charm@^0.10"
 React = "jsdotlua/react@^17"

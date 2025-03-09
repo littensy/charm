@@ -1,6 +1,6 @@
 {
 	"name": "@rbxts/charm",
-	"version": "0.9.0",
+	"version": "0.10.0",
 	"description": "An atomic state management library for Roblox",
 	"repository": "littensy/charm",
 	"license": "MIT",
