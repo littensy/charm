@@ -3,7 +3,8 @@ name = "littensy/vide-charm"
 version = "0.2.0"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
+exclude = ["package.json"]
 
 [dependencies]
-Charm = "littensy/charm@^0.9"
+charm = "littensy/charm@^0.9"
 Vide = "centau/vide@^0.3"

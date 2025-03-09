@@ -1,6 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local store = require(ReplicatedStorage.DevPackages.Charm.store)
+local store = require(ReplicatedStorage.DevPackages.charm.src.store)
 
 return function()
 	afterEach(function()

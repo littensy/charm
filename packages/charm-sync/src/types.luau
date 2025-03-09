@@ -1,4 +1,4 @@
-local Charm = require(script.Parent.Parent.Charm)
+local Charm = require(script.Parent.Parent.Parent.charm)
 type Atom<T> = Charm.Atom<T>
 
 --[=[

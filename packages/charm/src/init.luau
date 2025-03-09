@@ -10,7 +10,6 @@ local types = require(script.types)
 export type Atom<State> = types.Atom<State>
 export type Selector<State> = types.Selector<State>
 export type Molecule<State> = types.Selector<State>
-export type SyncPayload = types.SyncPayload
 
 return {
 	atom = atom,

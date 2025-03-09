@@ -1,11 +1,11 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local atom = Charm.atom
 local computed = Charm.computed
 local subscribe = Charm.subscribe
 local effect = Charm.effect
-local store = require(ReplicatedStorage.DevPackages.Charm.store)
+local store = require(ReplicatedStorage.DevPackages.charm.src.store)
 
 return function()
 	it("batches updates", function()

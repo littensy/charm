@@ -1,10 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local atom = Charm.atom
 local computed = Charm.computed
 local subscribe = Charm.subscribe
-local store = require(ReplicatedStorage.DevPackages.Charm.store)
+local store = require(ReplicatedStorage.DevPackages.charm.src.store)
 local collect = require(script.Parent.Parent.utils.collect)
 local count = require(script.Parent.Parent.utils.count)
 

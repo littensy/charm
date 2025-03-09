@@ -1,9 +1,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local atom = Charm.atom
 local subscribe = Charm.subscribe
-local store = require(ReplicatedStorage.DevPackages.Charm.store)
+local store = require(ReplicatedStorage.DevPackages.charm.src.store)
 
 return function()
 	it("gracefully handles yielding", function()

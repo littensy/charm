@@ -1,11 +1,11 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local atom = Charm.atom
-local CharmSync = require(ReplicatedStorage.DevPackages.CharmSync)
+local CharmSync = require(ReplicatedStorage.DevPackages["charm-sync"])
 type SyncPayload = CharmSync.SyncPayload
 local server = CharmSync.server
-local patch = require(ReplicatedStorage.DevPackages.CharmSync.patch)
+local patch = require(ReplicatedStorage.DevPackages["charm-sync"].src.patch)
 
 return function()
 	local target: Player = {} :: any

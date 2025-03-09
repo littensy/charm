@@ -6,8 +6,8 @@ local TestEZ = require(ReplicatedStorage.DevPackages.TestEZ)
 
 -- Start Charm in debug mode
 _G.__DEV__ = true
-require(ReplicatedStorage.DevPackages.Charm)
-require(ReplicatedStorage.DevPackages.CharmSync)
+require(ReplicatedStorage.DevPackages.charm)
+require(ReplicatedStorage.DevPackages["charm-sync"])
 _G.__DEV__ = false
 
 TestEZ.TestBootstrap:run({ script.Parent }, TestEZ.Reporters.TextReporter)
