@@ -1,6 +1,6 @@
 local Players = game:GetService("Players")
 
-local Charm = require(script.Parent.Parent.Charm)
+local Charm = require(script.Parent.Parent.Parent.charm)
 local interval = require(script.Parent.interval)
 local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)

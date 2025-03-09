@@ -3,25 +3,23 @@
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
-			"$className": "ReplicatedStorage",
 			"DevPackages": {
 				"$path": "modules/DevPackages",
-				"Charm": {
+				"charm": {
 					"$path": "packages/charm"
 				},
-				"CharmSync": {
+				"charm-sync": {
 					"$path": "packages/charm-sync"
 				},
-				"ReactCharm": {
+				"react-charm": {
 					"$path": "packages/react"
 				},
-				"VideCharm": {
+				"vide-charm": {
 					"$path": "packages/vide"
 				}
 			}
 		},
 		"ServerScriptService": {
-			"$className": "ServerScriptService",
 			"Tests": {
 				"$path": "tests"
 			}

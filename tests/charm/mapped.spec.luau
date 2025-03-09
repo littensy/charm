@@ -1,10 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local atom = Charm.atom
 local mapped = Charm.mapped
 local observe = Charm.observe
-local store = require(ReplicatedStorage.DevPackages.Charm.store)
+local store = require(ReplicatedStorage.DevPackages.charm.src.store)
 
 return function()
 	it("returns mapped atoms", function()

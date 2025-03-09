@@ -1,6 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local computed = Charm.computed
 local atom = Charm.atom
 

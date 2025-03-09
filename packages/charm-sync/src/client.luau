@@ -1,4 +1,4 @@
-local Charm = require(script.Parent.Parent.Charm)
+local Charm = require(script.Parent.Parent.Parent.charm)
 local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
 type AtomMap = types.AtomMap

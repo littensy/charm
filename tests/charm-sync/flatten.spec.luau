@@ -1,8 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.DevPackages.charm)
 local atom = Charm.atom
-local CharmSync = require(ReplicatedStorage.DevPackages.CharmSync)
+local CharmSync = require(ReplicatedStorage.DevPackages["charm-sync"])
 local flatten = CharmSync.flatten
 
 return function()
