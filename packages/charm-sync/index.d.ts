@@ -51,7 +51,9 @@ declare namespace CharmSync {
 	 * @param options The atoms to synchronize with the client.
 	 * @returns A `ServerSyncer` object.
 	 */
-	function server<Selectors extends SelectorMap>(options: ServerOptions<Selectors>): ServerSyncer<Selectors>;
+	function server<Selectors extends SelectorMap, Serialize extends boolean = true>(
+		options: ServerOptions<Selectors, Serialize>,
+	): ServerSyncer<Selectors, Serialize>;
 
 	/**
 	 * Checks whether a value is `None`. If `true`, the value is scheduled to be
@@ -111,27 +113,29 @@ declare namespace CharmSync {
 	 * If a value was removed, it is replaced with `None`. This can be checked
 	 * using the `sync.isNone` function.
 	 */
-	type SyncPatch<State> =
-		| MaybeNone<State>
-		| (State extends ReadonlyMap<infer K, infer V> | Map<infer K, infer V>
-				? ReadonlyMap<K, SyncPatch<V> | None>
-				: State extends Set<infer T> | ReadonlySet<infer T>
-					? ReadonlyMap<T, true | None>
-					: State extends readonly (infer T)[]
-						? readonly (SyncPatch<T> | None | undefined)[]
-						: State extends DataType
-							? State
-							: State extends object
-								? { readonly [P in keyof State]?: SyncPatch<State[P]> }
-								: State);
+	type SyncPatch<State, Serialize extends boolean = true> = MaybeNone<State> | State extends
+		| ReadonlyMap<infer K, infer V>
+		| Map<infer K, infer V>
+		? ReadonlyMap<K, SyncPatch<V, Serialize> | None>
+		: State extends Set<infer T> | ReadonlySet<infer T>
+			? ReadonlyMap<T, true | None>
+			: State extends readonly (infer T)[]
+				? Serialize extends true
+					? ReadonlyMap<string | number, SyncPatch<T, Serialize> | None>
+					: readonly (SyncPatch<T, Serialize> | None | undefined)[]
+				: State extends DataType
+					? State
+					: State extends object
+						? { readonly [P in keyof State]?: SyncPatch<State[P], Serialize> }
+						: State;
 
 	/**
 	 * A payload that can be sent from the server to the client to synchronize
 	 * state between the two.
 	 */
-	type SyncPayload<Selectors extends SelectorMap> =
+	type SyncPayload<Selectors extends SelectorMap, Serialize extends boolean = true> =
 		| { readonly type: "init"; readonly data: StateOfMap<Selectors> }
-		| { readonly type: "patch"; readonly data: SyncPatch<StateOfMap<Selectors>> };
+		| { readonly type: "patch"; readonly data: SyncPatch<StateOfMap<Selectors>, Serialize> };
 
 	interface ClientOptions<Atoms extends AtomMap> {
 		/**
@@ -145,7 +149,7 @@ declare namespace CharmSync {
 		ignoreUnhydrated?: boolean;
 	}
 
-	interface ServerOptions<Selectors extends SelectorMap> {
+	interface ServerOptions<Selectors extends SelectorMap, Serialize extends boolean = true> {
 		/**
 		 * The atoms to synchronize with the client.
 		 */
@@ -173,7 +177,7 @@ declare namespace CharmSync {
 		 * This option should be disabled if your network library uses a custom
 		 * serialization method (i.e. Zap, ByteNet) to prevent interference.
 		 */
-		autoSerialize?: boolean;
+		autoSerialize?: Serialize;
 	}
 
 	interface ClientSyncer<Atoms extends AtomMap> {
@@ -183,10 +187,10 @@ declare namespace CharmSync {
 		 *
 		 * @param payloads The patches or hydration payloads to apply.
 		 */
-		sync(...payloads: SyncPayload<Atoms>[]): void;
+		sync(...payloads: SyncPayload<Atoms, boolean>[]): void;
 	}
 
-	interface ServerSyncer<Selectors extends SelectorMap> {
+	interface ServerSyncer<Selectors extends SelectorMap, Serialize extends boolean> {
 		/**
 		 * Sets up a subscription to each atom that schedules a patch to be sent to
 		 * the client whenever the state changes. When a change occurs, the `callback`
@@ -198,7 +202,7 @@ declare namespace CharmSync {
 		 * @param callback The function to call when the state changes.
 		 * @returns A cleanup function that unsubscribes all listeners.
 		 */
-		connect(callback: (player: Player, ...payloads: SyncPayload<Selectors>[]) => void): Cleanup;
+		connect(callback: (player: Player, ...payloads: SyncPayload<Selectors, Serialize>[]) => void): Cleanup;
 		/**
 		 * Hydrates the client's state with the server's state. This should be
 		 * called when a player joins the game and requires the server's state.
