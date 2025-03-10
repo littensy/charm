@@ -1,10 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.charm)
+local Charm = require(ReplicatedStorage.DevPackages.Charm)
 local atom = Charm.atom
 local Vide = require(ReplicatedStorage.DevPackages.Vide)
 local root = Vide.root
-local VideCharm = require(ReplicatedStorage.DevPackages["vide-charm"])
+local VideCharm = require(ReplicatedStorage.DevPackages.VideCharm)
 local useAtom = VideCharm.useAtom
 
 return function()

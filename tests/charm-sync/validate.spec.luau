@@ -1,8 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.charm)
+local Charm = require(ReplicatedStorage.DevPackages.Charm)
 local atom = Charm.atom
-local validate = require(ReplicatedStorage.DevPackages["charm-sync"].src.validate)
+local validate = require(ReplicatedStorage.DevPackages.CharmSync.validate)
 
 return function()
 	it("validates inputs", function()

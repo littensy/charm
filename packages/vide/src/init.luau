@@ -1,7 +1,7 @@
-local Charm = require(script.Parent.Parent.charm)
-local Vide = if script.Parent.Parent:FindFirstChild("Vide")
-	then require(script.Parent.Parent.Vide)
-	else require((script.Parent.Parent :: any).vide.src) :: never
+local Charm = require(script.Parent.Charm)
+local Vide = if script.Parent:FindFirstChild("vide")
+	then require(script.Parent.vide.src) :: never
+	else require(script.Parent.Vide)
 
 --[=[
 	Subscribes to the state of an atom and returns a Vide source.

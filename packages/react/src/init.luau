@@ -1,7 +1,7 @@
-local Charm = require(script.Parent.Parent.charm)
-local React = if script.Parent.Parent:FindFirstChild("React")
-	then require(script.Parent.Parent.React)
-	else require((script.Parent.Parent :: any).react) :: never
+local Charm = require(script.Parent.Charm)
+local React = if script.Parent:FindFirstChild("react")
+	then require(script.Parent.react) :: never
+	else require(script.Parent.React)
 
 --[=[
 	A hook that subscribes to changes in the given atom or selector. The

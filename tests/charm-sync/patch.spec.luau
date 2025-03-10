@@ -1,7 +1,7 @@
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local patch = require(ReplicatedStorage.DevPackages["charm-sync"].src.patch)
+local patch = require(ReplicatedStorage.DevPackages.CharmSync.patch)
 
 return function()
 	local function serdes(value: { [any]: any })

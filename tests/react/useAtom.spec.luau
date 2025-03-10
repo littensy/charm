@@ -1,8 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.charm)
+local Charm = require(ReplicatedStorage.DevPackages.Charm)
 local atom = Charm.atom
-local ReactCharm = require(ReplicatedStorage.DevPackages["react-charm"])
+local ReactCharm = require(ReplicatedStorage.DevPackages.ReactCharm)
 local useAtom = ReactCharm.useAtom
 local renderHook = require(script.Parent.Parent.utils.renderHook)
 

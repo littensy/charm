@@ -1,0 +1,6 @@
+{
+	"name": "CharmSync",
+	"tree": {
+		"$path": "src"
+	}
+}
