@@ -8,6 +8,7 @@ local resumeTracking = signals.resumeTracking
 
 local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
 	local disposed = false
+	local mounted = true
 	local current: T?
 	local dispose: () -> ()
 
@@ -21,6 +22,13 @@ local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, d
 	dispose = effectScope(function()
 		effect(function()
 			local value = selector()
+
+			if mounted then
+				mounted = false
+			elseif value == current then
+				return
+			end
+
 			local previous = current
 			current = value
 

@@ -8,17 +8,17 @@ local resumeTracking = signals.resumeTracking
 
 local function subscribe<T>(selector: () -> T, listener: (T, T) -> ()): () -> ()
 	local current: T
-	local mount = true
+	local mounted = true
 	local dispose: () -> ()
 
 	dispose = effectScope(function()
 		effect(function()
 			local value = selector()
 
-			if mount then
+			if mounted then
 				current = value
-				mount = false
-			else
+				mounted = false
+			elseif value ~= current then
 				local previous = current
 				current = value
 
