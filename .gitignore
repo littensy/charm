@@ -1,14 +1,9 @@
 /.vscode
-/node_modules
 /build
-/modules/DevPackages
-/packages/**/node_modules
+/roblox_packages
 /packages/**/wally.lock
-/packages/**/README.md
-/packages/**/LICENSE.md
 /sourcemap.json
 *.tsbuildinfo
-*.tgz
 *.rbxm
 .DS_Store
 roblox.d.luau

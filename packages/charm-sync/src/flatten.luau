@@ -1,4 +1,5 @@
 local types = require(script.Parent.types)
+
 type AtomMap = types.AtomMap
 
 type NestedAtomMap = {

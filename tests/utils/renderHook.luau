@@ -2,8 +2,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 _G.__ROACT_17_MOCK_SCHEDULER__ = true
 
-local React = require(ReplicatedStorage.DevPackages.React)
-local ReactRoblox = require(ReplicatedStorage.DevPackages.ReactRoblox)
+local React = require(ReplicatedStorage.Packages.React)
+local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
 
 type RenderedHook<Props, Result> = {
 	result: Result,

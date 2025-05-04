@@ -1,7 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
-local signals = require(ReplicatedStorage.DevPackages.Charm.signals)
+local Charm = require(ReplicatedStorage.Packages.Charm)
+
+local signals = Charm.signals
 
 local function propagate(
 	signal: <T>(T) -> (T?) -> T,

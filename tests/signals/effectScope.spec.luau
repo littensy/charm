@@ -1,5 +1,5 @@
 local test = require("../suite").test
-local signals = require("../../packages/charm/src/signals")
+local signals = require("../charm").signals
 
 local effect = signals.effect
 local effectScope = signals.effectScope

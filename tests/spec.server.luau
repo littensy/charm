@@ -12,9 +12,10 @@ end
 test("signals")
 
 if game then
-	test("sync")
-	test("react")
-	test("vide")
+	_G.__DEV__ = true
+	test("charm-sync")
+	test("react-charm")
+	test("vide-charm")
 end
 
 finish()

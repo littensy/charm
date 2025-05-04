@@ -9,11 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
       - uses: CompeyDev/setup-rokit@v0.1.2
 
       - name: Build models
-        run: pnpm build
+        run: sh bin/build.sh
 
       - name: Upload release assets
         uses: AButler/upload-release-assets@v3.0

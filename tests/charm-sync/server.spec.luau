@@ -1,15 +1,15 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
-local CharmSync = require(ReplicatedStorage.DevPackages.CharmSync)
-local patch = require(ReplicatedStorage.DevPackages.CharmSync.patch)
+local Charm = require(ReplicatedStorage.Packages.Charm)
+local CharmSync = require(ReplicatedStorage.Packages.CharmSync)
 local suite = require(ServerScriptService.Tests.suite)
 
 type SyncPayload = CharmSync.SyncPayload
 
 local atom = Charm.atom
 local server = CharmSync.server
+local patch = CharmSync.patch
 local test = suite.test
 
 local target: Player = {} :: any
@@ -98,3 +98,5 @@ test("preserves history", function()
 
 	disconnect()
 end)
+
+return {}

@@ -1,6 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local patch = require(ReplicatedStorage.DevPackages.CharmSync.patch)
+local CharmSync = require(ReplicatedStorage.Packages.CharmSync)
+
+local patch = CharmSync.patch
 
 local USERS = 1000
 

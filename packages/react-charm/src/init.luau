@@ -19,7 +19,7 @@ local useState = React.useState
 	@param dependencies An array of values that the subscription depends on.
 	@return The current state.
 ]=]
-local function useAtom<State>(callback: Charm.Selector<State>, dependencies: { any }?): State
+local function useAtom<State>(callback: () -> State, dependencies: { any }?): State
 	local state, setState = useState(callback)
 
 	useEffect(function()

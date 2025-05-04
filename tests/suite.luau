@@ -44,13 +44,13 @@ local function describe(name: string, callback: () -> ())
 end
 
 local function finish()
-	print(`\n🔵 {tests - #errors} / {tests} tests passed\n`)
+	local output = { `\n🔵 {tests - #errors} / {tests} tests passed\n` }
 
 	for _, result in results do
-		print(result)
+		table.insert(output, result)
 	end
 
-	print()
+	print(table.concat(output, "\n") .. "\n")
 
 	if #errors > 0 then
 		error(`{#errors} test(s) failed:\n{table.concat(errors, "\n")}\n`)

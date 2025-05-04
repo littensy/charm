@@ -1,10 +1,10 @@
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
 
-local patch = require(ReplicatedStorage.DevPackages.CharmSync.patch)
-local suite = require(ServerScriptService.Tests.suite)
+local CharmSync = require(ReplicatedStorage.Packages.CharmSync)
+local suite = require("../suite")
 
+local patch = CharmSync.patch
 local test = suite.test
 
 local function serdes(value: { [any]: any })
@@ -123,7 +123,6 @@ test("optionally validates state", function()
 		patch.diff({}, { [0.1] = true }, false)
 	end)
 
-	assert(success)
 	assert(success)
 end)
 

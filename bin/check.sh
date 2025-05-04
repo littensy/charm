@@ -6,13 +6,11 @@ luau-lsp analyze \
 	--defs=bin/roblox.d.luau \
 	--flag:LuauFixIndexerSubtypingOrdering=true \
 	--sourcemap=sourcemap.json \
-	--ignore="**/_Index/**" \
+	--ignore="roblox_packages/**" \
 	packages tests
 
 selene packages tests
 
 stylua --check packages tests
-
-eslint packages
 
 rm bin/roblox.d.luau

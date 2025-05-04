@@ -1,9 +1,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
-local Vide = require(ReplicatedStorage.DevPackages.Vide)
-local VideCharm = require(ReplicatedStorage.DevPackages.VideCharm)
+local Charm = require(ReplicatedStorage.Packages.Charm)
+local Vide = require(ReplicatedStorage.Packages.Vide)
+local VideCharm = require(ReplicatedStorage.Packages.VideCharm)
 local suite = require(ServerScriptService.Tests.suite)
 
 local atom = Charm.atom

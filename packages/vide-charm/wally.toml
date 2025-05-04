@@ -5,5 +5,5 @@ registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
 [dependencies]
-charm = "littensy/charm@^0.10"
+Charm = "littensy/charm@^0.10"
 Vide = "centau/vide@^0.3"

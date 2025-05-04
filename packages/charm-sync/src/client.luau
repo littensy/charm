@@ -1,6 +1,7 @@
 local Charm = require(script.Parent.Parent.Charm)
 local patch = require(script.Parent.patch)
 local types = require(script.Parent.types)
+
 type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 

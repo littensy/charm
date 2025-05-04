@@ -1,9 +1,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
-local ReactCharm = require(ReplicatedStorage.DevPackages.ReactCharm)
-local renderHook = require(script.Parent.Parent.utils.renderHook)
+local Charm = require(ReplicatedStorage.Packages.Charm)
+local ReactCharm = require(ReplicatedStorage.Packages.ReactCharm)
+local renderHook = require(ServerScriptService.Tests.utils.renderHook)
 local suite = require(ServerScriptService.Tests.suite)
 
 local atom = Charm.atom
@@ -46,3 +46,5 @@ test("tracks dependencies", function()
 	state(1)
 	assert(hook.result == 1)
 end)
+
+return {}

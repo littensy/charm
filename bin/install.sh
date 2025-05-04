@@ -1,4 +1,2 @@
-cd modules
-wally install
-cd ..
+pesde install
 rojo sourcemap --output sourcemap.json

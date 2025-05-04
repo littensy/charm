@@ -1,4 +1,4 @@
-local signals = require("../../packages/charm/src/signals")
+local signals = require("../charm").signals
 local suite = require("../suite")
 
 local test = suite.test

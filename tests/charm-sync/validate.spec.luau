@@ -1,11 +1,12 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Charm = require(ReplicatedStorage.DevPackages.Charm)
+local Charm = require(ReplicatedStorage.Packages.Charm)
+local CharmSync = require(ReplicatedStorage.Packages.CharmSync)
 local suite = require(ServerScriptService.Tests.suite)
-local validate = require(ReplicatedStorage.DevPackages.CharmSync.validate)
 
 local atom = Charm.atom
+local validate = CharmSync.validate
 local test = suite.test
 
 test("validates inputs", function()
@@ -33,3 +34,5 @@ test("validates inputs", function()
 		end
 	end
 end)
+
+return {}

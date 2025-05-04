@@ -6,6 +6,7 @@ local effectScope = require("./effectScope")
 local listen = require("./listen")
 local mapped = require("./mapped")
 local observe = require("./observe")
+local signals = require("./signals")
 local subscribe = require("./subscribe")
 local types = require("./types")
 local untracked = require("./untracked")
@@ -25,4 +26,5 @@ return {
 	observe = observe,
 	subscribe = subscribe,
 	untracked = untracked,
+	signals = signals,
 }

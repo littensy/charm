@@ -1,14 +1,12 @@
-local Charm = require("../../packages/charm/src/lib")
+local Charm = require("../charm")
 
 local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
 
-local signals = require("../../packages/charm/src/signals")
-
-local signal = signals.signal
-local computedSignal = signals.computed
-local effectSignal = signals.effect
+local signal = Charm.signals.signal
+local computedSignal = Charm.signals.computed
+local effectSignal = Charm.signals.effect
 
 local w = 10
 local h = 10

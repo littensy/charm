@@ -4,27 +4,17 @@
 		"$className": "DataModel",
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
-			"DevPackages": {
-				"$path": "modules/DevPackages",
-				"Charm": {
-					"$path": "packages/charm"
-				},
-				"CharmSync": {
-					"$path": "packages/charm-sync"
-				},
-				"ReactCharm": {
-					"$path": "packages/react"
-				},
-				"VideCharm": {
-					"$path": "packages/vide"
-				}
+			"Packages": {
+				"$path": "roblox_packages",
+				"Charm": { "$path": "packages/charm" },
+				"CharmSync": { "$path": "packages/charm-sync" },
+				"ReactCharm": { "$path": "packages/react-charm" },
+				"VideCharm": { "$path": "packages/vide-charm" }
 			}
 		},
 		"ServerScriptService": {
 			"$className": "ServerScriptService",
-			"Tests": {
-				"$path": "tests"
-			}
+			"Tests": { "$path": "tests" }
 		}
 	}
 }
