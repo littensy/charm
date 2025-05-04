@@ -44,7 +44,7 @@ test("should run effect cleanup", function()
 	assert(cleanups == 1, "should skip redundant cleanup")
 end)
 
-test("should not run indirect effect cleanup", function()
+test("should run indirect effect cleanup", function()
 	local cleanups = 0
 
 	local cleanup
@@ -58,9 +58,9 @@ test("should not run indirect effect cleanup", function()
 
 	assert(cleanups == 0, "should not cleanup immediately")
 	stopScope()
-	assert(cleanups == 0, "should be detached from parent dispose")
+	assert(cleanups == 1, "should cleanup from parent dispose")
 	cleanup()
-	assert(cleanups == 1, "should cleanup after inner dispose")
+	assert(cleanups == 1, "should skip redundant dispose")
 end)
 
 return {}

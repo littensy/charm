@@ -324,9 +324,9 @@ local function effectScope(fn: () -> ...() -> ()?): () -> ()
 	if activeScope then
 		link(e, activeScope)
 	end
-	local prev = setCurrentSub(e)
+	local prev = setCurrentScope(e)
 	local success, result = pcall(fn)
-	setCurrentSub(prev)
+	setCurrentScope(prev)
 	if not success then
 		error(result)
 	end
