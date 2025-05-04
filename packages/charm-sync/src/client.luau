@@ -67,7 +67,7 @@ local function client(options: ClientOptions): ClientSyncer
 		for index = 1, select("#", ...) do
 			local payload: SyncPayload = select(index, ...)
 
-			Charm.batch(function()
+			Charm.batched(function()
 				if payload.type == "init" then
 					hydrate(payload.data)
 				elseif not ignoreUnhydrated or hydrated then

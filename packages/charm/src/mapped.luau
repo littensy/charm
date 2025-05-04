@@ -1,71 +1,127 @@
-local atom = require(script.Parent.atom)
-local store = require(script.Parent.store)
-local subscribe = require(script.Parent.subscribe)
-local types = require(script.Parent.types)
-type Atom<T> = types.Atom<T>
-type Selector<T> = types.Selector<T>
+local computed = require("./computed")
+local signals = require("./signals")
 
-type Map =
-	(<K0, V0, K1, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Selector<{ [K1]: V1 }>)
-	& (<K0, V0, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Selector<{ [K0]: V1 }>)
-	& (<K0, V0, K1, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Selector<{ [K1]: V1 }>)
+local pauseTracking = signals.pauseTracking
+local resumeTracking = signals.resumeTracking
 
---[=[
-	Maps each entry in the atom's state to a new key-value pair. If the `mapper`
-	function returns `undefined`, the entry is omitted from the resulting map.
-	When the atom changes, the `mapper` is called for each entry in the state
-	to compute the new state.
-	
-	@param callback The atom or selector to map.
-	@param mapper The function that maps each entry.
-	@return A new atom with the mapped state.
-]=]
-local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Selector<{ [K1]: V1 }>
-	local mappedAtom = atom({})
-	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
-	local prevMappedItems: { [K1]: V1 } = {}
-	local unsubscribe
+type MappedKey<VI, KO, VO> = {
+	key: KO,
+	value: VO,
+}
 
-	local function listener(items: { [K0]: V0 })
-		local mappedAtom = mappedAtomRef.current
+local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, transform: (item: VI, key: KI) -> (VO, KO?)): () -> { [KO]: VO }
+	local mappedKeys: { [KI]: MappedKey<VI, KO, VO> } = {}
+	local previousItems: { [KI]: VI }?
 
-		if not mappedAtom then
-			return unsubscribe()
+	local function getTransform(value: VI, key: KI): (VO, KO?)
+		pauseTracking()
+		local success, valueOut, keyOut = pcall(transform, value, key)
+		resumeTracking()
+
+		if not success then
+			error(`observe() transform function failed: {valueOut}`)
 		end
 
-		local mappedItems = table.clone(mappedAtom())
-		local mappedKeys = {}
-
-		-- TODO: Only call mapper if the item has changed.
-		for key, item in next, items do
-			local newItem, newKey = mapper(item, key)
-			if newKey == nil then
-				newKey = key :: any
-			end
-			if mappedItems[newKey :: K1] ~= newItem then
-				mappedItems[newKey :: K1] = newItem :: V1
-			else
-				mappedKeys[newKey] = key
-			end
-		end
-
-		for key in next, prevMappedItems do
-			if mappedKeys[key] == nil and mappedItems[key] == prevMappedItems[key] then
-				mappedItems[key] = nil
-			end
-		end
-
-		prevMappedItems = mappedItems
-		mappedAtom(mappedItems)
+		return valueOut, keyOut
 	end
 
-	unsubscribe = subscribe(callback, listener)
+	return computed(function(previousMappedItems)
+		local currentItems = selector()
 
-	store.peek(function(): ()
-		listener(callback())
+		-- If this is the initial run, create a map of the items and store the
+		-- updated keys and values.
+		if not previousItems or not previousMappedItems then
+			local mappedItems: { [KO]: VO } = {}
+			previousItems = currentItems
+
+			for key, value in currentItems do
+				local valueOut, keyOut = getTransform(value, key)
+				local keyOut = if keyOut ~= nil then keyOut else key :: never
+
+				if valueOut ~= nil then
+					mappedKeys[key] = { key = keyOut, value = valueOut }
+					mappedItems[keyOut] = valueOut
+				end
+			end
+
+			return mappedItems
+		end
+
+		local mappedItems = table.clone(previousMappedItems)
+
+		-- Update and remove mapped keys if the source values changed
+		for key, oldValue in previousItems do
+			local currentValue = currentItems[key]
+			local mappedKey = mappedKeys[key]
+
+			-- Remove the key if the source value changed from non-nil to nil
+			if currentValue == nil then
+				mappedKeys[key] = nil
+				if mappedKey then
+					mappedItems[mappedKey.key] = nil
+				end
+				continue
+			end
+
+			-- Do not call transform if the value has not changed
+			if currentValue == oldValue then
+				continue
+			end
+
+			local valueOut, keyOut = getTransform(currentValue, key)
+			local keyOut = if keyOut ~= nil then keyOut else key :: never
+
+			-- If there is no previous mappedKey, then this item was filtered
+			-- out to optimize memory. We need to check if the value is nil to
+			-- determine if we should add it back to the list.
+			if not mappedKey then
+				if valueOut ~= nil then
+					mappedKeys[key] = { key = keyOut, value = valueOut }
+					mappedItems[keyOut] = valueOut
+				end
+				continue
+			end
+
+			-- If the mapped value is nil, then delete mappedKey to save memory.
+			-- This is treated the same as setting mappedKey.value to nil.
+			if valueOut == nil then
+				mappedKeys[key] = nil
+				mappedItems[mappedKey.key] = nil
+				continue
+			end
+
+			-- If the key changed since the last transform call, remove
+			-- the old key and update mappedKey.
+			if keyOut ~= mappedKey.key then
+				mappedItems[mappedKey.key] = nil
+				mappedKey.key = keyOut
+			end
+
+			mappedKey.value = valueOut
+			mappedItems[keyOut] = valueOut
+		end
+
+		-- Add new keys if the value was not present in the previous state
+		for key, currentValue in currentItems do
+			local oldValue = previousItems[key]
+
+			if oldValue ~= nil then
+				continue
+			end
+
+			local valueOut, keyOut = getTransform(currentValue, key)
+			local keyOut = if keyOut ~= nil then keyOut else key :: never
+
+			if valueOut ~= nil then
+				mappedKeys[key] = { key = keyOut, value = valueOut }
+				mappedItems[keyOut] = valueOut
+			end
+		end
+
+		previousItems = currentItems
+
+		return mappedItems
 	end)
-
-	return mappedAtom
 end
 
-return mapped :: Map
+return mapped

@@ -1,4 +1,4 @@
-std = "roblox+testez"
+std = "selene_defs"
 
 [lints]
 global_usage = "allow"

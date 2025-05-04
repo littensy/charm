@@ -1,42 +1,36 @@
-local store = require(script.Parent.store)
-local types = require(script.Parent.types)
-type Selector<T> = types.Selector<T>
+local effectScope = require("./effectScope")
+local signals = require("./signals")
+local spawn = require("./spawn")
 
---[=[
-	Subscribes to changes in the given atom or selector. The callback is
-	called with the current state and the previous state immediately after a
-	change occurs.
-	
-	@param callback The atom or selector to subscribe to.
-	@param listener The function to call when the state changes.
-	@return A function that unsubscribes the callback.
-]=]
-local function subscribe<T>(callback: Selector<T>, listener: (state: T, prev: T) -> ()): () -> ()
-	local dependencies, state = store.capture(callback)
-	local disconnected = false
+local effect = signals.effect
+local pauseTracking = signals.pauseTracking
+local resumeTracking = signals.resumeTracking
 
-	local function handler()
-		local prevState = state
+local function subscribe<T>(selector: () -> T, listener: (T, T) -> ()): () -> ()
+	local current: T
+	local mount = true
+	local dispose: () -> ()
 
-		store.disconnect(dependencies, handler)
-		dependencies, state = store.capture(callback)
+	dispose = effectScope(function()
+		effect(function()
+			local value = selector()
 
-		if not disconnected then
-			store.connect(dependencies, handler)
-		end
+			if mount then
+				current = value
+				mount = false
+			else
+				local previous = current
+				current = value
 
-		if state ~= prevState then
-			listener(state, prevState)
-		end
-	end
-
-	store.connect(dependencies, handler)
+				pauseTracking()
+				spawn(listener, value, previous)
+				resumeTracking()
+			end
+		end)
+	end)
 
 	return function()
-		if not disconnected then
-			disconnected = true
-			store.disconnect(dependencies, handler)
-		end
+		dispose()
 	end
 end
 

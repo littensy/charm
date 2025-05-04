@@ -7,5 +7,4 @@ realm = "shared"
 [dev-dependencies]
 React = "jsdotlua/react@17.2.0"
 ReactRoblox = "jsdotlua/react-roblox@17.2.0"
-TestEZ = "roblox/testez@0.4.1"
 Vide = "centau/vide@0.3.1"

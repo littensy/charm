@@ -1,0 +1,11 @@
+base: roblox
+name: selene_defs
+globals:
+  require:
+    args:
+      - type: string
+  assert:
+    args:
+      - type: any
+      - type: any
+        required: false

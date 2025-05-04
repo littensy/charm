@@ -1,13 +1,6 @@
 name: CI
 
-on:
-  push:
-    branches:
-      - main
-
-  pull_request:
-    branches:
-      - main
+on: [push, pull_request]
 
 jobs:
   analyze:
@@ -17,9 +10,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           run_install: true
-
-      - name: Install Rokit
-        uses: CompeyDev/setup-rokit@v0.1.2
+      - uses: CompeyDev/setup-rokit@v0.1.2
 
       - name: Install Wally dependencies
         run: pnpm wally

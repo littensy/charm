@@ -1,7 +1,11 @@
 local Charm = require(script.Parent.Charm)
 local React = if script.Parent:FindFirstChild("react")
-	then require(script.Parent.react) :: never
+	then require((script :: any).Parent.react) :: never
 	else require(script.Parent.React)
+
+local listen = Charm.listen
+local useEffect = React.useEffect
+local useState = React.useState
 
 --[=[
 	A hook that subscribes to changes in the given atom or selector. The
@@ -16,11 +20,10 @@ local React = if script.Parent:FindFirstChild("react")
 	@return The current state.
 ]=]
 local function useAtom<State>(callback: Charm.Selector<State>, dependencies: { any }?): State
-	local state, setState = React.useState(callback)
+	local state, setState = useState(callback)
 
-	React.useEffect(function()
-		setState(callback())
-		return Charm.subscribe(callback, setState)
+	useEffect(function()
+		return listen(callback, setState)
 	end, dependencies or {})
 
 	return state

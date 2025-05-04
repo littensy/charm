@@ -1,36 +1,40 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Charm = require(ReplicatedStorage.DevPackages.Charm)
-local atom = Charm.atom
 local Vide = require(ReplicatedStorage.DevPackages.Vide)
-local root = Vide.root
 local VideCharm = require(ReplicatedStorage.DevPackages.VideCharm)
+local suite = require(ServerScriptService.Tests.suite)
+
+local atom = Charm.atom
+local root = Vide.root
 local useAtom = VideCharm.useAtom
+local test = suite.test
 
-return function()
-	it("tracks atom state", function()
-		local state = atom(0)
-		local source
-		local cleanup = root(function()
-			source = useAtom(state)
-		end)
-		expect(source()).to.equal(0)
-		state(1)
-		expect(source()).to.equal(1)
-		cleanup()
+test("tracks atom state", function()
+	local state = atom(0)
+	local source
+	local cleanup = root(function()
+		source = useAtom(state)
 	end)
+	assert(source() == 0)
+	state(1)
+	assert(source() == 1)
+	cleanup()
+end)
 
-	it("accepts a selector", function()
-		local state = atom(0)
-		local source
-		local cleanup = root(function()
-			source = useAtom(function()
-				return 2 * state()
-			end)
+test("accepts a selector", function()
+	local state = atom(0)
+	local source
+	local cleanup = root(function()
+		source = useAtom(function()
+			return 2 * state()
 		end)
-		expect(source()).to.equal(0)
-		state(1)
-		expect(source()).to.equal(2)
-		cleanup()
 	end)
-end
+	assert(source() == 0)
+	state(1)
+	assert(source() == 2)
+	cleanup()
+end)
+
+return {}

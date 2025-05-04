@@ -1,5 +1,3 @@
-import { Selector } from "@rbxts/charm";
-
 /**
  * A hook that subscribes to changes in the given atom or selector. The
  * component is re-rendered whenever the state changes.
@@ -12,4 +10,4 @@ import { Selector } from "@rbxts/charm";
  * @param dependencies An array of values that the subscription depends on.
  * @returns The current state.
  */
-export function useAtom<State>(callback: Selector<State>, dependencies?: unknown[]): State;
+export function useAtom<State>(callback: () => State, dependencies?: unknown[]): State;
