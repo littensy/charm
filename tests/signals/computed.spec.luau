@@ -1,8 +1,10 @@
-local test = require("../suite").test
-local signals = require("../charm").signals
+local charm = require("../charm")
+local suite = require("../suite")
 
+local signals = charm.signals
 local computed = signals.computed
 local signal = signals.signal
+local test = suite.test
 
 test("should correctly propagate changes through computed signals", function()
 	local src = signal(0)

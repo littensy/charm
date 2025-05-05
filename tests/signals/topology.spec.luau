@@ -1,12 +1,12 @@
-local signals = require("../charm").signals
+local charm = require("../charm")
 local suite = require("../suite")
 
-local test = suite.test
-local describe = suite.describe
-
+local signals = charm.signals
 local computed = signals.computed
 local effect = signals.effect
 local signal = signals.signal
+local describe = suite.describe
+local test = suite.test
 
 --[[
 	Tests adopted with thanks from preact-signals implementation at

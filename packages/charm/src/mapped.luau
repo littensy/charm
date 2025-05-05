@@ -1,6 +1,6 @@
-local computed = require("./computed")
 local signals = require("./signals")
 
+local computed = signals.computed
 local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 

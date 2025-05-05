@@ -1,8 +1,6 @@
 local atom = require("./atom")
 local batched = require("./batched")
-local computed = require("./computed")
 local effect = require("./effect")
-local effectScope = require("./effectScope")
 local listen = require("./listen")
 local mapped = require("./mapped")
 local observe = require("./observe")
@@ -14,6 +12,9 @@ local untracked = require("./untracked")
 export type Atom<T = any> = types.Atom<T>
 export type AtomOptions<T = any> = types.AtomOptions<T>
 export type Selector<T = any> = types.Selector<T>
+
+local computed = signals.computed
+local effectScope = signals.effectScope
 
 return {
 	atom = atom,

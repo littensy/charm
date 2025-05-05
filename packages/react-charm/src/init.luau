@@ -1,7 +1,5 @@
 local Charm = require(script.Parent.Charm)
-local React = if script.Parent:FindFirstChild("react")
-	then require((script :: any).Parent.react) :: never
-	else require(script.Parent.React)
+local React = require(script.Parent.React)
 
 local listen = Charm.listen
 local useEffect = React.useEffect

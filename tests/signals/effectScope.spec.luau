@@ -1,9 +1,11 @@
-local test = require("../suite").test
-local signals = require("../charm").signals
+local charm = require("../charm")
+local suite = require("../suite")
 
+local signals = charm.signals
 local effect = signals.effect
 local effectScope = signals.effectScope
 local signal = signals.signal
+local test = suite.test
 
 test("should not trigger after stop", function()
 	local count = signal(1)

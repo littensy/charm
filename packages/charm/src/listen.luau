@@ -1,4 +1,3 @@
-local effectScope = require("./effectScope")
 local signals = require("./signals")
 local spawn = require("./spawn")
 
@@ -19,23 +18,21 @@ local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, d
 		end
 	end
 
-	dispose = effectScope(function()
-		effect(function()
-			local value = selector()
+	dispose = effect(function()
+		local value = selector()
 
-			if mounted then
-				mounted = false
-			elseif value == current then
-				return
-			end
+		if mounted then
+			mounted = false
+		elseif value == current then
+			return
+		end
 
-			local previous = current
-			current = value
+		local previous = current
+		current = value
 
-			pauseTracking()
-			spawn(listener, value, previous, disposeSafe)
-			resumeTracking()
-		end)
+		pauseTracking()
+		spawn(listener, value, previous, disposeSafe)
+		resumeTracking()
 	end)
 
 	if disposed then

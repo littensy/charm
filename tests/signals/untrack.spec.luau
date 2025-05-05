@@ -1,10 +1,12 @@
-local test = require("../suite").test
-local signals = require("../charm").signals
+local charm = require("../charm")
+local suite = require("../suite")
 
+local signals = charm.signals
 local computed = signals.computed
 local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 local signal = signals.signal
+local test = suite.test
 
 test("should pause tracking", function()
 	local src = signal(0)

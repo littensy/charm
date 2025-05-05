@@ -1,7 +1,5 @@
 local Charm = require(script.Parent.Charm)
-local Vide = if script.Parent:FindFirstChild("vide")
-	then require((script :: any).Parent.vide.src) :: never
-	else require(script.Parent.Vide)
+local Vide = require(script.Parent.Vide)
 
 local subscribe = Charm.subscribe
 local source = Vide.source
@@ -15,8 +13,7 @@ local cleanup = Vide.cleanup
 ]=]
 local function useAtom<State>(callback: () -> State): () -> State
 	local state = source(callback())
-	local dispose = subscribe(callback, state)
-	cleanup(dispose)
+	cleanup(subscribe(callback, state))
 	return state
 end
 

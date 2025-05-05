@@ -1,4 +1,3 @@
-local effectScope = require("./effectScope")
 local signals = require("./signals")
 
 local effectImpl = signals.effect
@@ -14,10 +13,8 @@ local function effect(callback: (dispose: () -> ()) -> ...() -> ()?): () -> ()
 		end
 	end
 
-	dispose = effectScope(function()
-		effectImpl(function()
-			return callback(disposeSafe)
-		end)
+	dispose = effectImpl(function()
+		return callback(disposeSafe)
 	end)
 
 	if disposed then

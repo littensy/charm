@@ -1,11 +1,13 @@
-local test = require("../suite").test
-local signals = require("../charm").signals
+local charm = require("../charm")
+local suite = require("../suite")
 
+local signals = charm.signals
 local computed = signals.computed
 local effect = signals.effect
 local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 local signal = signals.signal
+local test = suite.test
 
 type ReactionOptions<T = unknown> = {
 	fireImmediately: boolean?,

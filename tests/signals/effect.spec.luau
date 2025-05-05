@@ -1,6 +1,7 @@
-local test = require("../suite").test
-local signals = require("../charm").signals
+local charm = require("../charm")
+local suite = require("../suite")
 
+local signals = charm.signals
 local computed = signals.computed
 local effect = signals.effect
 local effectScope = signals.effectScope
@@ -9,6 +10,7 @@ local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 local signal = signals.signal
 local startBatch = signals.startBatch
+local test = suite.test
 
 test("should clear subscriptions when untracked by all subscribers", function()
 	local bRunTimes = 0
