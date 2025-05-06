@@ -43,7 +43,7 @@ local function updatePercentageOfPeople(percent: number): ({ Person }) -> { Pers
 		local nextState = table.clone(state)
 		for index, person in state do
 			if math.random() < percent then
-				nextState[index] = mapper(person)
+				nextState[index] = table.clone(person)
 			end
 		end
 		return nextState
