@@ -17,12 +17,12 @@ test("should flatten atoms", function()
 	}
 	local result = flatten(input)
 
-	assert(result.a == input.a)
-	assert(result["b/c"] == input.b.c)
-	assert(result["d/e/f"] == input.d.e.f)
+	assert(result.a == input.a, "should flatten the first level")
+	assert(result["b/c"] == input.b.c, "should flatten the second level")
+	assert(result["d/e/f"] == input.d.e.f, "should flatten the third level")
 
-	assert(result.b == nil)
-	assert(result.d == nil)
+	assert(result.b == nil, "should remove the original nested tables")
+	assert(result.d == nil, "should remove the original nested tables")
 end)
 
 return {}

@@ -19,7 +19,7 @@ test("should sync state payload", function()
 		data = { a = 2 },
 	})
 
-	assert(a() == 2)
+	assert(a() == 2, "should set a to the initial value")
 end)
 
 test("should sync state patch", function()
@@ -32,16 +32,16 @@ test("should sync state patch", function()
 		data = { a = a() },
 	})
 
-	assert(a() == previous)
+	assert(a() == previous, "should set a to the initial value")
 
 	client:sync({
 		type = "patch",
 		data = { a = { b = 3 } },
 	})
 
-	assert(a() ~= previous)
-	assert(a().b == 3)
-	assert(a().c == 2)
+	assert(a() ~= previous, "should apply patch")
+	assert(a().b == 3, "should set b to the new value")
+	assert(a().c == 2, "should not change c")
 end)
 
 test("should fix sparse array patches", function()
@@ -61,8 +61,8 @@ test("should fix sparse array patches", function()
 		data = { a = { ["2"] = 2 } },
 	})
 
-	assert(a()["2" :: any] == nil)
-	assert(a()[2] == 2)
+	assert(a()["2" :: any] == nil, "should convert serialized arrays to use numbers")
+	assert(a()[2] == 2, "should convert serialized arrays to use numbers")
 end)
 
 test("should apply multiple patches", function()
@@ -87,9 +87,8 @@ test("should apply multiple patches", function()
 		data = { a = 3 },
 	})
 
-	assert(a() == 3)
-	assert(calls[1] == 2)
-	assert(calls[2] == 3)
+	assert(a() == 3, "should apply the last patch")
+	assert(table.concat(calls) == "23", `wrong order: {table.concat(calls)}`)
 end)
 
 test("should batch patches", function()
@@ -116,10 +115,10 @@ test("should batch patches", function()
 		data = { a = 1, b = 2 },
 	})
 
-	assert(a() == 1)
-	assert(b() == 2)
-	assert(states.a == 1)
-	assert(states.b == 2)
+	assert(a() == 1, "should set a to the new value")
+	assert(b() == 2, "should set b to the new value")
+	assert(states.a == 1, "sub to a should run after b updates")
+	assert(states.b == 2, "sub to b should run after a updates")
 end)
 
 return {}
