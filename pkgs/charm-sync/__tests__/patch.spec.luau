@@ -1,8 +1,9 @@
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local CharmSync = require(ReplicatedStorage.Packages.CharmSync)
-local suite = require("../suite")
+local suite = require(ServerScriptService.Tests.suite)
 
 local patch = CharmSync.patch
 local test = suite.test

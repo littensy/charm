@@ -5,6 +5,6 @@
 	},
 	"aliases": {
 		"tests": "tests",
-		"pkgs": "packages"
+		"pkgs": "pkgs"
 	}
 }
