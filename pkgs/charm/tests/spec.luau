@@ -15,6 +15,9 @@ local function spec(name: string)
 end
 
 collect("signals")
+spec("gc")
 spec("subscribe")
+spec("listen")
+spec("observe")
 
 return {}

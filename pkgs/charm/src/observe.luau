@@ -1,59 +1,71 @@
 local signals = require("./signals")
 
-local computed = signals.computed
 local effect = signals.effect
+local effectScope = signals.effectScope
 local getCurrentSub = signals.getCurrentSub
 local onEffectCleanup = signals.onEffectCleanup
 local onScopeDispose = signals.onScopeDispose
-
-local function noop() end
+local pauseTracking = signals.pauseTracking
+local resumeTracking = signals.resumeTracking
 
 local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...() -> ()?): () -> ()
-	local tracked = computed(function()
-		return selector()
-	end)
-
-	local cleanups: { [K]: () -> () } = {}
+	local scopes: { [K]: () -> () } = {}
 	local currentItems: { [K]: V } = {}
 
 	local function update(currentItems: { [K]: V }, previousItems: { [K]: V })
 		for key in previousItems do
-			local cleanup = cleanups[key]
-			if currentItems[key] == nil and cleanup then
-				cleanups[key] = nil
-				cleanup()
+			if currentItems[key] == nil then
+				local dispose = scopes[key]
+				scopes[key] = nil
+				dispose()
 			end
 		end
 
 		for key, value in currentItems do
 			if previousItems[key] == nil then
-				cleanups[key] = observer(value, key) or noop
+				scopes[key] = effectScope(function()
+					local cleanup = observer(value, key)
+					if cleanup then
+						onScopeDispose(cleanup)
+					end
+				end, true)
 			end
 		end
 	end
 
-	local function teardown()
-		for _, cleanup in cleanups do
-			cleanup()
+	local function disposeScopes()
+		for _, dispose in scopes do
+			dispose()
 		end
-		table.clear(cleanups)
+		table.clear(scopes)
 	end
 
 	local disposeEffect = effect(function()
-		local previousItems = currentItems
-		currentItems = tracked()
-		update(currentItems, previousItems)
+		local nextItems = selector()
+
+		if nextItems ~= currentItems then
+			local previousItems = currentItems
+			currentItems = nextItems
+
+			pauseTracking()
+			local success, result: unknown = pcall(update, currentItems, previousItems)
+			resumeTracking()
+
+			if not success then
+				error(`observe() encountered an error: {result}`, 2)
+			end
+		end
 	end)
 
 	if getCurrentSub() then
-		onEffectCleanup(teardown)
+		onEffectCleanup(disposeScopes)
 	else
-		onScopeDispose(teardown)
+		onScopeDispose(disposeScopes)
 	end
 
 	return function()
 		disposeEffect()
-		teardown()
+		disposeScopes()
 	end
 end
 

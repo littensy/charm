@@ -352,11 +352,11 @@ local function effect(fn: () -> ()): () -> ()
 	return effectStop(e)
 end
 
-local function effectScope(fn: () -> ()): () -> ()
+local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	local e: EffectScope = {
 		flags = NONE,
 	}
-	if activeScope then
+	if activeScope and not detached then
 		link(e, activeScope)
 	end
 	local prev = setCurrentScope(e)
