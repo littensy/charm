@@ -11,7 +11,13 @@ default = "https://github.com/pesde-pkg/index"
 [wally_indices]
 default = "https://github.com/UpliftGames/wally-index"
 
-[dependencies]
+[scripts]
+roblox_sync_config_generator = ".pesde/scripts/roblox_sync_config_generator.luau"
+sourcemap_generator = ".pesde/scripts/sourcemap_generator.luau"
+
+[dev_dependencies]
+scripts = { name = "pesde/scripts_rojo", version = "^0.1.0", target = "lune" }
+rojo = { name = "pesde/rojo", version = "^7.4.4", target = "lune" }
 React = { wally = "jsdotlua/react", version = "^17.2.1" }
 ReactRoblox = { wally = "jsdotlua/react-roblox", version = "^17.2.1" }
 Vide = { wally = "centau/vide", version = "^0.3.1" }

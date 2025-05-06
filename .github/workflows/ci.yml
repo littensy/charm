@@ -10,7 +10,7 @@ jobs:
       - uses: CompeyDev/setup-rokit@v0.1.2
 
       - name: Install dependencies
-        run: sh bin/install.sh
+        run: pesde install
 
       - name: Check code quality
         run: sh bin/check.sh
