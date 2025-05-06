@@ -2,7 +2,6 @@ local signals = require("./signals")
 local types = require("./types")
 
 type Atom<T> = types.Atom<T>
-type AtomOptions<T> = types.AtomOptions<T>
 
 local signal = signals.signal
 

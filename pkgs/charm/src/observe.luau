@@ -8,11 +8,13 @@ local onScopeDispose = signals.onScopeDispose
 local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 
-local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...() -> ()?): () -> ()
+type Cleanup = () -> ()
+
+local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...Cleanup?): () -> ()
 	local scopes: { [K]: () -> () } = {}
 	local currentItems: { [K]: V } = {}
 
-	local function update(currentItems: { [K]: V }, previousItems: { [K]: V })
+	local function updateScopes(currentItems: { [K]: V }, previousItems: { [K]: V })
 		for key in previousItems do
 			if currentItems[key] == nil then
 				local dispose = scopes[key]
@@ -41,14 +43,12 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 	end
 
 	local disposeEffect = effect(function()
-		local nextItems = selector()
+		local previousItems = currentItems
+		currentItems = selector()
 
-		if nextItems ~= currentItems then
-			local previousItems = currentItems
-			currentItems = nextItems
-
+		if currentItems ~= previousItems then
 			pauseTracking()
-			local success, result: unknown = pcall(update, currentItems, previousItems)
+			local success, result: unknown = pcall(updateScopes, currentItems, previousItems)
 			resumeTracking()
 
 			if not success then

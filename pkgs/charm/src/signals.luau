@@ -78,7 +78,7 @@ local batchDepth = 0
 local notifyIndex = 0
 local queuedEffectsLength = 0
 local activeSub: ReactiveNode?
-local activeScope: EffectScope?
+local activeScope: Effect | EffectScope?
 
 local function getCurrentSub(): ReactiveNode?
 	return activeSub
@@ -90,26 +90,28 @@ local function setCurrentSub(sub: ReactiveNode?)
 	return prevSub
 end
 
-local function getCurrentScope(): EffectScope?
+local function getCurrentScope(): Effect | EffectScope?
 	return activeScope
 end
 
-local function setCurrentScope(scope: EffectScope?)
+local function setCurrentScope(scope: Effect | EffectScope?)
 	local prevScope = activeScope
 	activeScope = scope
 	return prevScope
 end
 
-local function addCleanup(e: EffectScope, cleanup: () -> ())
-	local prevCleanup = e.cleanup
+local function addCleanup(e: Effect | EffectScope, cleanup: () -> ())
+	local prevCleanup: (() -> ())? = e.cleanup
+	local nextCleanup = cleanup
+
 	if prevCleanup then
-		e.cleanup = function()
+		function cleanup()
 			prevCleanup()
-			cleanup()
+			nextCleanup()
 		end
-	else
-		e.cleanup = cleanup
 	end
+
+	(e :: Effect).cleanup = cleanup
 end
 
 local function onEffectCleanup(cleanup: () -> ())
@@ -124,19 +126,19 @@ local function onScopeDispose(cleanup: () -> ())
 	end
 end
 
-local function cleanupEffect(e: EffectScope)
+local function cleanupEffect(e: Effect | EffectScope)
 	if e.cleanup then
 		local prev = setCurrentSub(nil)
 		local success, result: unknown = pcall(e.cleanup)
-		setCurrentSub(prev)
-		e.cleanup = nil
+		setCurrentSub(prev);
+		(e :: Effect).cleanup = nil
 		if not success then
 			error(result)
 		end
 	end
 end
 
-local function run(e: EffectScope, flags: ReactiveFlags): ()
+local function run(e: Effect | EffectScope, flags: ReactiveFlags): ()
 	if bit32.band(flags, DIRTY) ~= 0 or (bit32.band(flags, PENDING) ~= 0 and checkDirty(e.deps :: Link, e)) then
 		cleanupEffect(e)
 		local prev = setCurrentSub(e)
@@ -149,7 +151,7 @@ local function run(e: EffectScope, flags: ReactiveFlags): ()
 		end
 		return
 	elseif bit32.band(flags, PENDING) ~= 0 then
-		e.flags = bit32.band(flags, bit32.bnot(PENDING))
+		(e :: Effect).flags = bit32.band(flags, bit32.bnot(PENDING))
 	end
 	local link = e.deps
 	while link do
@@ -158,7 +160,7 @@ local function run(e: EffectScope, flags: ReactiveFlags): ()
 		if bit32.band(depFlags, QUEUED) ~= 0 then
 			depFlags = bit32.band(depFlags, bit32.bnot(QUEUED))
 			dep.flags = depFlags
-			run(dep :: EffectScope, depFlags)
+			run(dep :: Effect, depFlags)
 		end
 		link = link.nextDep
 	end
@@ -167,7 +169,7 @@ end
 local function flush(): ()
 	while notifyIndex < queuedEffectsLength do
 		notifyIndex += 1
-		local effect = queuedEffects[notifyIndex] :: EffectScope
+		local effect = queuedEffects[notifyIndex] :: Effect
 		queuedEffects[notifyIndex] = nil
 		effect.flags = bit32.band(effect.flags, bit32.bnot(QUEUED))
 		run(effect, effect.flags)
@@ -302,7 +304,7 @@ local function computedGetter<T>(this: Computed<T>): () -> T
 	end
 end
 
-local function effectStop(this: EffectScope): () -> ()
+local function effectStop(this: Effect | EffectScope): () -> ()
 	return function()
 		local dep = this.deps
 		while dep do
@@ -313,7 +315,7 @@ local function effectStop(this: EffectScope): () -> ()
 			unlink(sub)
 			sub = this.subs
 		end
-		this.flags = NONE
+		(this :: Effect).flags = NONE
 		cleanupEffect(this)
 	end
 end
@@ -368,43 +370,43 @@ local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	return effectStop(e)
 end
 
-local function notify(e: ReactiveNode)
+local function update(signal: Signal | Computed): boolean
+	if (signal :: Computed).getter then
+		return updateComputed(signal :: Computed)
+	else
+		return updateSignal(signal :: Signal, signal.value)
+	end
+end
+
+local function notify(e: Effect | EffectScope)
 	local flags = e.flags
 	if bit32.band(flags, QUEUED) == 0 then
-		e.flags = bit32.bor(flags, QUEUED)
+		(e :: Effect).flags = bit32.bor(flags, QUEUED)
 		local subs = e.subs
 		if subs then
-			notify(subs.sub :: Effect | EffectScope)
+			notify(subs.sub :: Effect)
 		else
 			queuedEffectsLength += 1
-			queuedEffects[queuedEffectsLength] = e :: Effect
+			queuedEffects[queuedEffectsLength] = e
 		end
 	end
 end
 
-local function update(signal: ReactiveNode): boolean
-	if (signal :: Computed).getter then
-		return updateComputed(signal :: Computed)
-	else
-		return updateSignal(signal :: Signal, (signal :: Signal).value)
-	end
-end
-
-local function unwatched(signal: ReactiveNode)
+local function unwatched(signal: Signal | Effect | Computed)
 	local toRemove = signal.deps
 	if toRemove then
 		repeat
 			toRemove = unlink(toRemove, signal)
-		until not toRemove
-		signal.flags = bit32.bor(signal.flags, DIRTY)
+		until toRemove == nil
+		(signal :: Signal).flags = bit32.bor(signal.flags, DIRTY)
 	end
-	cleanupEffect(signal :: EffectScope)
+	cleanupEffect(signal :: Effect)
 end
 
 local reactiveSystem = createReactiveSystem({
-	update = update,
-	notify = notify,
-	unwatched = unwatched,
+	update = update :: (ReactiveNode) -> boolean,
+	notify = notify :: (ReactiveNode) -> (),
+	unwatched = unwatched :: (ReactiveNode) -> (),
 })
 
 link = reactiveSystem.link

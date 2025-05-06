@@ -1,5 +1,4 @@
 local signals = require("./signals")
-local spawn = require("./spawn")
 
 local effect = signals.effect
 local pauseTracking = signals.pauseTracking
@@ -7,22 +6,24 @@ local resumeTracking = signals.resumeTracking
 
 local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
 	local disposeImmediately = false
-	local current: T?
+	local current: T
 
 	local function dispose()
 		disposeImmediately = true
 	end
 
 	dispose = effect(function()
-		local value = selector()
+		local previous: T? = current
+		current = selector()
 
-		if value ~= current then
-			local previous = current
-			current = value
-
+		if current ~= previous then
 			pauseTracking()
-			spawn(listener, value, previous, dispose)
+			local success, result: unknown = pcall(listener, current, previous, dispose)
 			resumeTracking()
+
+			if not success then
+				error(`listen() encountered an error: {result}`)
+			end
 		end
 	end)
 

@@ -4,128 +4,86 @@ local computed = signals.computed
 local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 
-type MappedKey<VI, KO, VO> = {
-	key: KO,
-	value: VO,
-}
+type Mapped =
+	& (<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
+	& (<K, VI, VO>(selector: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO })
 
-local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, transform: (item: VI, key: KI) -> (VO, KO?)): () -> { [KO]: VO }
-	local mappedKeys: { [KI]: MappedKey<VI, KO, VO> } = {}
-	local previousItems: { [KI]: VI }?
+local function ensureCanMutateOutput<KO, VO>(output: { [KO]: VO }, previous: { [KO]: VO }?): { [KO]: VO }
+	return if output == previous then table.clone(output) else output
+end
 
-	local function getTransform(value: VI, key: KI): (VO, KO?)
+local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
+	local currentData: { [KI]: VI } = {}
+	local keyCache: { [KI]: KO } = {}
+
+	local function map(value: VI, key: KI): (VO, KO)
 		pauseTracking()
-		local success, valueOut, keyOut = pcall(transform, value, key)
+		local success, valueOut, keyOut = pcall(mapper, value, key)
 		resumeTracking()
 
 		if not success then
 			error(`mapped() transform function failed: {valueOut}`)
 		end
 
-		return valueOut, keyOut
+		return valueOut, if keyOut ~= nil then keyOut else key :: any
 	end
 
-	return computed(function(previousMappedItems)
-		local currentItems = selector()
+	return computed(function(previousOutput)
+		local output: { [KO]: VO } = previousOutput or {}
+		local previousData = currentData
+		currentData = selector()
 
-		-- If this is the initial run, create a map of the items and store the
-		-- updated keys and values.
-		if not previousItems or not previousMappedItems then
-			local mappedItems: { [KO]: VO } = {}
-			previousItems = currentItems
-
-			for key, value in currentItems do
-				local valueOut, keyOut = getTransform(value, key)
-				local keyOut = if keyOut ~= nil then keyOut else key :: never
-
-				if valueOut ~= nil then
-					mappedKeys[key] = { key = keyOut, value = valueOut }
-					mappedItems[keyOut] = valueOut
-				end
-			end
-
-			return mappedItems
+		-- Check equality since the selector might not be a computed value
+		if currentData == previousData then
+			return output
 		end
 
-		if previousItems == currentItems then
-			return previousMappedItems
+		-- Clear removed values from the output and key cache
+		for key in previousData do
+			if currentData[key] == nil then
+				local keyOut = keyCache[key]
+
+				if keyOut then
+					output = ensureCanMutateOutput(output, previousOutput)
+					output[keyOut] = nil
+					keyCache[key] = nil
+				end
+			end
 		end
 
-		local mappedItems = table.clone(previousMappedItems)
-
-		-- Update and remove mapped keys if the source values changed
-		for key, oldValue in previousItems do
-			local currentValue = currentItems[key]
-			local mappedKey = mappedKeys[key]
-
-			-- Remove the key if the source value changed from non-nil to nil
-			if currentValue == nil then
-				mappedKeys[key] = nil
-				if mappedKey then
-					mappedItems[mappedKey.key] = nil
-				end
+		-- Process new or changed values
+		for key, value in currentData do
+			if value == previousData[key] then
 				continue
 			end
 
-			-- Do not call transform if the value has not changed
-			if currentValue == oldValue then
-				continue
-			end
-
-			local valueOut, keyOut = getTransform(currentValue, key)
-			local keyOut = if keyOut ~= nil then keyOut else key :: never
-
-			-- If there is no previous mappedKey, then this item was filtered
-			-- out to optimize memory. We need to check if the value is nil to
-			-- determine if we should add it back to the list.
-			if not mappedKey then
-				if valueOut ~= nil then
-					mappedKeys[key] = { key = keyOut, value = valueOut }
-					mappedItems[keyOut] = valueOut
-				end
-				continue
-			end
-
-			-- If the mapped value is nil, then delete mappedKey to save memory.
-			-- This is treated the same as setting mappedKey.value to nil.
-			if valueOut == nil then
-				mappedKeys[key] = nil
-				mappedItems[mappedKey.key] = nil
-				continue
-			end
-
-			-- If the key changed since the last transform call, remove
-			-- the old key and update mappedKey.
-			if keyOut ~= mappedKey.key then
-				mappedItems[mappedKey.key] = nil
-				mappedKey.key = keyOut
-			end
-
-			mappedKey.value = valueOut
-			mappedItems[keyOut] = valueOut
-		end
-
-		-- Add new keys if the value was not present in the previous state
-		for key, currentValue in currentItems do
-			local oldValue = previousItems[key]
-
-			if oldValue ~= nil then
-				continue
-			end
-
-			local valueOut, keyOut = getTransform(currentValue, key)
-			local keyOut = if keyOut ~= nil then keyOut else key :: never
+			local valueOut, keyOut = map(value, key)
+			local cachedKeyOut = keyCache[key]
 
 			if valueOut ~= nil then
-				mappedKeys[key] = { key = keyOut, value = valueOut }
-				mappedItems[keyOut] = valueOut
+				-- Skip update if the key and value are the same
+				if keyOut == cachedKeyOut and valueOut == output[cachedKeyOut] then
+					continue
+				end
+
+				output = ensureCanMutateOutput(output, previousOutput)
+				output[keyOut] = valueOut
+				keyCache[key] = keyOut
+
+				-- Remove the old key if a new key is assigned
+				if cachedKeyOut ~= nil and keyOut ~= cachedKeyOut then
+					output[cachedKeyOut] = nil
+				end
+			elseif cachedKeyOut ~= nil then
+				-- Remove the cached key if the new value is nil
+				output = ensureCanMutateOutput(output, previousOutput)
+				output[cachedKeyOut] = nil
+				keyCache[key] = nil
 			end
 		end
 
-		previousItems = currentItems
-
-		return mappedItems
+		return output
 	end)
 end
 
-return mapped
+return mapped :: Mapped

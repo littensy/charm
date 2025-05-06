@@ -1,27 +1,27 @@
 local signals = require("./signals")
-local spawn = require("./spawn")
 
 local effect = signals.effect
 local pauseTracking = signals.pauseTracking
 local resumeTracking = signals.resumeTracking
 
-local function subscribe<T>(selector: () -> T, listener: (T, T) -> ()): () -> ()
+local function subscribe<T>(selector: () -> T, listener: (state: T, lastState: T) -> ()): () -> ()
 	local current: T
 	local mounted = true
 
 	return effect(function()
-		local value = selector()
+		local previous = current
+		current = selector()
 
 		if mounted then
-			current = value
 			mounted = false
-		elseif value ~= current then
-			local previous = current
-			current = value
-
+		elseif current ~= previous then
 			pauseTracking()
-			spawn(listener, value, previous)
+			local success, result: unknown = pcall(listener, current, previous)
 			resumeTracking()
+
+			if not success then
+				error(`subscribe() encountered an error: {result}`)
+			end
 		end
 	end)
 end
