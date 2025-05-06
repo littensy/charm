@@ -1,3 +1,5 @@
+--!optimize 2
+
 local signals = require("./signals")
 
 local computed = signals.computed
@@ -8,12 +10,12 @@ type Mapped =
 	& (<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
 	& (<K, VI, VO>(selector: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO })
 
-local function ensureCanMutateOutput<KO, VO>(output: { [KO]: VO }, previous: { [KO]: VO }?): { [KO]: VO }
+local function ensureCanMutateOutput<KO, VO>(output: { [KO]: VO }, previous: { [KO]: VO }): { [KO]: VO }
 	return if output == previous then table.clone(output) else output
 end
 
 local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
-	local currentData: { [KI]: VI } = {}
+	local currentData: { [KI]: VI }
 	local keyCache: { [KI]: KO } = {}
 
 	local function map(value: VI, key: KI): (VO, KO)
@@ -29,9 +31,25 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 	end
 
 	return computed(function(previousOutput)
-		local output: { [KO]: VO } = previousOutput or {}
 		local previousData = currentData
 		currentData = selector()
+
+		-- Only perform additions if this is the first run
+		if not previousOutput then
+			local output: { [KO]: VO } = {}
+
+			for key, value in currentData do
+				local valueOut, keyOut = map(value, key)
+				if valueOut ~= nil then
+					output[keyOut] = valueOut
+					keyCache[key] = keyOut
+				end
+			end
+
+			return output
+		end
+
+		local output = previousOutput
 
 		-- Check equality since the selector might not be a computed value
 		if currentData == previousData then
@@ -42,7 +60,6 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 		for key in previousData do
 			if currentData[key] == nil then
 				local keyOut = keyCache[key]
-
 				if keyOut then
 					output = ensureCanMutateOutput(output, previousOutput)
 					output[keyOut] = nil

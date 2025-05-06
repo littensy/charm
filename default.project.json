@@ -22,9 +22,7 @@
 				"VideCharm": { "$path": "pkgs/vide-charm/tests" }
 			},
 			"Benchmarks": {
-				"$className": "Folder",
-				"Charm": { "$path": "pkgs/charm/benchmarks" },
-				"CharmSync": { "$path": "pkgs/charm-sync/benchmarks" }
+				"$path": "benchmarks"
 			}
 		}
 	}
