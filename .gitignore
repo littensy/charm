@@ -1,7 +1,7 @@
 /.vscode
 /build
 /roblox_packages
-/packages/**/wally.lock
+/pkgs/**/wally.lock
 /sourcemap.json
 *.tsbuildinfo
 *.rbxm

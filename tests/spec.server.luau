@@ -3,19 +3,18 @@ local suite = require("./suite")
 local describe = suite.describe
 local finish = suite.finish
 
-local function test(name: string)
-	describe(name, function()
-		return require(`./{name}/spec`) :: any
-	end)
-end
+_G.__DEV__ = true
 
-test("signals")
+describe("charm-sync", function()
+	require(script.Parent.CharmSync.spec)
+end)
 
-if game then
-	_G.__DEV__ = true
-	test("charm-sync")
-	test("react-charm")
-	test("vide-charm")
-end
+describe("react-charm", function()
+	require(script.Parent.ReactCharm.spec)
+end)
+
+describe("vide-charm", function()
+	require(script.Parent.VideCharm.spec)
+end)
 
 finish()

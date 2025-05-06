@@ -6,15 +6,26 @@
 			"$className": "ReplicatedStorage",
 			"Packages": {
 				"$path": "roblox_packages",
-				"Charm": { "$path": "packages/charm" },
-				"CharmSync": { "$path": "packages/charm-sync" },
-				"ReactCharm": { "$path": "packages/react-charm" },
-				"VideCharm": { "$path": "packages/vide-charm" }
+				"Charm": { "$path": "pkgs/charm" },
+				"CharmSync": { "$path": "pkgs/charm-sync" },
+				"ReactCharm": { "$path": "pkgs/react-charm" },
+				"VideCharm": { "$path": "pkgs/vide-charm" }
 			}
 		},
 		"ServerScriptService": {
 			"$className": "ServerScriptService",
-			"Tests": { "$path": "tests" }
+			"Tests": {
+				"$path": "tests",
+				"Charm": { "$path": "pkgs/charm/__tests__" },
+				"CharmSync": { "$path": "pkgs/charm-sync/__tests__" },
+				"ReactCharm": { "$path": "pkgs/react-charm/__tests__" },
+				"VideCharm": { "$path": "pkgs/vide-charm/__tests__" }
+			},
+			"Benchmarks": {
+				"$className": "Folder",
+				"Charm": { "$path": "pkgs/charm/__benchmarks__" },
+				"CharmSync": { "$path": "pkgs/charm-sync/__benchmarks__" }
+			}
 		}
 	}
 }
