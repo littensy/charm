@@ -25,7 +25,7 @@ end
 
 --- In alien-signals, a computed value unlinks from dependencies when its last
 --- parent scope is disposed. Calling a computed value outside of a scope links
---- it to dependencies, but the two-way link holds a strong reference to the
+--- it to dependencies, but the dependencies hold strong references to the
 --- computed value, so it won't GC until called in a scope and disposed.
 ---
 --- This function releases a computed value by linking it to a scope and then
