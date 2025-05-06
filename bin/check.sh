@@ -6,7 +6,7 @@ luau-lsp analyze \
 	--defs=bin/roblox.d.luau \
 	--flag:LuauFixIndexerSubtypingOrdering=true \
 	--sourcemap=sourcemap.json \
-	--ignore="roblox_packages/**" \
+	--ignore="**/_Index/**" \
 	pkgs tests
 
 selene pkgs tests

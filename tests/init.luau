@@ -8,7 +8,7 @@ if not table.isfrozen(_G) then
 end
 
 describe("charm", function()
-	require("@pkgs/charm/__tests__/spec")
+	require("@pkgs/charm/tests/spec")
 end)
 
 finish()

@@ -1,9 +1,7 @@
 /.vscode
 /.pesde
 /build
-/roblox_packages
-/luau_packages
-/lune_packages
+/DevPackages
 /pkgs/**/wally.lock
 /sourcemap.json
 *.tsbuildinfo
