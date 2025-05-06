@@ -11,8 +11,8 @@ local test = suite.test
 type ReactionOptions<T = unknown> = {
 	fireImmediately: boolean?,
 	equals: ((a: T, b: T?) -> boolean)?,
-	onError: (error: unknown) -> ()?,
-	scheduler: (fn: () -> ()) -> ()?,
+	onError: ((error: unknown) -> ())?,
+	scheduler: ((fn: () -> ()) -> ())?,
 	once: boolean?,
 }
 
