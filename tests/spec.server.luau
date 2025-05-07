@@ -3,6 +3,10 @@ local suite = require("./suite")
 local describe = suite.describe
 local finish = suite.finish
 
+if not script then
+	return
+end
+
 _G.__DEV__ = true
 
 describe("charm-sync", function()

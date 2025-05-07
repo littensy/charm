@@ -3,5 +3,6 @@ name = "littensy/charm"
 version = "0.10.0"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
+exclude = ["tests"]
 
 [dependencies]
