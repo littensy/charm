@@ -141,8 +141,8 @@ local function finish()
 	local redOrGreen: (string | number) -> string = if failed then color.red else color.green
 
 	table.insert(output, "")
-	table.insert(output, `Test Files  {redOrGreen(`{filesOk} passed`)} ({color.gray(`{files}`)})`)
-	table.insert(output, `     Tests  {redOrGreen(`{testsOk} passed`)} ({color.gray(`{tests}`)})`)
+	table.insert(output, `Test Files  {redOrGreen(`{filesOk} passed`)} {color.gray(`({files})`)}`)
+	table.insert(output, `     Tests  {redOrGreen(`{testsOk} passed`)} {color.gray(`({tests})`)}`)
 	table.insert(output, `  Duration  {color.blue(`{millis}ms`)}`)
 
 	print("\n" .. table.concat(output, "\n") .. "\n")
