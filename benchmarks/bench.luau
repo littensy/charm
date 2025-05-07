@@ -10,7 +10,7 @@ local function run(name: string, test: () -> ())
 	table.clear(times)
 	table.clear(stack)
 
-	while os.clock() - start < 1 do
+	while os.clock() - start < 2 do
 		iter += 1
 		test()
 	end

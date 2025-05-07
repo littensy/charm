@@ -10,12 +10,12 @@ type Mapped =
 	& (<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
 	& (<K, VI, VO>(selector: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO })
 
-local function ensureCanMutateOutput<KO, VO>(output: { [KO]: VO }, previous: { [KO]: VO }): { [KO]: VO }
+local function ensureCanMutateOutput<KO, VO>(output: { [KO]: VO }, previous: { [KO]: VO }?): { [KO]: VO }
 	return if output == previous then table.clone(output) else output
 end
 
 local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
-	local currentData: { [KI]: VI }
+	local currentData: { [KI]: VI } = {}
 	local keyCache: { [KI]: KO } = {}
 
 	local function map(value: VI, key: KI): (VO, KO)
@@ -31,75 +31,33 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 	end
 
 	return computed(function(previousOutput)
+		local currentOutput: { [KO]: VO } = previousOutput or {}
 		local previousData = currentData
 		currentData = selector()
 
-		-- Only perform additions if this is the first run
-		if not previousOutput then
-			local output: { [KO]: VO } = {}
-
-			for key, value in currentData do
-				local valueOut, keyOut = map(value, key)
-				if valueOut ~= nil then
-					output[keyOut] = valueOut
-					keyCache[key] = keyOut
-				end
+		for key, cachedKey in keyCache do
+			if currentData[key] ~= nil then
+				continue
 			end
 
-			return output
+			currentOutput = ensureCanMutateOutput(currentOutput, previousOutput)
+			currentOutput[cachedKey] = nil
+			keyCache[key] = nil
 		end
 
-		local output = previousOutput
-
-		-- Check equality since the selector might not be a computed value
-		if currentData == previousData then
-			return output
-		end
-
-		-- Clear removed values from the output and key cache
-		for key in previousData do
-			if currentData[key] == nil then
-				local keyOut = keyCache[key]
-				if keyOut then
-					output = ensureCanMutateOutput(output, previousOutput)
-					output[keyOut] = nil
-					keyCache[key] = nil
-				end
-			end
-		end
-
-		-- Process new or changed values
 		for key, value in currentData do
 			if value == previousData[key] then
 				continue
 			end
 
 			local valueOut, keyOut = map(value, key)
-			local cachedKeyOut = keyCache[key]
 
-			if valueOut ~= nil then
-				-- Skip update if the key and value are the same
-				if keyOut == cachedKeyOut and valueOut == output[cachedKeyOut] then
-					continue
-				end
-
-				output = ensureCanMutateOutput(output, previousOutput)
-				output[keyOut] = valueOut
-				keyCache[key] = keyOut
-
-				-- Remove the old key if a new key is assigned
-				if cachedKeyOut ~= nil and keyOut ~= cachedKeyOut then
-					output[cachedKeyOut] = nil
-				end
-			elseif cachedKeyOut ~= nil then
-				-- Remove the cached key if the new value is nil
-				output = ensureCanMutateOutput(output, previousOutput)
-				output[cachedKeyOut] = nil
-				keyCache[key] = nil
-			end
+			currentOutput = ensureCanMutateOutput(currentOutput, previousOutput)
+			currentOutput[keyOut] = valueOut
+			keyCache[key] = keyOut
 		end
 
-		return output
+		return currentOutput
 	end)
 end
 
