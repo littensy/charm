@@ -3,7 +3,7 @@ local color = {
 		return `\27[37;1m{text}\27[0m`
 	end,
 	gray = function(text: string | number)
-		return `\27[30;1m{text}\27[0m`
+		return `\27[90;1m{text}\27[0m`
 	end,
 	green = function(text: string | number)
 		return `\27[32;1m{text}\27[0m`
