@@ -3,9 +3,9 @@ local signals = require("./signals")
 local setCurrentSub = signals.setCurrentSub
 
 local function untracked<T, Args...>(callback: ((Args...) -> T) | (Args...) -> (), ...: Args...): T
-	local prevSub = setCurrentSub(nil)
+	local currentSub = setCurrentSub(nil)
 	local success, result = pcall(callback, ...)
-	setCurrentSub(prevSub)
+	setCurrentSub(currentSub)
 
 	if not success then
 		error(result)

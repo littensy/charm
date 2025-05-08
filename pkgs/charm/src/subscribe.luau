@@ -14,9 +14,9 @@ local function subscribe<T>(selector: () -> T, listener: (state: T, lastState: T
 		if mounted then
 			mounted = false
 		elseif current ~= previous then
-			local prevSub = setCurrentSub(nil)
+			local currentSub = setCurrentSub(nil)
 			local success, result: unknown = pcall(listener, current, previous)
-			setCurrentSub(prevSub)
+			setCurrentSub(currentSub)
 
 			if not success then
 				error(`subscribe() encountered an error: {result}`)

@@ -16,9 +16,9 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 	local keyCache: { [KI]: KO } = {}
 
 	local function map(value: VI, key: KI): (VO, KO)
-		local prevSub = setCurrentSub(nil)
+		local currentSub = setCurrentSub(nil)
 		local success, valueOut, keyOut = pcall(mapper, value, key)
-		setCurrentSub(prevSub)
+		setCurrentSub(currentSub)
 
 		if not success then
 			error(`mapped() transform function failed: {valueOut}`)

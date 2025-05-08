@@ -16,9 +16,9 @@ local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, d
 		current = selector()
 
 		if current ~= previous then
-			local prevSub = setCurrentSub(nil)
+			local currentSub = setCurrentSub(nil)
 			local success, result: unknown = pcall(listener, current, previous, dispose)
-			setCurrentSub(prevSub)
+			setCurrentSub(currentSub)
 
 			if not success then
 				error(`listen() encountered an error: {result}`)

@@ -3,8 +3,7 @@ local suite = require("@tests/suite")
 
 local computed = signals.computed
 local effect = signals.effect
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
+local setCurrentSub = signals.setCurrentSub
 local signal = signals.signal
 local test = suite.test
 
@@ -17,9 +16,9 @@ type ReactionOptions<T = unknown> = {
 }
 
 local function untracked<T>(callback: () -> T): T
-	pauseTracking()
+	local currentSub = setCurrentSub(nil)
 	local success, result = pcall(callback)
-	resumeTracking()
+	setCurrentSub(currentSub)
 	if not success then
 		error(result)
 	end

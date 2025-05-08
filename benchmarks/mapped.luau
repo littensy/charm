@@ -25,9 +25,9 @@ local function simpleMapped(source: () -> { Entry }, mapper: (Entry, number) -> 
 		local nextState = {}
 
 		for index, value in state do
-			local prevSub = setCurrentSub(nil)
+			local currentSub = setCurrentSub(nil)
 			local success, valueOut, keyOut = pcall(mapper, value, index)
-			setCurrentSub(prevSub)
+			setCurrentSub(currentSub)
 
 			if success then
 				nextState[keyOut] = valueOut

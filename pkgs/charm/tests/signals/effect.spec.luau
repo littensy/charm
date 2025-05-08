@@ -5,8 +5,7 @@ local computed = signals.computed
 local effect = signals.effect
 local effectScope = signals.effectScope
 local endBatch = signals.endBatch
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
+local setCurrentSub = signals.setCurrentSub
 local onEffectCleanup = signals.onEffectCleanup
 local signal = signals.signal
 local startBatch = signals.startBatch
@@ -203,9 +202,9 @@ test("should duplicate subscribers do not affect the notify order", function()
 
 	effect(function()
 		table.insert(order, "a")
-		pauseTracking()
+		local currentSub = setCurrentSub(nil)
 		local isOne = src2() == 1
-		resumeTracking()
+		setCurrentSub(currentSub)
 		if isOne then
 			src1()
 		end

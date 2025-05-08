@@ -46,9 +46,9 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 		currentItems = selector()
 
 		if currentItems ~= previousItems then
-			local prevSub = setCurrentSub(nil)
+			local currentSub = setCurrentSub(nil)
 			local success, result: unknown = pcall(updateScopes, currentItems, previousItems)
-			setCurrentSub(prevSub)
+			setCurrentSub(currentSub)
 
 			if not success then
 				error(`observe() encountered an error: {result}`, 2)
