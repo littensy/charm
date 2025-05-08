@@ -1,8 +1,7 @@
 local signals = require("./signals")
 
 local effect = signals.effect
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
+local setCurrentSub = signals.setCurrentSub
 
 local function subscribe<T>(selector: () -> T, listener: (state: T, lastState: T) -> ()): () -> ()
 	local current: T
@@ -15,9 +14,9 @@ local function subscribe<T>(selector: () -> T, listener: (state: T, lastState: T
 		if mounted then
 			mounted = false
 		elseif current ~= previous then
-			pauseTracking()
+			local prevSub = setCurrentSub(nil)
 			local success, result: unknown = pcall(listener, current, previous)
-			resumeTracking()
+			setCurrentSub(prevSub)
 
 			if not success then
 				error(`subscribe() encountered an error: {result}`)

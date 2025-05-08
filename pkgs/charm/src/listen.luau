@@ -1,8 +1,7 @@
 local signals = require("./signals")
 
 local effect = signals.effect
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
+local setCurrentSub = signals.setCurrentSub
 
 local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
 	local disposeImmediately = false
@@ -17,9 +16,9 @@ local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, d
 		current = selector()
 
 		if current ~= previous then
-			pauseTracking()
+			local prevSub = setCurrentSub(nil)
 			local success, result: unknown = pcall(listener, current, previous, dispose)
-			resumeTracking()
+			setCurrentSub(prevSub)
 
 			if not success then
 				error(`listen() encountered an error: {result}`)

@@ -3,10 +3,9 @@ local signals = require("./signals")
 local effect = signals.effect
 local effectScope = signals.effectScope
 local getCurrentSub = signals.getCurrentSub
+local setCurrentSub = signals.setCurrentSub
 local onEffectCleanup = signals.onEffectCleanup
 local onScopeDispose = signals.onScopeDispose
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
 
 type Cleanup = () -> ()
 
@@ -47,9 +46,9 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 		currentItems = selector()
 
 		if currentItems ~= previousItems then
-			pauseTracking()
+			local prevSub = setCurrentSub(nil)
 			local success, result: unknown = pcall(updateScopes, currentItems, previousItems)
-			resumeTracking()
+			setCurrentSub(prevSub)
 
 			if not success then
 				error(`observe() encountered an error: {result}`, 2)

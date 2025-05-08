@@ -1,12 +1,11 @@
 local signals = require("./signals")
 
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
+local setCurrentSub = signals.setCurrentSub
 
 local function untracked<T, Args...>(callback: ((Args...) -> T) | (Args...) -> (), ...: Args...): T
-	pauseTracking()
+	local prevSub = setCurrentSub(nil)
 	local success, result = pcall(callback, ...)
-	resumeTracking()
+	setCurrentSub(prevSub)
 
 	if not success then
 		error(result)

@@ -303,9 +303,14 @@ end)
 test("should run inner effect cleanup", function()
 	local cleanups = 0
 
-	local a, setA = signal(false)
+	local src, setSrc = signal(false)
 	local stopEffect = effect(function()
-		a()
+		src()
+		effect(function()
+			onEffectCleanup(function()
+				cleanups += 1
+			end)
+		end)
 		effect(function()
 			onEffectCleanup(function()
 				cleanups += 1
@@ -314,12 +319,12 @@ test("should run inner effect cleanup", function()
 	end)
 
 	assert(cleanups == 0, "should not cleanup immediately")
-	setA(true)
-	assert(cleanups == 1, "should cleanup after outer update")
+	setSrc(true)
+	assert(cleanups == 2, "should cleanup after outer update")
 	stopEffect()
-	assert(cleanups == 2, "should cleanup after outer dispose")
-	setA(false)
-	assert(cleanups == 2, "should not cleanup after update")
+	assert(cleanups == 4, "should cleanup after outer dispose")
+	setSrc(false)
+	assert(cleanups == 4, "should not cleanup after update")
 end)
 
 return {}

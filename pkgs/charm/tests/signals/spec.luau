@@ -8,11 +8,14 @@ local function spec(name: string)
 	end)
 end
 
-spec("computed")
-spec("effect")
-spec("effectScope")
-spec("issue_48")
-spec("topology")
-spec("untrack")
+describe("signals", function()
+	spec("computed")
+	spec("effect")
+	spec("effectScope")
+	spec("issue_48")
+	spec("gc")
+	spec("topology")
+	spec("untrack")
+end)
 
 return {}

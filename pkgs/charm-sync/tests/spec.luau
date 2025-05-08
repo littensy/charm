@@ -10,10 +10,12 @@ local function spec(name: string)
 	end)
 end
 
-spec("client")
-spec("server")
-spec("flatten")
-spec("patch")
-spec("validate")
+describe("charm-sync", function()
+	spec("client")
+	spec("server")
+	spec("flatten")
+	spec("patch")
+	spec("validate")
+end)
 
 return {}

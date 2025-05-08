@@ -4,8 +4,7 @@ local bench = require("./bench")
 local atom = Charm.atom
 local computed = Charm.computed
 local mapped = Charm.mapped
-local pauseTracking = Charm.signals.pauseTracking
-local resumeTracking = Charm.signals.resumeTracking
+local setCurrentSub = Charm.signals.setCurrentSub
 
 type Entry = { number }
 
@@ -26,9 +25,9 @@ local function simpleMapped(source: () -> { Entry }, mapper: (Entry, number) -> 
 		local nextState = {}
 
 		for index, value in state do
-			pauseTracking()
+			local prevSub = setCurrentSub(nil)
 			local success, valueOut, keyOut = pcall(mapper, value, index)
-			resumeTracking()
+			setCurrentSub(prevSub)
 
 			if success then
 				nextState[keyOut] = valueOut

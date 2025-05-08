@@ -10,6 +10,8 @@ local function spec(name: string)
 	end)
 end
 
-spec("useAtom")
+describe("vide-charm", function()
+	spec("useAtom")
+end)
 
 return {}

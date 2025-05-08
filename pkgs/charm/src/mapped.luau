@@ -1,10 +1,7 @@
---!optimize 2
-
 local signals = require("./signals")
 
 local computed = signals.computed
-local pauseTracking = signals.pauseTracking
-local resumeTracking = signals.resumeTracking
+local setCurrentSub = signals.setCurrentSub
 
 type Mapped =
 	& (<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
@@ -19,9 +16,9 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 	local keyCache: { [KI]: KO } = {}
 
 	local function map(value: VI, key: KI): (VO, KO)
-		pauseTracking()
+		local prevSub = setCurrentSub(nil)
 		local success, valueOut, keyOut = pcall(mapper, value, key)
-		resumeTracking()
+		setCurrentSub(prevSub)
 
 		if not success then
 			error(`mapped() transform function failed: {valueOut}`)
