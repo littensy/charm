@@ -60,7 +60,7 @@ local ERROR = 4
 
 local tests: { Test } = {}
 local descriptions: { Description } = {}
-local parent: Description = {
+local root: Description = {
 	status = PENDING,
 	name = "root",
 	only = false,
@@ -71,6 +71,7 @@ local parent: Description = {
 	skips = 0,
 	runtime = 0,
 }
+local parent: Description = root
 
 local function describe(name: string, run: () -> ()): Description
 	local this: Description = {
@@ -120,7 +121,7 @@ end
 
 local function only()
 	parent.only = true
-	parent.only = true
+	root.only = true
 end
 
 local function testSkip(name: string, run: () -> ()): Test
@@ -132,7 +133,7 @@ end
 local function testOnly(name: string, run: () -> ()): Test
 	local this = test(name, run)
 	this.only = true
-	parent.only = true
+	root.only = true
 	return this
 end
 
@@ -145,17 +146,17 @@ end
 local function describeOnly(name: string, run: () -> ()): Description
 	local this = describe(name, run)
 	this.only = true
-	parent.only = true
+	root.only = true
 	return this
 end
 
 local function isOnly(test: Test): boolean
-	if not parent.only or test.only then
+	if not root.only or test.only then
 		return true
 	end
 
 	local description = test.parent
-	while description and description ~= parent do
+	while description and description ~= root do
 		if description.only then
 			return true
 		elseif description.skip then
@@ -176,7 +177,7 @@ local function isSkip(test: Test): boolean
 
 	local description = test.parent
 	while description do
-		if description.only and description ~= parent then
+		if description.only and description ~= root then
 			return false
 		elseif description.skip then
 			return true
@@ -246,7 +247,7 @@ end
 local function getIndent(node: Description | Test): string
 	local depth = 0
 	local description = node.parent
-	while description and description ~= parent do
+	while description and description ~= root do
 		depth += 1
 		description = description.parent
 	end
@@ -256,7 +257,7 @@ end
 local function getPath(node: Description | Test): string
 	local path = { "" }
 	local description = node.parent
-	while description and description ~= parent do
+	while description and description ~= root do
 		table.insert(path, 1, description.name)
 		description = description.parent
 	end
@@ -295,7 +296,7 @@ local function report()
 		if description.skips > 0 then
 			text ..= " " .. color.blue(`({description.skips} skipped)`)
 		elseif description.fails == 0 then
-			text ..= " " .. color.gray(`({string.format("%.2fms", description.runtime * 1000)})`)
+			text ..= " " .. color.gray(string.format("%.2fms", description.runtime * 1000))
 		end
 
 		table.insert(output, text)
@@ -352,8 +353,8 @@ local function report()
 
 		local describes =
 			`{greenOrRed(`{describePasses} passed`, describeFails == 0)} {color.gray(`({#descriptions})`)}`
-		local tests = `{greenOrRed(`{parent.passes} passed`, parent.fails == 0)} {color.gray(`({#tests})`)}`
-		local duration = `{color.blue(`{string.format("%.2fms", parent.runtime * 1000)}`)}`
+		local tests = `{greenOrRed(`{root.passes} passed`, root.fails == 0)} {color.gray(`({#tests})`)}`
+		local duration = `{color.blue(`{string.format("%.2fms", root.runtime * 1000)}`)}`
 
 		table.insert(output, "")
 		table.insert(output, `Describe  {describes}`)
@@ -363,7 +364,7 @@ local function report()
 	end
 
 	local function reportErrors()
-		if parent.fails == 0 then
+		if root.fails == 0 then
 			return
 		end
 
@@ -379,7 +380,7 @@ local function report()
 	table.insert(output, color.blue("Test Results"))
 	table.insert(output, "")
 
-	for _, child in parent.children do
+	for _, child in root.children do
 		reportNode(child)
 	end
 
@@ -388,8 +389,8 @@ local function report()
 
 	print(table.concat(output, "\n"))
 
-	if parent.fails > 0 then
-		error(color.red(`{parent.fails} test(s) failed`))
+	if root.fails > 0 then
+		error(color.red(`{root.fails} test(s) failed`))
 	end
 end
 
@@ -400,7 +401,7 @@ local function finish(config: Config?)
 	end
 
 	runTests()
-	updateDescription(parent)
+	updateDescription(root)
 	report()
 end
 
