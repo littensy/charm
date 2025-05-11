@@ -1,161 +1,431 @@
+type Config = {
+	colors: boolean?,
+	verbose: boolean?,
+}
+
+type Description = {
+	status: number,
+	name: string,
+	only: boolean,
+	skip: boolean,
+	parent: Description?,
+	children: { Description | Test },
+	passes: number,
+	fails: number,
+	skips: number,
+	runtime: number,
+}
+
+type Test = {
+	status: number,
+	name: string,
+	only: boolean,
+	skip: boolean,
+	parent: Description?,
+	children: nil,
+	run: () -> (),
+	result: unknown?,
+	line: number?,
+	runtime: number,
+}
+
+local options = {
+	colors = true,
+	verbose = false,
+}
+
 local color = {
-	white = function(text: string | number)
-		return `\27[37;1m{text}\27[0m`
+	white = function(text: string)
+		return if options.colors then `\27[37;1m{text}\27[0m` else text
 	end,
-	gray = function(text: string | number)
-		return `\27[90;1m{text}\27[0m`
+	gray = function(text: string)
+		return if options.colors then `\27[90;1m{text}\27[0m` else text
 	end,
-	green = function(text: string | number)
-		return `\27[32;1m{text}\27[0m`
+	green = function(text: string)
+		return if options.colors then `\27[32;1m{text}\27[0m` else text
 	end,
-	red = function(text: string | number)
-		return `\27[31;1m{text}\27[0m`
+	red = function(text: string)
+		return if options.colors then `\27[31;1m{text}\27[0m` else text
 	end,
-	blue = function(text: string | number)
-		return `\27[34;1m{text}\27[0m`
+	blue = function(text: string)
+		return if options.colors then `\27[34;1m{text}\27[0m` else text
 	end,
 }
 
-if script then
-	local function prepend(prefix: string?): (string | number) -> string
-		return function(text: string | number): string
-			return if prefix then `{prefix} {text}` else `{text}`
-		end
-	end
+local PENDING = 0
+local PASS = 1
+local FAIL = 2
+local SKIP = 3
+local ERROR = 4
 
-	color.white = prepend()
-	color.gray = prepend()
-	color.green = prepend(utf8.char(0x1F7E2)) -- green circle
-	color.red = prepend(utf8.char(0x1F534)) -- red circle
-	color.blue = prepend(utf8.char(0x1F535)) -- blue circle
+local tests: { Test } = {}
+local descriptions: { Description } = {}
+local parent: Description = {
+	status = PENDING,
+	name = "root",
+	only = false,
+	skip = false,
+	children = {},
+	passes = 0,
+	fails = 0,
+	skips = 0,
+	runtime = 0,
+}
+
+local function describe(name: string, run: () -> ()): Description
+	local this: Description = {
+		status = PENDING,
+		name = name,
+		only = false,
+		skip = false,
+		parent = parent,
+		children = {},
+		passes = 0,
+		fails = 0,
+		skips = 0,
+		runtime = 0,
+	}
+
+	local prevDescription = parent
+	parent = this
+	run()
+	parent = prevDescription
+
+	table.insert(parent.children, this)
+	table.insert(descriptions, this)
+
+	return this
 end
 
-local WALL = color.gray("│")
-local PASS = color.green("PASS") .. WALL
-local FAIL = color.red("FAIL") .. WALL
-local SKIP = color.blue("SKIP") .. WALL
-local ERROR = color.red("ERROR") .. WALL
+local function test(name: string, run: () -> ()): Test
+	local this: Test = {
+		status = PENDING,
+		name = name,
+		only = false,
+		skip = false,
+		parent = parent,
+		run = run,
+		runtime = 0,
+	}
 
-local results: { string } = {}
-local stack: { string } = {}
-local errors: { string } = {}
+	table.insert(parent.children, this)
+	table.insert(tests, this)
 
-local skipDepth = 0
-local skipCount = 0
-
-local testsOk = 0
-local testsFailed = 0
-local testsSkipped = 0
-local filesOk = 0
-local filesFailed = 0
-
-local start = os.clock()
-
-local function log(result: string, index: number?)
-	if index then
-		table.insert(results, index, result)
-	else
-		table.insert(results, result)
-	end
+	return this
 end
 
 local function skip()
-	skipDepth += 1
+	parent.skip = true
 end
 
-local function test(name: string, callback: () -> ())
-	local path = color.gray(table.concat(stack, " > "))
-	local line = color.red("-1:")
+local function only()
+	parent.only = true
+	parent.only = true
+end
 
-	if skipDepth > 0 then
-		testsSkipped += 1
-		skipCount += 1
+local function testSkip(name: string, run: () -> ()): Test
+	local this = test(name, run)
+	this.skip = true
+	return this
+end
+
+local function testOnly(name: string, run: () -> ()): Test
+	local this = test(name, run)
+	this.only = true
+	parent.only = true
+	return this
+end
+
+local function describeSkip(name: string, run: () -> ()): Description
+	local this = describe(name, run)
+	this.skip = true
+	return this
+end
+
+local function describeOnly(name: string, run: () -> ()): Description
+	local this = describe(name, run)
+	this.only = true
+	parent.only = true
+	return this
+end
+
+local function isOnly(test: Test): boolean
+	if not parent.only or test.only then
+		return true
+	end
+
+	local description = test.parent
+	while description and description ~= parent do
+		if description.only then
+			return true
+		elseif description.skip then
+			return false
+		end
+		description = description.parent
+	end
+
+	return false
+end
+
+local function isSkip(test: Test): boolean
+	if test.only then
+		return false
+	elseif test.skip then
+		return true
+	end
+
+	local description = test.parent
+	while description do
+		if description.only and description ~= parent then
+			return false
+		elseif description.skip then
+			return true
+		end
+		description = description.parent
+	end
+
+	return false
+end
+
+local function runTests()
+	for _, test in tests do
+		if isSkip(test) or not isOnly(test) then
+			test.status = SKIP
+			continue
+		end
+
+		local start = os.clock()
+		local success = xpcall(test.run, function(result)
+			test.status = FAIL
+			test.result = result
+			test.line = debug.info(3, "l")
+		end)
+
+		test.runtime = os.clock() - start
+
+		if success then
+			test.status = PASS
+		end
+	end
+end
+
+local function updateDescription(description: Description)
+	if not description.children[1] then
+		description.status = PASS
 		return
 	end
 
-	table.insert(stack, name)
+	description.status = SKIP
 
-	local success = xpcall(callback, function(err)
-		line = color.red(`{debug.info(3, "l")}:`)
-		table.insert(errors, `\n{ERROR} {path} > {line}{color.white(name)}\n{err}`)
-	end)
+	for _, child in description.children do
+		if child.children then
+			updateDescription(child)
+			description.passes += child.passes
+			description.fails += child.fails
+		elseif child.status == PASS then
+			description.passes += 1
+		elseif child.status == FAIL then
+			description.fails += 1
+		end
 
-	if success then
-		testsOk += 1
-	else
-		testsFailed += 1
-		log(`{FAIL} {path} {color.gray(">")} {line}{color.white(name)}`)
-	end
+		-- Only count skips in direct children
+		if child.status == SKIP then
+			description.skips += 1
+		end
 
-	table.remove(stack)
-end
+		description.runtime += child.runtime
 
-local function describe(name: string, callback: () -> ())
-	local path = if #stack > 0 then color.gray(table.concat(stack, " > ")) .. color.gray(" > ") else ""
-	local index = #results + 1
-	local start = os.clock()
-
-	local initialTestsOk = testsOk
-	local initialTestsFailed = testsFailed
-	local initialSkipDepth = skipDepth
-
-	skipCount = 0
-
-	table.insert(stack, name)
-	callback()
-	table.remove(stack)
-
-	skipDepth = initialSkipDepth
-
-	local skippedEveryTest = initialTestsOk == testsOk and initialTestsFailed == testsFailed and skipCount > 0
-	local passedEveryTest = testsFailed == initialTestsFailed
-
-	local millis = string.format("%.2fms", (os.clock() - start) * 1000)
-	local skips = if skipCount > 0 then color.blue(` ({skipCount} skipped) `) else " "
-
-	if skippedEveryTest then
-		filesOk += 1
-		log(`{SKIP} {path .. color.white(name)}{skips}`, index)
-	elseif passedEveryTest then
-		filesOk += 1
-		log(`{PASS} {path .. color.white(name)}{skips}{color.gray(millis)}`, index)
-	else
-		filesFailed += 1
-		log(`{FAIL} {path .. color.white(name)}{skips}{color.gray(millis)}`, index)
+		if child.status == FAIL then
+			description.status = FAIL
+		elseif description.status == SKIP and child.status == PASS then
+			description.status = PASS
+		end
 	end
 end
 
-local function finish()
-	local tests = testsOk + testsFailed + testsSkipped
-	local files = filesOk + filesFailed
-	local failed = testsFailed + filesFailed > 0
-	local millis = math.round((os.clock() - start) * 1000)
+local function getIndent(node: Description | Test): string
+	local depth = 0
+	local description = node.parent
+	while description and description ~= parent do
+		depth += 1
+		description = description.parent
+	end
+	return if depth > 0 then string.rep("  ", depth - 1) .. color.gray("· ") else ""
+end
+
+local function getPath(node: Description | Test): string
+	local path = { "" }
+	local description = node.parent
+	while description and description ~= parent do
+		table.insert(path, 1, description.name)
+		description = description.parent
+	end
+	return table.concat(path, " > ")
+end
+
+local function greenOrRed(text: string, good: boolean): string
+	return if good then color.green(text) else color.red(text)
+end
+
+local function colorStatus(status: number): string
+	local wall = color.gray("│")
+
+	if status == PASS then
+		return color.green("PASS") .. wall
+	elseif status == FAIL then
+		return color.red("FAIL") .. wall
+	elseif status == SKIP then
+		return color.blue("SKIP") .. wall
+	else
+		return color.red("ERROR") .. wall
+	end
+end
+
+local function report()
 	local output = {}
 
-	table.insert(output, color.blue("Test Results\n"))
+	local function reportDescription(description: Description)
+		local name = color.white(description.name)
+		local text = `{colorStatus(description.status)} {getIndent(description)}{name}`
 
-	for _, result in results do
-		table.insert(output, result)
+		if description.fails > 0 then
+			text ..= " " .. color.red(`({description.fails})`)
+		end
+
+		if description.skips > 0 then
+			text ..= " " .. color.blue(`({description.skips} skipped)`)
+		elseif description.fails == 0 then
+			text ..= " " .. color.gray(`({string.format("%.2fms", description.runtime * 1000)})`)
+		end
+
+		table.insert(output, text)
 	end
 
-	local redOrGreen: (string | number) -> string = if failed then color.red else color.green
+	local function reportTest(test: Test, reportError: boolean?)
+		if test.status ~= FAIL and not options.verbose then
+			return
+		end
+
+		local line = color.red(`{test.line}:`)
+
+		if reportError then
+			local name = color.white(test.name)
+			local path = color.gray(getPath(test))
+
+			table.insert(output, `{colorStatus(ERROR)} {path}{line}{name}`)
+			table.insert(output, `{test.result}`)
+		else
+			local name = color.gray(test.name)
+			local indent = getIndent(test)
+
+			if test.status == FAIL then
+				table.insert(output, `{colorStatus(FAIL)} {indent}{line}{name}`)
+			else
+				table.insert(output, `{colorStatus(test.status)} {indent}{name}`)
+			end
+		end
+	end
+
+	local function reportNode(node: Description | Test)
+		if not node.children then
+			return reportTest(node :: Test)
+		end
+
+		reportDescription(node)
+
+		for _, child in node.children do
+			reportNode(child)
+		end
+	end
+
+	local function reportSummary()
+		local describePasses = 0
+		local describeFails = 0
+
+		for _, description in descriptions do
+			if description.status == PASS then
+				describePasses += 1
+			elseif description.status == FAIL then
+				describeFails += 1
+			end
+		end
+
+		local describes =
+			`{greenOrRed(`{describePasses} passed`, describeFails == 0)} {color.gray(`({#descriptions})`)}`
+		local tests = `{greenOrRed(`{parent.passes} passed`, parent.fails == 0)} {color.gray(`({#tests})`)}`
+		local duration = `{color.blue(`{string.format("%.2fms", parent.runtime * 1000)}`)}`
+
+		table.insert(output, "")
+		table.insert(output, `Describe  {describes}`)
+		table.insert(output, `   Tests  {tests}`)
+		table.insert(output, `Duration  {duration}`)
+		table.insert(output, "")
+	end
+
+	local function reportErrors()
+		if parent.fails == 0 then
+			return
+		end
+
+		for _, test in tests do
+			if test.status == FAIL then
+				reportTest(test, true)
+				table.insert(output, "")
+			end
+		end
+	end
 
 	table.insert(output, "")
-	table.insert(output, `Test Files  {redOrGreen(`{filesOk} passed`)} {color.gray(`({files})`)}`)
-	table.insert(output, `     Tests  {redOrGreen(`{testsOk} passed`)} {color.gray(`({tests})`)}`)
-	table.insert(output, `  Duration  {color.blue(`{millis}ms`)}`)
+	table.insert(output, color.blue("Test Results"))
+	table.insert(output, "")
 
-	print("\n" .. table.concat(output, "\n") .. "\n")
+	for _, child in parent.children do
+		reportNode(child)
+	end
 
-	if failed then
-		print(`{color.red(`{testsFailed} errors:`)}\n{table.concat(errors, "\n")}\n`)
-		error("Tests failed")
+	reportSummary()
+	reportErrors()
+
+	print(table.concat(output, "\n"))
+
+	if parent.fails > 0 then
+		error(color.red(`{parent.fails} test(s) failed`))
 	end
 end
 
+local function finish(config: Config?)
+	if config then
+		options.colors = if config.colors ~= nil then config.colors else options.colors
+		options.verbose = if config.verbose ~= nil then config.verbose else options.verbose
+	end
+
+	runTests()
+	updateDescription(parent)
+	report()
+end
+
+local testImpl = setmetatable({
+	skip = testSkip,
+	only = testOnly,
+}, {
+	__call = function(_, name: string, run: () -> ())
+		return test(name, run)
+	end,
+})
+
+local describeImpl = setmetatable({
+	skip = describeSkip,
+	only = describeOnly,
+}, {
+	__call = function(_, name: string, run: () -> ())
+		return describe(name, run)
+	end,
+})
+
 return {
-	test = test,
-	describe = describe,
+	test = testImpl,
+	describe = describeImpl,
 	skip = skip,
+	only = only,
 	finish = finish,
 }
