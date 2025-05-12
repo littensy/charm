@@ -6,34 +6,26 @@ type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
 type ClientOptions = {
-	--[=[
-		The atoms to synchronize with the server.
-	]=]
+	--- The atoms to synchronize with the server.
 	atoms: AtomMap,
-	--[=[
-		Whether to ignore patches sent before the client has been hydrated.
-		Default is `true`.
-	]=]
+	--- Whether to ignore patches sent before the client has been hydrated.
+	--- Default is `true`.
 	ignoreUnhydrated: boolean?,
 }
 
 type ClientSyncer = {
-	--[=[
-		Applies a patch or initializes the state of the atoms with the given
-		payload from the server.
-		
-		@param ...payloads The patches or hydration payloads to apply.
-	]=]
+	--- Applies a patch or initializes the state of the atoms with the given
+	--- payload from the server.
+	---
+	--- @param ...payloads The patches or hydration payloads to apply.
 	sync: (self: ClientSyncer, ...SyncPayload) -> (),
 }
 
---[=[
-	Creates a `ClientSyncer` object that receives patches from the server and
-	applies them to the local state.
-	
-	@param options The atoms to synchronize with the server.
-	@return A `ClientSyncer` object.
-]=]
+--- Creates a `ClientSyncer` object that receives patches from the server and
+--- applies them to the local state.
+---
+--- @param options The atoms to synchronize with the server.
+--- @return A `ClientSyncer` object.
 local function client(options: ClientOptions): ClientSyncer
 	local atoms = options.atoms
 	local ignoreUnhydrated = options.ignoreUnhydrated ~= false

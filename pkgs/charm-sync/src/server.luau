@@ -9,65 +9,49 @@ type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
 type ServerOptions = {
-	--[=[
-		The atoms to synchronize with the client.
-	]=]
+	--- The atoms to synchronize with the client.
 	atoms: AtomMap,
-	--[=[
-		The interval at which to send patches to the client, in seconds.
-		Defaults to `0` (patches are sent up to once per frame). Set to a
-		negative value to disable automatic syncing.
-	]=]
+	--- The interval at which to send patches to the client, in seconds.
+	--- Defaults to `0` (patches are sent up to once per frame). Set to a
+	--- negative value to disable automatic syncing.
 	interval: number?,
-	--[=[
-		Whether the history of state changes since the client's last update
-		should be preserved. This is useful for values that change multiple times
-		per frame, where each individual change is important. Defaults to `false`.
-	]=]
+	--- Whether the history of state changes since the client's last update
+	--- should be preserved. This is useful for values that change multiple times
+	--- per frame, where each individual change is important. Defaults to `false`.
 	preserveHistory: boolean?,
-	--[=[
-		When `true`, Charm will apply validation and serialize unsafe arrays
-		to address remote event argument limitations. Defaults to `true`.
-
-		This option should be disabled if your network library uses a custom
-		serialization method (i.e. Zap, ByteNet) to prevent interference.
-	]=]
+	--- When `true`, Charm will apply validation and serialize unsafe arrays
+	--- to address remote event argument limitations. Defaults to `true`.
+	---
+	--- This option should be disabled if your network library uses a custom
+	--- serialization method (i.e. Zap, ByteNet) to prevent interference.
 	autoSerialize: boolean?,
 }
 
 type ServerSyncer = {
-	--[=[
-		Sets up a subscription to each atom that schedules a patch to be sent to
-		the client whenever the state changes. When a change occurs, the `callback`
-		is called with the player and the payload to send.
-
-		Note that the `payload` object should not be mutated. If you need to
-		modify the payload, apply the changes to a copy of the object.
-
-		@param callback The function to call when the state changes.
-		@return A cleanup function that unsubscribes all listeners.
-	]=]
+	--- Sets up a subscription to each atom that schedules a patch to be sent to
+	--- the client whenever the state changes. When a change occurs, the `callback`
+	--- is called with the player and the payload to send.
+	---
+	--- Note that the `payload` object should not be mutated. If you need to
+	--- modify the payload, apply the changes to a copy of the object.
+	---
+	--- @param callback The function to call when the state changes.
+	--- @return A cleanup function that unsubscribes all listeners.
 	connect: (self: ServerSyncer, callback: (player: Player, ...SyncPayload) -> ()) -> () -> (),
-	--[=[
-		Hydrates the client's state with the server's state. This should be
-		called when a player joins the game and requires the server's state.
-
-		@param player The player to hydrate.
-	]=]
+	--- Hydrates the client's state with the server's state. This should be
+	--- called when a player joins the game and requires the server's state.
+	---
+	--- @param player The player to hydrate.
 	hydrate: (self: ServerSyncer, player: Player) -> (),
-	--[=[
-		@deprecated For internal use only.
-	]=]
+	--- @deprecated For internal use only.
 	_sendPatch: (self: ServerSyncer, player: Player) -> (),
 }
 
---[=[
-	Creates a `ServerSyncer` object that sends patches to the client and
-	hydrates the client's state.
-	
-	@param options The atoms to synchronize with the client.
-	@return A `ServerSyncer` object.
-]=]
+--- Creates a `ServerSyncer` object that sends patches to the client and
+--- hydrates the client's state.
+---
+--- @param options The atoms to synchronize with the client.
+--- @return A `ServerSyncer` object.
 local function server(options: ServerOptions): ServerSyncer
 	local atoms = options.atoms
 	local autoSerialize = options.autoSerialize ~= false
