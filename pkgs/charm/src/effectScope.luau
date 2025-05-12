@@ -2,9 +2,7 @@ local signals = require("./signals")
 
 local onScopeDispose = signals.onScopeDispose
 
-type Cleanup = () -> ()
-
-local function effectScope(callback: () -> ...Cleanup?, detached: boolean?): () -> ()
+local function effectScope(callback: () -> ...(() -> ())?, detached: boolean?): () -> ()
 	return signals.effectScope(function()
 		local cleanup = callback()
 		if cleanup then

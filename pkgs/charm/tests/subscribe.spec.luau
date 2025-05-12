@@ -1,11 +1,12 @@
 local Charm = require("../src/lib")
-local suite = require("@tests/suite")
+local suite = require("@test/suite")
 
 type Atom<T> = Charm.Atom<T>
 
 local atom = Charm.atom
 local computed = Charm.computed
 local subscribe = Charm.subscribe
+local listen = Charm.listen
 local test = suite.test
 
 test("should subscribe to selector", function()
@@ -53,6 +54,35 @@ test("should ensure correct execution order", function()
 	n1(n1() + 1)
 
 	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
+end)
+
+test("should track inner subs", function()
+	local order = {}
+	local a = atom(1)
+
+	local unsub = subscribe(a, function()
+		table.insert(order, 1)
+		listen(a, function()
+			table.insert(order, 2)
+		end)
+		listen(a, function()
+			table.insert(order, 3)
+		end)
+	end)
+
+	assert(table.concat(order) == "", "should not run immediately")
+
+	a(a() + 1)
+	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
+
+	table.clear(order)
+	a(a() + 1)
+	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
+
+	table.clear(order)
+	unsub()
+	a(a() + 1)
+	assert(table.concat(order) == "", `bad order: {table.concat(order)}`)
 end)
 
 return {}

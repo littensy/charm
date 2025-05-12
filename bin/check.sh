@@ -7,10 +7,10 @@ luau-lsp analyze \
 	--flag:LuauFixIndexerSubtypingOrdering=true \
 	--sourcemap=sourcemap.json \
 	--ignore="**/_Index/**" \
-	pkgs tests
+	pkgs test
 
-selene pkgs tests
+selene pkgs test
 
-stylua --check pkgs tests
+stylua --check pkgs test
 
 rm bin/roblox.d.luau

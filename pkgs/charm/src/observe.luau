@@ -2,23 +2,19 @@ local signals = require("./signals")
 
 local effect = signals.effect
 local effectScope = signals.effectScope
-local getCurrentSub = signals.getCurrentSub
-local setCurrentSub = signals.setCurrentSub
 local onEffectCleanup = signals.onEffectCleanup
 local onScopeDispose = signals.onScopeDispose
+local getCurrentSub = signals.getCurrentSub
 
-type Cleanup = () -> ()
-
-local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...Cleanup?): () -> ()
+local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local scopes: { [K]: () -> () } = {}
 	local currentItems: { [K]: V } = {}
 
 	local function updateScopes(currentItems: { [K]: V }, previousItems: { [K]: V })
 		for key in previousItems do
-			if currentItems[key] == nil then
-				local dispose = scopes[key]
+			if currentItems[key] == nil and scopes[key] then
+				scopes[key]()
 				scopes[key] = nil
-				dispose()
 			end
 		end
 
@@ -46,13 +42,7 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 		currentItems = selector()
 
 		if currentItems ~= previousItems then
-			local currentSub = setCurrentSub(nil)
-			local success, result: unknown = pcall(updateScopes, currentItems, previousItems)
-			setCurrentSub(currentSub)
-
-			if not success then
-				error(`observe() encountered an error: {result}`, 2)
-			end
+			updateScopes(currentItems, previousItems)
 		end
 	end)
 

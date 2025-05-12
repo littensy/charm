@@ -1,5 +1,5 @@
 local Charm = require("../src/lib")
-local suite = require("@tests/suite")
+local suite = require("@test/suite")
 
 local atom = Charm.atom
 local mapped = Charm.mapped

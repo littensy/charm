@@ -1,21 +1,27 @@
-local suite = require("@tests/suite")
+local suite = require("@test/suite")
 
-local describe = suite.describe
-
-local function spec(name: string)
-	describe(name, function()
-		return require(`./{name}.spec`) :: any
+suite.describe("signals", function()
+	suite.describe("computed", function()
+		require("./computed.spec")
 	end)
-end
-
-describe("signals", function()
-	spec("computed")
-	spec("effect")
-	spec("effectScope")
-	spec("issue_48")
-	spec("gc")
-	spec("topology")
-	spec("untrack")
+	suite.describe("effect", function()
+		require("./effect.spec")
+	end)
+	suite.describe("effectScope", function()
+		require("./effectScope.spec")
+	end)
+	suite.describe("issue_48", function()
+		require("./issue_48.spec")
+	end)
+	suite.describe("gc", function()
+		require("./gc.spec")
+	end)
+	suite.describe("topology", function()
+		require("./topology.spec")
+	end)
+	suite.describe("untrack", function()
+		require("./untrack.spec")
+	end)
 end)
 
 return {}

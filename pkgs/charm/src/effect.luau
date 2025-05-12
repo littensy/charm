@@ -2,13 +2,11 @@ local signals = require("./signals")
 
 local onEffectCleanup = signals.onEffectCleanup
 
-type Cleanup = () -> ()
-
-local function effect(callback: (dispose: () -> ()) -> ...Cleanup?): () -> ()
-	local disposeImmediately = false
+local function effect(callback: (dispose: () -> ()) -> ...(() -> ())?): () -> ()
+	local disposed = false
 
 	local function dispose()
-		disposeImmediately = true
+		disposed = true
 	end
 
 	dispose = signals.effect(function()
@@ -18,7 +16,7 @@ local function effect(callback: (dispose: () -> ()) -> ...Cleanup?): () -> ()
 		end
 	end)
 
-	if disposeImmediately then
+	if disposed then
 		dispose()
 	end
 

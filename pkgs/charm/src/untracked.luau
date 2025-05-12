@@ -1,10 +1,11 @@
+local noYield = require("./noYield")
 local signals = require("./signals")
 
 local setCurrentSub = signals.setCurrentSub
 
 local function untracked<T, Args...>(callback: ((Args...) -> T) | (Args...) -> (), ...: Args...): T
 	local currentSub = setCurrentSub(nil)
-	local success, result = pcall(callback, ...)
+	local success, result = noYield(callback, ...)
 	setCurrentSub(currentSub)
 
 	if not success then

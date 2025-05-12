@@ -10,7 +10,10 @@ local types = require("./types")
 local untracked = require("./untracked")
 
 export type Atom<T = any> = types.Atom<T>
+export type Getter<T = any> = types.Getter<T>
 export type Selector<T = any> = types.Selector<T>
+export type Setter<T = any> = types.Setter<T>
+export type Update<T = any> = types.Update<T>
 
 local computed = signals.computed
 local effectScope = signals.effectScope

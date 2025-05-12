@@ -1,3 +1,4 @@
+local noYield = require("./noYield")
 local signals = require("./signals")
 
 local computed = signals.computed
@@ -17,14 +18,18 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 
 	local function map(value: VI, key: KI): (VO, KO)
 		local currentSub = setCurrentSub(nil)
-		local success, valueOut, keyOut = pcall(mapper, value, key)
+		local success, valueOut, keyOut = noYield(mapper, value, key)
 		setCurrentSub(currentSub)
 
 		if not success then
 			error(`mapped() transform function failed: {valueOut}`)
 		end
 
-		return valueOut, if keyOut ~= nil then keyOut else key :: any
+		if keyOut == nil then
+			keyOut = key :: any
+		end
+
+		return valueOut, keyOut
 	end
 
 	return computed(function(previousOutput)
@@ -53,9 +58,11 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 
 			local valueOut, keyOut = map(value, key)
 
-			currentOutput = ensureCanMutateOutput(currentOutput, previousOutput)
-			currentOutput[keyOut] = valueOut
-			keyCache[key] = keyOut
+			if currentOutput[keyOut] ~= valueOut then
+				currentOutput = ensureCanMutateOutput(currentOutput, previousOutput)
+				currentOutput[keyOut] = valueOut
+				keyCache[key] = keyOut
+			end
 		end
 
 		return currentOutput

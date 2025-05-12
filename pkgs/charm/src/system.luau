@@ -1,4 +1,4 @@
---[=[
+--[[
 	alien-signals 2.0.1 implementation adopted from
 	https://github.com/Nicell/alien-signals-luau
 	https://github.com/stackblitz/alien-signals
@@ -24,7 +24,7 @@
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
-]=]
+]]
 
 export type ReactiveNode = {
 	deps: Link?,

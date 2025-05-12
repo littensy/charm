@@ -1,6 +1,6 @@
 <p align="center">
   <p align="center">
-	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/main/images/logo.png" alt="Logo">
+	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/main/assets/logo.png" alt="Logo">
   </p>
   <h1 align="center"><b>Charm</b></h1>
   <p align="center">

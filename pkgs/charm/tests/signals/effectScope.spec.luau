@@ -1,5 +1,5 @@
 local signals = require("../../src/signals")
-local suite = require("@tests/suite")
+local suite = require("@test/suite")
 
 local effect = signals.effect
 local effectScope = signals.effectScope

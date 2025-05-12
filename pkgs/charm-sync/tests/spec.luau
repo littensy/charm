@@ -2,20 +2,22 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local suite = require(ServerScriptService.Tests.suite)
 
-local describe = suite.describe
-
-local function spec(name: string)
-	describe(name, function()
-		return require(`./{name}.spec`) :: any
+suite.describe("charm-sync", function()
+	suite.describe("client", function()
+		require("./client.spec")
 	end)
-end
-
-describe("charm-sync", function()
-	spec("client")
-	spec("server")
-	spec("flatten")
-	spec("patch")
-	spec("validate")
+	suite.describe("server", function()
+		require("./server.spec")
+	end)
+	suite.describe("flatten", function()
+		require("./flatten.spec")
+	end)
+	suite.describe("patch", function()
+		require("./patch.spec")
+	end)
+	suite.describe("validate", function()
+		require("./validate.spec")
+	end)
 end)
 
 return {}

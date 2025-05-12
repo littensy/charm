@@ -1,32 +1,27 @@
 local signals = require("./signals")
 
+local computed = signals.computed
 local effect = signals.effect
-local setCurrentSub = signals.setCurrentSub
 
 local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
-	local disposeImmediately = false
+	local tracked = computed(function()
+		return selector()
+	end)
+
 	local current: T
+	local disposed = false
 
 	local function dispose()
-		disposeImmediately = true
+		disposed = true
 	end
 
 	dispose = effect(function()
-		local previous: T? = current
-		current = selector()
-
-		if current ~= previous then
-			local currentSub = setCurrentSub(nil)
-			local success, result: unknown = pcall(listener, current, previous, dispose)
-			setCurrentSub(currentSub)
-
-			if not success then
-				error(`listen() encountered an error: {result}`)
-			end
-		end
+		local previous = current
+		current = tracked()
+		listener(current, previous, dispose)
 	end)
 
-	if disposeImmediately then
+	if disposed then
 		dispose()
 	end
 

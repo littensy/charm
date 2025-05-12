@@ -2,16 +2,13 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local suite = require(ServerScriptService.Tests.suite)
 
-local describe = suite.describe
-
-local function spec(name: string)
-	describe(name, function()
-		return require(`./{name}.spec`) :: any
+suite.describe("react-charm", function()
+	suite.describe("useAtom", function()
+		require("./useAtom.spec")
 	end)
-end
-
-describe("react-charm", function()
-	spec("useAtom")
+	suite.describe("useAtomBinding", function()
+		require("./useAtomBinding.spec")
+	end)
 end)
 
 return {}

@@ -1,19 +1,20 @@
-local suite = require("@tests/suite")
-
-local describe = suite.describe
-
-local function spec(name: string)
-	describe(name, function()
-		return require(`./{name}.spec`) :: any
-	end)
-end
+local suite = require("@test/suite")
 
 require("./signals/spec")
 
-spec("gc")
-spec("listen")
-spec("mapped")
-spec("observe")
-spec("subscribe")
+suite.describe("charm", function()
+	suite.describe("listen", function()
+		require("./listen.spec")
+	end)
+	suite.describe("mapped", function()
+		require("./mapped.spec")
+	end)
+	suite.describe("observe", function()
+		require("./observe.spec")
+	end)
+	suite.describe("subscribe", function()
+		require("./subscribe.spec")
+	end)
+end)
 
 return {}

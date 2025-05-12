@@ -42,13 +42,13 @@ local color = {
 		return if options.colors then `\27[90;1m{text}\27[0m` else text
 	end,
 	green = function(text: string)
-		return if options.colors then `\27[32;1m{text}\27[0m` else text
+		return if options.colors then `\27[32;1m{text}\27[0m` else `\u{1F7E2} {text}`
 	end,
 	red = function(text: string)
-		return if options.colors then `\27[31;1m{text}\27[0m` else text
+		return if options.colors then `\27[31;1m{text}\27[0m` else `\u{1F534} {text}`
 	end,
 	blue = function(text: string)
-		return if options.colors then `\27[34;1m{text}\27[0m` else text
+		return if options.colors then `\27[34;1m{text}\27[0m` else `\u{1F535} {text}`
 	end,
 }
 
@@ -405,27 +405,33 @@ local function finish(config: Config?)
 	report()
 end
 
-local testImpl = setmetatable({
+local testCtor = setmetatable({
 	skip = testSkip,
 	only = testOnly,
 }, {
-	__call = function(_, name: string, run: () -> ())
-		return test(name, run)
+	__call = function(_, ...)
+		return test(...)
 	end,
 })
 
-local describeImpl = setmetatable({
+local describeCtor = setmetatable({
 	skip = describeSkip,
 	only = describeOnly,
 }, {
-	__call = function(_, name: string, run: () -> ())
-		return describe(name, run)
+	__call = function(_, ...)
+		return describe(...)
 	end,
 })
 
 return {
-	test = testImpl,
-	describe = describeImpl,
+	test = testCtor :: ((name: string, callback: () -> ()) -> ()) & {
+		skip: (name: string, callback: () -> ()) -> (),
+		only: (name: string, callback: () -> ()) -> (),
+	},
+	describe = describeCtor :: ((name: string, callback: () -> ()) -> ()) & {
+		skip: (name: string, callback: () -> ()) -> (),
+		only: (name: string, callback: () -> ()) -> (),
+	},
 	skip = skip,
 	only = only,
 	finish = finish,

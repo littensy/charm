@@ -15,14 +15,14 @@
 		"ServerScriptService": {
 			"$className": "ServerScriptService",
 			"Tests": {
-				"$path": "tests",
+				"$path": "test",
 				"Charm": { "$path": "pkgs/charm/tests" },
 				"CharmSync": { "$path": "pkgs/charm-sync/tests" },
 				"ReactCharm": { "$path": "pkgs/react-charm/tests" },
 				"VideCharm": { "$path": "pkgs/vide-charm/tests" }
 			},
 			"Benchmarks": {
-				"$path": "benchmarks"
+				"$path": "benches"
 			}
 		}
 	}

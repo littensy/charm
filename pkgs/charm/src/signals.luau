@@ -1,4 +1,4 @@
---[=[
+--[[
 	alien-signals 2.0.1 implementation adopted from
 	https://github.com/Nicell/alien-signals-luau
 	https://github.com/stackblitz/alien-signals
@@ -24,8 +24,9 @@
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
-]=]
+]]
 
+local noYield = require("./noYield")
 local system = require("./system")
 
 export type ReactiveFlags = system.ReactiveFlags
@@ -43,12 +44,12 @@ local PENDING = 0b0100000
 local QUEUED = 0b1000000
 
 type EffectScope = ReactiveNode & {
-	cleanup: (() -> ())?,
+	cleanups: { () -> () },
 }
 
 type Effect = ReactiveNode & {
 	fn: () -> (),
-	cleanup: (() -> ())?,
+	cleanups: { () -> () },
 }
 
 type Computed<T = any> = ReactiveNode & {
@@ -99,42 +100,28 @@ local function setCurrentScope(scope: Effect | EffectScope?)
 	return prevScope
 end
 
-local function addCleanup(e: Effect | EffectScope, cleanup: () -> ())
-	local prevCleanup: (() -> ())? = e.cleanup
-	local nextCleanup = cleanup
-
-	if prevCleanup then
-		function cleanup()
-			prevCleanup()
-			nextCleanup()
-		end
-	end
-
-	(e :: Effect).cleanup = cleanup
-end
-
 local function onEffectCleanup(cleanup: () -> ())
 	if activeSub then
-		addCleanup(activeSub :: Effect, cleanup)
+		table.insert((activeSub :: Effect).cleanups, cleanup)
 	end
 end
 
 local function onScopeDispose(cleanup: () -> ())
 	if activeScope then
-		addCleanup(activeScope, cleanup)
+		table.insert(activeScope.cleanups, cleanup)
 	end
 end
 
 local function cleanupEffect(e: Effect | EffectScope)
-	if e.cleanup then
-		local prev = setCurrentSub(nil)
-		local success, result: unknown = pcall(e.cleanup)
-		setCurrentSub(prev);
-		(e :: Effect).cleanup = nil
+	for _, cleanup in e.cleanups :: { () -> () } do
+		local prevSub = setCurrentSub(nil)
+		local success, result: unknown = noYield(cleanup)
+		setCurrentSub(prevSub)
 		if not success then
 			error(result)
 		end
 	end
+	table.clear(e.cleanups)
 end
 
 local function run(e: Effect | EffectScope, flags: ReactiveFlags): ()
@@ -142,7 +129,7 @@ local function run(e: Effect | EffectScope, flags: ReactiveFlags): ()
 		cleanupEffect(e)
 		local prev = setCurrentSub(e)
 		startTracking(e)
-		local success, result: unknown = pcall((e :: Effect).fn)
+		local success, result: unknown = noYield((e :: Effect).fn)
 		setCurrentSub(prev)
 		endTracking(e)
 		if not success then
@@ -208,7 +195,7 @@ local function updateComputed(c: Computed): boolean
 	local prevSub = setCurrentSub(c)
 	startTracking(c)
 	local oldValue = c.value
-	local success, result = pcall(c.getter, oldValue)
+	local success, result = noYield(c.getter, oldValue)
 	setCurrentSub(prevSub)
 	endTracking(c)
 	if not success then
@@ -254,7 +241,7 @@ local function signalGetterSetter<T>(this: Signal<T>): (() -> T, (value: ((T) ->
 		local newValue = newValue :: T
 		if type(newValue) == "function" then
 			local prev = setCurrentSub(nil)
-			local success, result = pcall(newValue, value)
+			local success, result = noYield(newValue, value)
 			setCurrentSub(prev)
 			if not success then
 				error(result)
@@ -336,6 +323,7 @@ end
 local function effect(fn: () -> ()): () -> ()
 	local e: Effect = {
 		fn = fn,
+		cleanups = {},
 		flags = WATCHING,
 	}
 	if activeSub then
@@ -344,7 +332,7 @@ local function effect(fn: () -> ()): () -> ()
 		link(e, activeScope)
 	end
 	local prev = setCurrentSub(e)
-	local success, result: unknown = pcall(fn)
+	local success, result: unknown = noYield(fn)
 	setCurrentSub(prev)
 	if not success then
 		error(result)
@@ -354,6 +342,7 @@ end
 
 local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	local e: EffectScope = {
+		cleanups = {},
 		flags = NONE,
 	}
 	if activeScope and not detached then
@@ -361,7 +350,7 @@ local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	end
 	local prevSub = setCurrentSub(nil)
 	local prevScope = setCurrentScope(e)
-	local success, result: unknown = pcall(fn)
+	local success, result: unknown = noYield(fn)
 	setCurrentScope(prevScope)
 	setCurrentSub(prevSub)
 	if not success then
@@ -401,7 +390,7 @@ local function unwatched(node: Signal | Computed | Effect | EffectScope)
 				toRemove = unlink(toRemove, node)
 			until not toRemove
 		end
-	elseif (node :: Signal).previousValue == nil then
+	elseif (node :: Effect).cleanups ~= nil then
 		effectStop(node :: Effect)()
 	end
 end

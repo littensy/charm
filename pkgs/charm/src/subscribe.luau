@@ -1,26 +1,21 @@
 local signals = require("./signals")
 
+local computed = signals.computed
 local effect = signals.effect
-local setCurrentSub = signals.setCurrentSub
 
 local function subscribe<T>(selector: () -> T, listener: (state: T, lastState: T) -> ()): () -> ()
-	local current: T
-	local mounted = true
+	local tracked = computed(function()
+		return selector()
+	end)
+
+	local current = tracked()
 
 	return effect(function()
 		local previous = current
-		current = selector()
+		current = tracked()
 
-		if mounted then
-			mounted = false
-		elseif current ~= previous then
-			local currentSub = setCurrentSub(nil)
-			local success, result: unknown = pcall(listener, current, previous)
-			setCurrentSub(currentSub)
-
-			if not success then
-				error(`subscribe() encountered an error: {result}`)
-			end
+		if current ~= previous then
+			listener(current, previous)
 		end
 	end)
 end

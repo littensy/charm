@@ -4,7 +4,7 @@
 		"LocalShadow": false
 	},
 	"aliases": {
-		"tests": "tests",
+		"test": "test",
 		"pkgs": "pkgs"
 	}
 }

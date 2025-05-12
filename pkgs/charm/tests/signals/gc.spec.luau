@@ -1,10 +1,10 @@
-local Charm = require("@pkgs/charm/src/lib")
-local suite = require("@tests/suite")
+local signals = require("../../src/signals")
+local suite = require("@test/suite")
 
-local atom = Charm.atom
-local computed = Charm.computed
-local effect = Charm.effect
-local effectScope = Charm.effectScope
+local signal = signals.signal
+local computed = signals.computed
+local effect = signals.effect
+local effectScope = signals.effectScope
 local test = suite.test
 
 --- Creates a weak reference to a value.
@@ -39,23 +39,23 @@ end
 
 test("should release computed cache", function()
 	local srcRef = weakRef({})
-	local src = atom(srcRef())
+	local src, setSrc = signal(srcRef())
 
 	local c = computed(function()
 		return src()
 	end)
 
 	c() -- cache src value
-	src(nil) -- release value
+	setSrc(nil) -- release value
 	c = release(c) -- release computed
 
 	gc()
 	assert(srcRef() == nil, "should release computed cache")
 end)
 
-test("should not release effect for atom", function()
+test("should not release effect for signal", function()
 	local effectCalls = 0
-	local src = atom(0)
+	local src, setSrc = signal(0)
 
 	effect(function()
 		effectCalls += 1
@@ -65,7 +65,7 @@ test("should not release effect for atom", function()
 	assert(effectCalls == 1, "should call effect once")
 
 	gc()
-	src(src() + 1)
+	setSrc(src() + 1)
 	assert(effectCalls == 2, "should call effect again")
 end)
 
