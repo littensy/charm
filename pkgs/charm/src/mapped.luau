@@ -32,14 +32,18 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 		local previousData = currentData
 		currentData = selector()
 
-		for key, cachedKey in keyCache do
+		for key in previousData do
 			if currentData[key] ~= nil then
 				continue
 			end
 
-			currentOutput = ensureCanMutateOutput(currentOutput, previousOutput)
-			currentOutput[cachedKey] = nil
-			keyCache[key] = nil
+			local cachedKey = keyCache[key]
+
+			if cachedKey then
+				currentOutput = ensureCanMutateOutput(currentOutput, previousOutput)
+				currentOutput[cachedKey] = nil
+				keyCache[key] = nil
+			end
 		end
 
 		for key, value in currentData do

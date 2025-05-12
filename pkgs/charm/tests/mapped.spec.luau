@@ -52,6 +52,7 @@ test("should not update if no values change", function()
 
 	src({ 4, 5, 6, 7 })
 	src({ 1, 2, 3 })
+	map()
 	assert(calls == 3, "should not map unchanged values")
 	assert(table.concat(map()) == "234", table.concat(map()))
 	assert(prev == map(), "should not create new table")
