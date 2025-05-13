@@ -4,6 +4,7 @@ local effect = require("./effect")
 local listen = require("./listen")
 local mapped = require("./mapped")
 local observe = require("./observe")
+local onCleanup = require("./onCleanup")
 local signals = require("./signals")
 local subscribe = require("./subscribe")
 local types = require("./types")
@@ -17,8 +18,6 @@ export type Update<T = any> = types.Update<T>
 
 local computed = signals.computed
 local effectScope = signals.effectScope
-local onEffectCleanup = signals.onEffectCleanup
-local onScopeDispose = signals.onScopeDispose
 
 return {
 	atom = atom,
@@ -31,7 +30,6 @@ return {
 	observe = observe,
 	subscribe = subscribe,
 	untracked = untracked,
-	onEffectCleanup = onEffectCleanup,
-	onScopeDispose = onScopeDispose,
+	onCleanup = onCleanup,
 	signals = signals,
 }

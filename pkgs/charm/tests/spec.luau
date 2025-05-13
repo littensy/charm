@@ -15,6 +15,9 @@ suite.describe("charm", function()
 	suite.describe("subscribe", function()
 		require("./subscribe.spec")
 	end)
+	suite.describe("untracked", function()
+		require("./untracked.spec")
+	end)
 end)
 
 return {}

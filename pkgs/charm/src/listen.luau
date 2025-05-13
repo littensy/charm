@@ -2,6 +2,8 @@ local signals = require("./signals")
 
 local computed = signals.computed
 local effect = signals.effect
+local effectScope = signals.effectScope
+local onEffectCleanup = signals.onEffectCleanup
 
 local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
 	local tracked = computed(function()
@@ -18,7 +20,12 @@ local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, d
 	dispose = effect(function()
 		local previous = current
 		current = tracked()
-		listener(current, previous, dispose)
+
+		local stopScope = effectScope(function()
+			listener(current, previous, dispose)
+		end)
+
+		onEffectCleanup(stopScope)
 	end)
 
 	if disposed then

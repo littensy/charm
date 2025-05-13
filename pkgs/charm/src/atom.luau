@@ -10,6 +10,14 @@ local signal = signals.signal
 
 type Equals<T> = (current: T, incoming: T) -> boolean
 
+local function createAtom<T>(getter: Getter<T>, setter: Setter<T>): Atom<T>
+	local function atom(...: Update<T>): T
+		return if select("#", ...) == 0 then getter() else setter((...))
+	end
+
+	return atom
+end
+
 local function createAtomWithEqualityCheck<T>(getter: Getter<T>, setter: Setter<T>, equals: Equals<T>): Atom<T>
 	local function atom(...: Update<T>): T
 		if select("#", ...) == 0 then
@@ -27,18 +35,10 @@ local function createAtomWithEqualityCheck<T>(getter: Getter<T>, setter: Setter<
 	return atom
 end
 
-local function createAtom<T>(getter: Getter<T>, setter: Setter<T>): Atom<T>
-	local function atom(...: Update<T>): T
-		return if select("#", ...) == 0 then getter() else setter((...))
-	end
-
-	return atom
-end
-
 local function atom<T>(state: T, equals: Equals<T>?): Atom<T>
 	local getter, setter = signal(state)
 
-	if equals == nil then
+	if not equals then
 		return createAtom(getter, setter)
 	else
 		return createAtomWithEqualityCheck(getter, setter, equals)

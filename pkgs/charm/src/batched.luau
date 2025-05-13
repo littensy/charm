@@ -1,16 +1,22 @@
 local signals = require("./signals")
 
+type ReactiveNode = signals.ReactiveNode
+
 local startBatch = signals.startBatch
 local endBatch = signals.endBatch
 
-local function batched(callback: () -> ())
-	startBatch()
-	local success, result: any = pcall(callback)
+local function handleBatched(ok: boolean, ...)
 	endBatch()
-
-	if not success then
-		error(result)
+	if not ok then
+		return ...
+	else
+		error(...)
 	end
+end
+
+local function batched<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
+	startBatch()
+	return handleBatched(pcall(callback, ...))
 end
 
 return batched

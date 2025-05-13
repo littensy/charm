@@ -3,6 +3,7 @@ local suite = require("@test/suite")
 
 local atom = Charm.atom
 local listen = Charm.listen
+local effect = Charm.effect
 local test = suite.test
 
 test("should listen to selector", function()
@@ -24,6 +25,47 @@ test("should listen to selector", function()
 	unsub()
 	source(2)
 	assert(current == 2 and previous == 1, "should not run after unsub")
+end)
+
+test("should run in untracked", function()
+	local runs = 0
+	local cleanups = 0
+	local a = atom(0)
+	local b = atom(0)
+
+	listen(a, function()
+		runs += 1
+		b()
+		effect(function()
+			return function()
+				cleanups += 1
+			end
+		end)
+	end)
+
+	assert(runs == 1, "should run once on init")
+	assert(cleanups == 0, "should not cleanup yet")
+
+	a(1)
+	assert(runs == 2, "should run on a change")
+	assert(cleanups == 1, "should cleanup first call")
+
+	b(1)
+	assert(runs == 2, "should not run on b change")
+	assert(cleanups == 1, "should not cleanup second call")
+end)
+
+test("should run if first value is nil", function()
+	local runs = 0
+	local source = atom(nil :: number?)
+
+	listen(source, function()
+		runs += 1
+	end)
+
+	assert(runs == 1, "should run once on init")
+	source(1)
+	assert(runs == 2, "should run once on change")
 end)
 
 test("should track inner subs", function()

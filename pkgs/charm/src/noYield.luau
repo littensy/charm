@@ -1,11 +1,6 @@
 local function handleNoYield(thread: thread, ok: boolean, ...)
 	if not ok then
-		local err = (...)
-		if typeof(err) == "string" then
-			return false, debug.traceback(thread, err)
-		else
-			return false, tostring(err)
-		end
+		return false, debug.traceback(thread, tostring((...)))
 	end
 
 	if coroutine.status(thread) ~= "dead" then
@@ -20,6 +15,6 @@ local function noYield<Args..., Results...>(callback: (Args...) -> Results..., .
 	return handleNoYield(thread, coroutine.resume(thread, ...))
 end
 
--- To eliminate the overhead of noYield returning callback(...) in debug mode,
--- replace it with pcall to avoid wrapping the callback in another function.
+-- To eliminate the overhead of noYield returning callback(...) in production,
+-- replace it with pcall to simulate the same behavior.
 return if _G.__DEV__ then noYield else pcall :: never

@@ -1,10 +1,9 @@
+local onCleanup = require("./onCleanup")
 local signals = require("./signals")
 
 local effect = signals.effect
 local effectScope = signals.effectScope
-local onEffectCleanup = signals.onEffectCleanup
 local onScopeDispose = signals.onScopeDispose
-local getCurrentSub = signals.getCurrentSub
 
 local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local scopes: { [K]: () -> () } = {}
@@ -46,11 +45,7 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 		end
 	end)
 
-	if getCurrentSub() then
-		onEffectCleanup(disposeScopes)
-	else
-		onScopeDispose(disposeScopes)
-	end
+	onCleanup(disposeScopes, true)
 
 	return function()
 		disposeEffect()

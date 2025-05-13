@@ -326,4 +326,34 @@ test("should run inner effect cleanup", function()
 	assert(cleanups == 4, "should not cleanup after update")
 end)
 
+test("should run cleanups outside any evaluation context", function()
+	local calls = 0
+	local a, setA = signal(0)
+	local b, setB = signal(0)
+	local c = computed(function()
+		if a() == 0 then
+			effect(function()
+				onEffectCleanup(function()
+					b()
+				end)
+			end)
+		end
+		return a()
+	end)
+
+	effect(function()
+		calls += 1
+		c()
+	end)
+	assert(calls == 1, "should run once")
+
+	calls = 0
+	setA(1)
+	assert(calls == 1, "should run once after a update")
+
+	calls = 0
+	setB(1)
+	assert(calls == 0, "should not run after b update")
+end)
+
 return {}
