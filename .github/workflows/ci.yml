@@ -7,10 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: true
       - uses: CompeyDev/setup-rokit@v0.1.2
-
-      - name: Install dependencies
-        run: wally install
 
       - name: Check code quality
         run: sh bin/check.sh
