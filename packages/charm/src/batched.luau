@@ -7,7 +7,7 @@ local endBatch = signals.endBatch
 
 local function handleBatched(ok: boolean, ...)
 	endBatch()
-	if not ok then
+	if ok then
 		return ...
 	else
 		error(...)

@@ -5,6 +5,7 @@ local effect = Charm.effect
 local useBinding = React.useBinding
 local useEffect = React.useEffect
 local useState = React.useState
+local useMemo = React.useMemo
 
 --- A hook that subscribes to changes in the given atom or selector. The
 --- component is re-rendered whenever the state changes.
@@ -39,7 +40,8 @@ end
 --- @param dependencies An array of values that the subscription depends on.
 --- @return A binding that stores the current state.
 local function useAtomBinding<State>(selector: () -> State, dependencies: { any }?)
-	local binding, setBinding = useBinding(selector)
+	local initialState = useMemo(selector, {})
+	local binding, setBinding = useBinding(initialState)
 
 	useEffect(function()
 		return effect(function()

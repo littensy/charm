@@ -1,0 +1,164 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@rbxts-js/react':
+        specifier: 17.1.20-ts.1
+        version: 17.1.20-ts.1
+      '@rbxts-js/react-roblox':
+        specifier: 17.1.20-ts.1
+        version: 17.1.20-ts.1
+      '@rbxts/vide':
+        specifier: ^0.5.7
+        version: 0.5.7
+
+packages:
+
+  '@rbxts-js/boolean@1.2.3-ts.1':
+    resolution: {integrity: sha512-IlYFG9uatXQKXOLR1mdptVeEcxudwBCierO+Vu6VZRRaI+/+JDxUClm+QFZyce/kitwnDTmtNvhqVAUtFvCU0Q==}
+
+  '@rbxts-js/collections@1.2.3-ts.1':
+    resolution: {integrity: sha512-RYT73QyEdsV+DCQMtyzT2bZ1P12j2b+JSHVdb1x6xrDq/KdVEkk/QAzW+o22vPrLXbHa6/jA5bmVlgVcOOrIjA==}
+
+  '@rbxts-js/console@1.2.3-ts.1':
+    resolution: {integrity: sha512-qacyJE7bYf4n9448F7mn9e8Y5qljZb7QkSmsmnbQT2HA9Mecvg3gqc9RwCIdVkBV6o1AGVAHbatNQ3a39zPjaw==}
+
+  '@rbxts-js/es7-types@1.2.3-ts.1':
+    resolution: {integrity: sha512-Z7NitBQp6tyzsr5eKlSX54rmopKXpzGu33lYikjF37llrnGFBpnRcZgCJwHKYciloRmjUtnR/UohUNwbWyG9Zg==}
+
+  '@rbxts-js/instance-of@1.2.3-ts.1':
+    resolution: {integrity: sha512-3fKvDPvxHuEZALNBP2XdbXfzjEfbgsXAheCm1Jf5kC2r+HgszW+yqg4zY6TjW0pcsJM2JjH+fM52oomSNu3LLQ==}
+
+  '@rbxts-js/luau-polyfill@1.2.3-ts.1':
+    resolution: {integrity: sha512-2asgvWrOhf311rNgEM/fxMO3+xOVI63Cz1K1PobyZVtDdd87ZJ6RGiZSFl1EAeU77SZc8280toJDVs9YSwxWnA==}
+
+  '@rbxts-js/math@1.2.3-ts.1':
+    resolution: {integrity: sha512-mF7IMJJyxYE02cRNWJ1wsq4pPaAEXKX+CbGlmI0G3QBgWVHj+Oi02IR6pssyUyE6Y2BKvgvP3dcJuTO51OX25A==}
+
+  '@rbxts-js/number@1.2.3-ts.1':
+    resolution: {integrity: sha512-tPdt2s7fEBSxImVFBUvuSMtBKIvaZUCtlOjBl58Y0+GKB15VPXFIRW/5biVruXPnv9d4sDE3mh986ZxxN4UQ5w==}
+
+  '@rbxts-js/react-reconciler@17.1.20-ts.1':
+    resolution: {integrity: sha512-t4vY4nHeM+Scrs+9FbgNsuhK0QR6lg3SNWUhjbzvptNP+IA4+4F8TkHQghR2SSTxQDhegU02BTR7NBpk+AQcUw==}
+
+  '@rbxts-js/react-roblox@17.1.20-ts.1':
+    resolution: {integrity: sha512-Jv0mq+9txXptgsJ6MDWHgCTwsohaon9HhmllkUe29zkaMwE+di4cHqzF1tgV8VHYGG/LQoitXDddK03CA3L+2g==}
+
+  '@rbxts-js/react@17.1.20-ts.1':
+    resolution: {integrity: sha512-u/dNRTNj5AaVPuqJLza7FEJ24lyRfJ0CdjflbIS8JiUS1iXiO7yZeHQWwPk6V3oHuAOckv6tA4FN/Eju2rPMrQ==}
+
+  '@rbxts-js/roblox-lua-promise@3.5.0-ts.2':
+    resolution: {integrity: sha512-H8fxKVJkRnM60yTZ/riO4X43GZD/MViFm+ftCzzAALkAhE4vSaBDNv9E7IUjZZoWi21bG6vZ8mGIiYfavaljvw==}
+
+  '@rbxts-js/safe-flags@17.1.20-ts.1':
+    resolution: {integrity: sha512-k+16jmCP63LT8sNfhLoytUrp3UB+CGHH7s54BFUAHte+zCANK3wfAKXbpT36NqnUfRqgKDM8grO4lWp6awuacQ==}
+
+  '@rbxts-js/scheduler@17.1.20-ts.1':
+    resolution: {integrity: sha512-RoXs6bAW3LIB6HL/voMilR2hjcGAtutaVsr0yumu0hUYVFY2FwIkbOVepsdYWDrYhVqsk5zrj8CcVGgUxDldGg==}
+
+  '@rbxts-js/shared@17.1.20-ts.1':
+    resolution: {integrity: sha512-/3K1BnWV519+any6JMWniIDx1rtq20H6RVgJStSCj4XofrM63kzju0EzRQg1af4lnXCfZNZBusRW8IGQ14xuZQ==}
+
+  '@rbxts-js/string@1.2.3-ts.1':
+    resolution: {integrity: sha512-Je/WKgZbXF/sAHEsQPuns5n4rWzux327zjr0KRf9Gy62ieUzl2FRZZHjVYce3xdMtHif2JstIf/J3p513TUtRg==}
+
+  '@rbxts-js/symbol-luau@1.0.0-ts.1':
+    resolution: {integrity: sha512-TQS/ImDCK5KPGvbmyScH5EZS0ELSCDvZEFR3W+ItPlsLl+bDRSI/0uaKtJ7rbwXgdGwBDKM1QXFPjqe+KOphIA==}
+
+  '@rbxts-js/timers@1.2.3-ts.1':
+    resolution: {integrity: sha512-HKP4ymFX3QLWbR/2Gy4LXwvkhjC9OzbwZ5bNunxu+M8Ocbi1cjRduiZK/y5ogLr9cNIfSoxs6e1DQ3soc8/hwA==}
+
+  '@rbxts/vide@0.5.7':
+    resolution: {integrity: sha512-Q9R7ybzuHK1phtLicBHgAjQnlJ/dMsXDs2k296PIMLgLqK9aX/f1skOP7F1K/vo7IrSE0jCG3B3XTOtQL1Sb0Q==}
+
+snapshots:
+
+  '@rbxts-js/boolean@1.2.3-ts.1':
+    dependencies:
+      '@rbxts-js/collections': 1.2.3-ts.1
+
+  '@rbxts-js/collections@1.2.3-ts.1':
+    dependencies:
+      '@rbxts-js/es7-types': 1.2.3-ts.1
+      '@rbxts-js/instance-of': 1.2.3-ts.1
+
+  '@rbxts-js/console@1.2.3-ts.1':
+    dependencies:
+      '@rbxts-js/collections': 1.2.3-ts.1
+
+  '@rbxts-js/es7-types@1.2.3-ts.1': {}
+
+  '@rbxts-js/instance-of@1.2.3-ts.1': {}
+
+  '@rbxts-js/luau-polyfill@1.2.3-ts.1':
+    dependencies:
+      '@rbxts-js/boolean': 1.2.3-ts.1
+      '@rbxts-js/collections': 1.2.3-ts.1
+      '@rbxts-js/console': 1.2.3-ts.1
+      '@rbxts-js/es7-types': 1.2.3-ts.1
+      '@rbxts-js/instance-of': 1.2.3-ts.1
+      '@rbxts-js/math': 1.2.3-ts.1
+      '@rbxts-js/number': 1.2.3-ts.1
+      '@rbxts-js/string': 1.2.3-ts.1
+      '@rbxts-js/symbol-luau': 1.0.0-ts.1
+      '@rbxts-js/timers': 1.2.3-ts.1
+
+  '@rbxts-js/math@1.2.3-ts.1': {}
+
+  '@rbxts-js/number@1.2.3-ts.1': {}
+
+  '@rbxts-js/react-reconciler@17.1.20-ts.1':
+    dependencies:
+      '@rbxts-js/luau-polyfill': 1.2.3-ts.1
+      '@rbxts-js/react': 17.1.20-ts.1
+      '@rbxts-js/roblox-lua-promise': 3.5.0-ts.2
+      '@rbxts-js/safe-flags': 17.1.20-ts.1
+      '@rbxts-js/scheduler': 17.1.20-ts.1
+      '@rbxts-js/shared': 17.1.20-ts.1
+
+  '@rbxts-js/react-roblox@17.1.20-ts.1':
+    dependencies:
+      '@rbxts-js/luau-polyfill': 1.2.3-ts.1
+      '@rbxts-js/react': 17.1.20-ts.1
+      '@rbxts-js/react-reconciler': 17.1.20-ts.1
+      '@rbxts-js/scheduler': 17.1.20-ts.1
+      '@rbxts-js/shared': 17.1.20-ts.1
+
+  '@rbxts-js/react@17.1.20-ts.1':
+    dependencies:
+      '@rbxts-js/luau-polyfill': 1.2.3-ts.1
+      '@rbxts-js/shared': 17.1.20-ts.1
+
+  '@rbxts-js/roblox-lua-promise@3.5.0-ts.2': {}
+
+  '@rbxts-js/safe-flags@17.1.20-ts.1': {}
+
+  '@rbxts-js/scheduler@17.1.20-ts.1':
+    dependencies:
+      '@rbxts-js/luau-polyfill': 1.2.3-ts.1
+      '@rbxts-js/safe-flags': 17.1.20-ts.1
+      '@rbxts-js/shared': 17.1.20-ts.1
+
+  '@rbxts-js/shared@17.1.20-ts.1':
+    dependencies:
+      '@rbxts-js/luau-polyfill': 1.2.3-ts.1
+      '@rbxts-js/safe-flags': 17.1.20-ts.1
+
+  '@rbxts-js/string@1.2.3-ts.1':
+    dependencies:
+      '@rbxts-js/es7-types': 1.2.3-ts.1
+      '@rbxts-js/number': 1.2.3-ts.1
+
+  '@rbxts-js/symbol-luau@1.0.0-ts.1': {}
+
+  '@rbxts-js/timers@1.2.3-ts.1':
+    dependencies:
+      '@rbxts-js/collections': 1.2.3-ts.1
+
+  '@rbxts/vide@0.5.7': {}

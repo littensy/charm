@@ -1,9 +1,9 @@
 /.vscode
 /.pesde
 /build
-/DevPackages
-/pkgs/**/wally.lock
+/packages/**/wally.lock
 /sourcemap.json
+node_modules
 *.tsbuildinfo
 *.rbxm
 .DS_Store

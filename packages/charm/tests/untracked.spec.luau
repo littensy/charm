@@ -1,4 +1,4 @@
-local Charm = require("../src/lib")
+local Charm = require("../src")
 local suite = require("@test/suite")
 
 local atom = Charm.atom

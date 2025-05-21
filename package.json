@@ -1,0 +1,14 @@
+{
+	"private": true,
+	"scripts": {
+		"test": "lute test/init.luau",
+		"build": "sh bin/build.sh",
+		"typecheck": "sh bin/check.sh"
+	},
+	"packageManager": "pnpm@10.11.0",
+	"devDependencies": {
+		"@rbxts-js/react": "17.1.20-ts.1",
+		"@rbxts-js/react-roblox": "17.1.20-ts.1",
+		"@rbxts/vide": "^0.5.7"
+	}
+}

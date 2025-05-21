@@ -1,25 +1,29 @@
-local Charm = require("../src/lib")
+local Charm = require("../src")
 local suite = require("@test/suite")
 
+type Atom<T> = Charm.Atom<T>
+
 local atom = Charm.atom
+local computed = Charm.computed
+local subscribe = Charm.subscribe
 local listen = Charm.listen
 local effect = Charm.effect
 local test = suite.test
 
-test("should listen to selector", function()
+test("should subscribe to selector", function()
 	local source = atom(0)
 	local current, previous
 
-	local unsub = listen(function()
+	local unsub = subscribe(function()
 		return source() + 1
 	end, function(a, b)
 		current = a
 		previous = b
 	end)
 
-	assert(current == 1 and previous == nil, "should run initially")
+	assert(not current and not previous, "should not run initially")
 	source(0)
-	assert(current == 1 and previous == nil, "should skip redundant update")
+	assert(not current and not previous, "should skip redundant update")
 	source(1)
 	assert(current == 2 and previous == 1, "should run with new value")
 	unsub()
@@ -33,7 +37,7 @@ test("should run in untracked", function()
 	local a = atom(0)
 	local b = atom(0)
 
-	listen(a, function()
+	subscribe(a, function()
 		runs += 1
 		b()
 		effect(function()
@@ -43,36 +47,53 @@ test("should run in untracked", function()
 		end)
 	end)
 
-	assert(runs == 1, "should run once on init")
+	assert(runs == 0, "should not run once on init")
 	assert(cleanups == 0, "should not cleanup yet")
 
 	a(1)
-	assert(runs == 2, "should run on a change")
-	assert(cleanups == 1, "should cleanup first call")
+	assert(runs == 1, "should run once on change")
+	assert(cleanups == 0, "should not cleanup yet")
 
 	b(1)
-	assert(runs == 2, "should not run on b change")
-	assert(cleanups == 1, "should not cleanup second call")
+	assert(runs == 1, "should not run on b change")
+	assert(cleanups == 0, "should not cleanup first call")
+
+	a(2)
+	assert(runs == 2, "should run on a change")
+	assert(cleanups == 1, "should cleanup first call")
 end)
 
-test("should run if first value is nil", function()
-	local runs = 0
-	local source = atom(nil :: number?)
-
-	listen(source, function()
-		runs += 1
+test("should ensure correct execution order", function()
+	local order = {}
+	local n1 = atom(0)
+	local n2 = atom(0)
+	local sum = computed(function()
+		return n1() + n2()
 	end)
 
-	assert(runs == 1, "should run once on init")
-	source(1)
-	assert(runs == 2, "should run once on change")
+	subscribe(n1, function()
+		table.insert(order, 1)
+		n2(n2() + 1)
+	end)
+
+	subscribe(sum, function()
+		table.insert(order, 2)
+	end)
+
+	subscribe(n1, function()
+		table.insert(order, 3)
+	end)
+
+	n1(n1() + 1)
+
+	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
 end)
 
 test("should track inner subs", function()
 	local order = {}
 	local a = atom(1)
 
-	local unsub = listen(a, function()
+	local unsub = subscribe(a, function()
 		table.insert(order, 1)
 		listen(a, function()
 			table.insert(order, 2)
@@ -82,9 +103,8 @@ test("should track inner subs", function()
 		end)
 	end)
 
-	assert(table.concat(order) == "123", `bad mount order: {table.concat(order)}`)
+	assert(table.concat(order) == "", "should not run immediately")
 
-	table.clear(order)
 	a(a() + 1)
 	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
 

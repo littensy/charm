@@ -1,4 +1,4 @@
-local Charm = require("@pkgs/charm/src/lib")
+local Charm = require("@packages/charm/src")
 local bench = require("./bench")
 
 local atom = Charm.atom
