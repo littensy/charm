@@ -1,7 +1,7 @@
 {
 	"private": true,
 	"scripts": {
-		"test": "lute test/init.luau",
+		"test": "lune run test",
 		"build": "sh bin/build.sh",
 		"typecheck": "sh bin/check.sh"
 	},

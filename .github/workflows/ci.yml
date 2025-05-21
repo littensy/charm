@@ -18,7 +18,7 @@ jobs:
         run: sh bin/check.sh
 
       - name: Run tests
-        run: lute test/init.luau
+        run: lune run test
 
       - name: Build models
         run: sh bin/build.sh

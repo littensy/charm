@@ -4,7 +4,7 @@
 		"LocalShadow": false
 	},
 	"aliases": {
-		"test": "test",
-		"packages": "packages"
+		"test": "./test",
+		"packages": "./packages"
 	}
 }
