@@ -1,9 +1,7 @@
-local Players = game:GetService("Players")
-
-local Charm = require(script.Parent.Parent.Charm)
-local interval = require(script.Parent.interval)
-local patch = require(script.Parent.patch)
-local types = require(script.Parent.types)
+local Charm = require("../Charm")
+local interval = require("./interval")
+local patch = require("./patch")
+local types = require("./types")
 
 type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
@@ -64,7 +62,7 @@ local function server(options: ServerOptions): ServerSyncer
 	local function createSnapshot()
 		local snapshot = {}
 
-		for key, atom in next, atoms do
+		for key, atom in atoms do
 			snapshot[key] = atom()
 		end
 
@@ -110,7 +108,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			-- Populate the snapshot with the initial state of each atom.
 			-- Subscribe to each atom and update the state when it changes.
-			for key, atom in next, atoms do
+			for key, atom in atoms do
 				subscriptions[key] = Charm.subscribe(atom, function(current, previous)
 					pushSnapshot(key, current, previous)
 					changed = true
@@ -125,7 +123,7 @@ local function server(options: ServerOptions): ServerSyncer
 				local payloads: { SyncPayload } = {}
 				local lastSnapshot
 
-				for index, snapshot in next, snapshots do
+				for index, snapshot in snapshots do
 					lastSnapshot = snapshot
 
 					if index == 1 then
@@ -141,7 +139,7 @@ local function server(options: ServerOptions): ServerSyncer
 				snapshots = { lastSnapshot }
 				changed = false
 
-				for _, player in next, Players:GetPlayers() do
+				for _, player in game:GetService("Players"):GetPlayers() do
 					callback(player, unpack(payloads))
 				end
 			end, syncRate)
@@ -149,7 +147,7 @@ local function server(options: ServerOptions): ServerSyncer
 			return function()
 				disconnect()
 
-				for _, unsubscribe in next, subscriptions do
+				for _, unsubscribe in subscriptions do
 					unsubscribe()
 				end
 			end
@@ -164,7 +162,7 @@ local function server(options: ServerOptions): ServerSyncer
 
 			local payloads: { SyncPayload } = {}
 
-			for index, snapshot in next, snapshots do
+			for index, snapshot in snapshots do
 				if index == 1 then
 					continue
 				end
@@ -194,7 +192,7 @@ local function server(options: ServerOptions): ServerSyncer
 		sync = callback
 
 		-- Subscribe to each atom and update the state when one changes.
-		for key, atom in next, atoms do
+		for key, atom in atoms do
 			subscriptions[key] = Charm.subscribe(atom, function(state)
 				currentSnapshot[key] = state
 				changed = true
@@ -214,7 +212,7 @@ local function server(options: ServerOptions): ServerSyncer
 			previousSnapshot = table.clone(currentSnapshot)
 			changed = false
 
-			for _, player in next, Players:GetPlayers() do
+			for _, player in game:GetService("Players"):GetPlayers() do
 				callback(player, payload)
 			end
 		end, syncRate)
@@ -222,7 +220,7 @@ local function server(options: ServerOptions): ServerSyncer
 		return function()
 			disconnect()
 
-			for _, unsubscribe in next, subscriptions do
+			for _, unsubscribe in subscriptions do
 				unsubscribe()
 			end
 		end

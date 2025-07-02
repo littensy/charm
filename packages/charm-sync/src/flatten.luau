@@ -1,4 +1,4 @@
-local types = require(script.Parent.types)
+local types = require("./types")
 
 type AtomMap = types.AtomMap
 

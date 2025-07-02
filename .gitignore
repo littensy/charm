@@ -2,6 +2,8 @@
 /.pesde
 /build
 /packages/**/wally.lock
+/packages/**/LICENSE.md
+/packages/**/README.md
 /sourcemap.json
 node_modules
 *.tsbuildinfo

@@ -1,9 +1,9 @@
-local client = require(script.client)
-local flatten = require(script.flatten)
-local patch = require(script.patch)
-local server = require(script.server)
-local types = require(script.types)
-local validate = require(script.validate)
+local client = require("@self/client")
+local flatten = require("@self/flatten")
+local patch = require("@self/patch")
+local server = require("@self/server")
+local types = require("@self/types")
+local validate = require("@self/validate")
 
 export type SyncPayload = types.SyncPayload
 

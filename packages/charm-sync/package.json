@@ -1,0 +1,27 @@
+{
+	"name": "@rbxts/charm-sync",
+	"version": "0.3.0",
+	"description": "Simple server-to-client sync for Charm",
+	"license": "MIT",
+	"main": "src/init.luau",
+	"types": "src/index.d.ts",
+	"files": [
+		"src",
+		"*.luau",
+		"!wally.toml",
+		"!wally.lock",
+		"!default.project.json",
+		"!**/__tests__"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/littensy/charm.git"
+	},
+	"scripts": {
+		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
+		"publish:wally": "wally publish"
+	},
+	"dependencies": {
+		"@rbxts/charm": "workspace:*"
+	}
+}

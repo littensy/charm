@@ -1,5 +1,5 @@
-local Charm = require(script.Parent.Charm)
-local React = require(script.Parent.React)
+local Charm = require("./Charm")
+local React = require("./React")
 
 local effect = Charm.effect
 local useBinding = React.useBinding

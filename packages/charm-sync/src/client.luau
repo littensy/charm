@@ -1,6 +1,6 @@
-local Charm = require(script.Parent.Parent.Charm)
-local patch = require(script.Parent.patch)
-local types = require(script.Parent.types)
+local Charm = require("../Charm")
+local patch = require("./patch")
+local types = require("./types")
 
 type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
@@ -36,7 +36,7 @@ local function client(options: ClientOptions): ClientSyncer
 	local function hydrate(state: { [string | number]: any })
 		hydrated = true
 
-		for key, value in next, state do
+		for key, value in state do
 			local atom = atoms[key]
 			atom(value)
 		end
@@ -45,13 +45,13 @@ local function client(options: ClientOptions): ClientSyncer
 	local function apply(data: { [string | number]: any })
 		local target = {}
 
-		for key, atom in next, atoms do
+		for key, atom in atoms do
 			target[key] = atom()
 		end
 
 		target = patch.apply(target, data)
 
-		for key, atom in next, atoms do
+		for key, atom in atoms do
 			atom(target[key])
 		end
 	end

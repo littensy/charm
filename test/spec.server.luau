@@ -1,16 +1,11 @@
+local Charm = require("../packages/charm/src")
 local suite = require("./suite")
 
-if not script then
-	return
-end
+Charm.strict.enabled = true
 
-_G.__DEV__ = true
+require("../packages/charm/src/__tests__/spec")
+require("../packages/charm-sync/src/__tests__/spec")
+require("../packages/react-charm/src/__tests__/spec")
+require("../packages/vide-charm/src/__tests__/spec")
 
-require(script.Parent.CharmSync.spec)
-require(script.Parent.ReactCharm.spec)
-require(script.Parent.VideCharm.spec)
-
-suite.finish({
-	colors = false,
-	verbose = true,
-})
+suite.finish()

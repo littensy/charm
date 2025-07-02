@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		// required
+		"allowSyntheticDefaultImports": true,
+		"downlevelIteration": true,
+		"jsx": "react",
+		"jsxFactory": "Roact.createElement",
+		"jsxFragmentFactory": "Roact.createFragment",
+		"module": "commonjs",
+		"moduleResolution": "Node",
+		"noLib": true,
+		"resolveJsonModule": true,
+		"experimentalDecorators": true,
+		"forceConsistentCasingInFileNames": true,
+		"moduleDetection": "force",
+		"strict": true,
+		"target": "ESNext",
+		"typeRoots": ["node_modules/@rbxts"]
+	}
+}

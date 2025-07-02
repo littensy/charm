@@ -1,6 +1,5 @@
-local validate = require(script.Parent.validate)
-
-local __DEV__ = _G.__DEV__
+local Charm = require("../Charm")
+local validate = require("./validate")
 
 --- A special symbol that denotes the absence of a value. Used to represent
 --- deleted values in patches.
@@ -64,7 +63,7 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serial
 		patches = stringifySparseArray(patches)
 	end
 
-	if serialize and __DEV__ then
+	if serialize and Charm.strict.enabled then
 		for key, value in next, patches do
 			validate(value, key)
 		end

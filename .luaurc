@@ -2,9 +2,5 @@
 	"languageMode": "strict",
 	"lint": {
 		"LocalShadow": false
-	},
-	"aliases": {
-		"test": "./test",
-		"packages": "./packages"
 	}
 }

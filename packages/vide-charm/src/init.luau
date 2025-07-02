@@ -1,5 +1,5 @@
-local Charm = require(script.Parent.Charm)
-local Vide = require(script.Parent.Vide)
+local Charm = require("./Charm")
+local Vide = require("./Vide")
 
 local subscribe = Charm.subscribe
 local source = Vide.source

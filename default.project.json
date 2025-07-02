@@ -1,29 +1,50 @@
 {
 	"name": "charm-test",
+	"globIgnorePaths": [
+		"**/default.project.json",
+		"node_modules/charm",
+		"node_modules/charm-sync",
+		"node_modules/react-charm",
+		"node_modules/vide-charm"
+	],
+	"emitLegacyScripts": false,
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
-			"Packages": {
-				"$path": "node_modules/@rbxts-js",
-				"Vide": { "$path": "node_modules/@rbxts/vide/src" },
-				"Charm": { "$path": "packages/charm" },
-				"CharmSync": { "$path": "packages/charm-sync" },
-				"ReactCharm": { "$path": "packages/react-charm" },
-				"VideCharm": { "$path": "packages/vide-charm" }
-			}
-		},
-		"ServerScriptService": {
-			"$className": "ServerScriptService",
-			"Tests": {
-				"$path": "test",
-				"Charm": { "$path": "packages/charm/tests" },
-				"CharmSync": { "$path": "packages/charm-sync/tests" },
-				"ReactCharm": { "$path": "packages/react-charm/tests" },
-				"VideCharm": { "$path": "packages/vide-charm/tests" }
+			"packages": {
+				"$className": "Folder",
+				"vide": {
+					"$path": "node_modules/@rbxts/vide"
+				},
+				"charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/charm/src" }
+				},
+				"charm-sync": {
+					"$className": "Folder",
+					"src": { "$path": "packages/charm-sync/src" },
+					"Charm": { "$path": "packages/charm-sync/Charm.luau" }
+				},
+				"react-charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/react-charm/src" },
+					"React": { "$path": "packages/react-charm/React.luau" },
+					"ReactRoblox": { "$path": "packages/react-charm/ReactRoblox.luau" },
+					"Charm": { "$path": "packages/react-charm/Charm.luau" }
+				},
+				"vide-charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/vide-charm/src" },
+					"Vide": { "$path": "packages/vide-charm/Vide.luau" },
+					"Charm": { "$path": "packages/vide-charm/Charm.luau" }
+				}
 			},
-			"Benchmarks": {
-				"$path": "benches"
+			"@rbxts-js": {
+				"$path": "node_modules/@rbxts-js"
+			},
+			"test": {
+				"$path": "test"
 			}
 		}
 	}

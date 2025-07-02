@@ -1,5 +1,3 @@
-local RunService = game:GetService("RunService")
-
 --- Schedules a function to be called at a fixed interval of `seconds`.
 ---
 --- @param callback The function to call.
@@ -12,7 +10,7 @@ local function interval(callback: () -> (), seconds: number): () -> ()
 
 	local clock = 0
 
-	local connection = RunService.Heartbeat:Connect(function(delta)
+	local connection = game:GetService("RunService").Heartbeat:Connect(function(delta)
 		clock += delta
 		if clock >= seconds then
 			clock = 0

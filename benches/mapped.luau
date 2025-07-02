@@ -1,10 +1,10 @@
-local Charm = require("@packages/charm/src")
+local Charm = require("../packages/charm/src")
 local bench = require("./bench")
 
 local atom = Charm.atom
 local computed = Charm.computed
 local mapped = Charm.mapped
-local setCurrentSub = Charm.signals.setCurrentSub
+local setCurrentSub = Charm.core.setCurrentSub
 
 type Entry = { number }
 

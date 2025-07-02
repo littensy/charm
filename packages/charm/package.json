@@ -1,0 +1,24 @@
+{
+	"name": "@rbxts/charm",
+	"version": "0.10.0",
+	"description": "Atomic state management based on alien-signals",
+	"license": "MIT",
+	"main": "src/init.luau",
+	"types": "src/index.d.ts",
+	"files": [
+		"src",
+		"*.luau",
+		"!wally.toml",
+		"!wally.lock",
+		"!default.project.json",
+		"!**/__tests__"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/littensy/charm.git"
+	},
+	"scripts": {
+		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
+		"publish:wally": "wally publish"
+	}
+}
