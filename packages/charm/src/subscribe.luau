@@ -1,5 +1,5 @@
 local core = require("./core")
-local untracked = require("./untracked")
+local peek = require("./peek")
 
 local computed = core.computed
 local effect = core.effect
@@ -18,7 +18,7 @@ local function subscribe<T>(selector: () -> T, listener: (state: T, lastState: T
 		if mounted then
 			mounted = false
 		else
-			untracked(listener, current, previous)
+			peek(listener, current, previous)
 		end
 	end)
 end

@@ -4,28 +4,28 @@ local suite = require("../../../../test/suite")
 local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
-local untracked = Charm.untracked
 local onCleanup = Charm.onCleanup
+local peek = Charm.peek
 local test = suite.test
 
-test("should run detached", function()
+test("should not run detached", function()
 	local a = atom(1)
 	local spyCalls = 0
 
 	effect(function()
 		a()
-		untracked(function()
+		peek(function()
 			onCleanup(function()
 				spyCalls += 1
-			end, true)
+			end)
 		end)
 	end)
 
-	assert(spyCalls == 0, "should not be called")
+	assert(spyCalls == 0, "should not be called yet")
 	a(2)
-	assert(spyCalls == 0, "rerun should not call cleanup")
+	assert(spyCalls == 1, "should be called once")
 	a(3)
-	assert(spyCalls == 0, "rerun should not call cleanup")
+	assert(spyCalls == 2, "should be called twice")
 end)
 
 test("should block tracking inside effects", function()
@@ -34,7 +34,7 @@ test("should block tracking inside effects", function()
 	local spyCalls = 0
 
 	effect(function()
-		untracked(function()
+		peek(function()
 			spyCalls += 1
 			return a() + b()
 		end)
@@ -46,13 +46,13 @@ test("should block tracking inside effects", function()
 	assert(spyCalls == 1, "should be called once")
 end)
 
-test("should block tracking even when run inside effect run inside untracked", function()
+test("should block tracking even when run inside effect run inside peek", function()
 	local s = atom(1)
 	local spyCalls = 0
 
-	untracked(function()
+	peek(function()
 		effect(function()
-			untracked(function()
+			peek(function()
 				spyCalls += 1
 				return s()
 			end)
@@ -70,7 +70,7 @@ test("should not cause atom assignments throw", function()
 
 	local dispose = effect(function()
 		a()
-		untracked(function()
+		peek(function()
 			aChangedTime(aChangedTime() + 1)
 		end)
 	end)
@@ -88,7 +88,7 @@ test("should block tracking inside computed atoms", function()
 	local b = atom(2)
 	local spyCalls = 0
 	local c = computed(function()
-		return untracked(function()
+		return peek(function()
 			spyCalls += 1
 			return a() + b()
 		end)

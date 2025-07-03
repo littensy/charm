@@ -13,11 +13,11 @@ local function renderHook<Props, Result>(callback: (Props) -> Result, props: Pro
 	local root = ReactRoblox.createLegacyRoot(Instance.new("Folder"))
 	local hook = {}
 
-	local function Component(props)
+	local function Component(props: Props)
 		hook.result = callback(props)
 	end
 
-	function hook.rerender(newProps)
+	function hook.rerender(newProps: Props?)
 		props = newProps or props
 		ReactRoblox.act(function()
 			root:render(React.createElement(Component, props))

@@ -8,21 +8,21 @@ local useState = React.useState
 local useMemo = React.useMemo
 
 --- A hook that subscribes to changes in the given atom or selector. The
---- component is re-rendered whenever the state changes.
+--- component is re-rendered with the new state after an update.
 ---
---- If the `dependencies` array is provided, the effect is re-created whenever
---- the dependencies change. Otherwise, the subscription is created once when
---- the component is mounted.
+--- If the `dependencies` array is provided, a new effect is created for the
+--- current `callback` when the dependencies change. Otherwise, the effect is
+--- created only once, when the component is mounted.
 ---
---- @param selector The atom or selector to subscribe to.
---- @param dependencies An array of values that the subscription depends on.
+--- @param callback The atom or selector to watch.
+--- @param dependencies An array of values used to memoize the callback.
 --- @return The current state.
-local function useAtom<State>(selector: () -> State, dependencies: { any }?): State
-	local state, setState = useState(selector)
+local function useAtom<T>(callback: () -> T, dependencies: { any }?): T
+	local state, setState = useState(callback)
 
 	useEffect(function()
 		return effect(function()
-			setState(selector())
+			setState(callback())
 		end)
 	end, dependencies or {})
 
@@ -32,20 +32,20 @@ end
 --- A hook that subscribes to changes in the given atom or selector. Returns
 --- a binding that updates when the state changes.
 ---
---- If the `dependencies` array is provided, the effect is re-created whenever
---- the dependencies change. Otherwise, the subscription is created once when
---- the component is mounted.
+--- If the `dependencies` array is provided, a new effect is created for the
+--- current `callback` when the dependencies change. Otherwise, the effect is
+--- created only once, when the component is mounted.
 ---
---- @param selector The atom or selector to subscribe to.
---- @param dependencies An array of values that the subscription depends on.
+--- @param callback The atom or selector to watch.
+--- @param dependencies An array of values used to memoize the callback.
 --- @return A binding that stores the current state.
-local function useAtomBinding<State>(selector: () -> State, dependencies: { any }?)
-	local initialState = useMemo(selector, {})
+local function useAtomBinding<T>(callback: () -> T, dependencies: { any }?)
+	local initialState = useMemo(callback, {})
 	local binding, setBinding = useBinding(initialState)
 
 	useEffect(function()
 		return effect(function()
-			setBinding(selector())
+			setBinding(callback())
 		end)
 	end, dependencies or {})
 

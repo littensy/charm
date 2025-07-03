@@ -23,13 +23,13 @@ local function gc()
 	end
 end
 
---- In alien-core, a computed value unlinks from dependencies when its last
+--- In alien-signals, a computed value unlinks from dependencies when its last
 --- parent scope is disposed. Calling a computed value outside of a scope links
 --- it to dependencies, but the dependencies hold strong references to the
 --- computed value, so it won't GC until called in a scope and disposed.
 ---
 --- This function releases a computed value by linking it to a scope and then
---- immediately closing it, causing alien-core to unlink the computed value
+--- immediately closing it, causing alien-signals to unlink the computed value
 --- and allow it to be garbage collected.
 local function release(getter: () -> ())
 	effectScope(function()

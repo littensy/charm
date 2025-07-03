@@ -4,5 +4,5 @@ end
 
 return {
 	-- Enable strict mode in O2
-	enabled = inlineTest() == "inlineTest",
+	strict = inlineTest() == "inlineTest",
 }

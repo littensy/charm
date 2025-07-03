@@ -1,9 +1,9 @@
 local core = require("./core")
 
-local setCurrentTracking = core.setCurrentTracking
+local setCurrentSub = core.setCurrentSub
 
-local function handleUntracked(prevTracking: boolean, ok: boolean, ...)
-	setCurrentTracking(prevTracking)
+local function handleUntracked(prevSub: core.ReactiveNode?, ok: boolean, ...)
+	setCurrentSub(prevSub)
 	if ok then
 		return ...
 	else
@@ -12,7 +12,7 @@ local function handleUntracked(prevTracking: boolean, ok: boolean, ...)
 end
 
 local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
-	return handleUntracked(setCurrentTracking(false), pcall(callback, ...))
+	return handleUntracked(setCurrentSub(nil), pcall(callback, ...))
 end
 
 return untracked

@@ -1,32 +1,4 @@
---[[
-	alien-signals 2.0.5 implementation adopted from
-	https://github.com/Nicell/alien-signals-luau
-	https://github.com/stackblitz/alien-signals
-
-	MIT License
-
-	Copyright (c) 2024-present Johnson Chu, Nicholas Winans
-
-	Permission is hereby granted, free of charge, to any person obtaining a copy
-	of this software and associated documentation files (the "Software"), to deal
-	in the Software without restriction, including without limitation the rights
-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-	copies of the Software, and to permit persons to whom the Software is
-	furnished to do so, subject to the following conditions:
-
-	The above copyright notice and this permission notice shall be included in all
-	copies or substantial portions of the Software.
-
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-	SOFTWARE.
-]]
-
-local strict = require("./strict")
+local config = require("./flags")
 local system = require("./system")
 local utils = require("./utils")
 
@@ -103,15 +75,15 @@ local function setCurrentScope(scope: Effect | EffectScope?)
 end
 
 local function setCurrentTracking(tracking: boolean): boolean
-	local prevTracking = activeSubTracking
+	local prevSubTracking = activeSubTracking
 	activeSubTracking = tracking
-	return prevTracking
+	return prevSubTracking
 end
 
 local function runCleanups(effect: EffectScope)
 	for _, cleanup in effect.cleanups do
 		local prev = setCurrentSub(nil)
-		local success, result: unknown = (if strict.enabled then noYield else pcall)(cleanup)
+		local success, result: unknown = (if config.strict then noYield else pcall)(cleanup)
 		setCurrentSub(prev)
 		if not success then
 			error(result)
@@ -136,7 +108,7 @@ local function run(effect: Effect | EffectScope, flags: ReactiveFlags): ()
 		local prev = setCurrentSub(effect)
 		local prevTracking = setCurrentTracking(true)
 		startTracking(effect)
-		local success, result: (() -> ())? = (if strict.enabled then noYield else pcall)((effect :: Effect).fn)
+		local success, result: (() -> ())? = (if config.strict then noYield else pcall)((effect :: Effect).fn)
 		setCurrentSub(prev)
 		endTracking(effect)
 		setCurrentTracking(prevTracking)
@@ -194,7 +166,7 @@ local function updateComputed(computed: Computed): boolean
 	local prevTracking = setCurrentTracking(true)
 	startTracking(computed)
 	local oldValue = computed.value
-	local success, result = (if strict.enabled then noYield else pcall)(computed.getter, oldValue)
+	local success, result = (if config.strict then noYield else pcall)(computed.getter, oldValue)
 	setCurrentSub(prevSub)
 	endTracking(computed)
 	setCurrentTracking(prevTracking)
@@ -262,7 +234,7 @@ local function atomGetterSetter<T>(atom: Atom<T>): (...((T) -> T) | T) -> T
 		local newValue = ...
 		if type(newValue) == "function" then
 			local prev = setCurrentSub(nil)
-			local success, result = (if strict.enabled then noYield else pcall)(newValue, oldValue)
+			local success, result = (if config.strict then noYield else pcall)(newValue, oldValue)
 			setCurrentSub(prev)
 			if not success then
 				error(result)
@@ -380,7 +352,7 @@ local function effect(fn: () -> ...(() -> ())?): () -> ()
 	end
 	local prev = setCurrentSub(self)
 	local prevTracking = setCurrentTracking(true)
-	local success, result: (() -> ())? = (if strict.enabled then noYield else pcall)(fn)
+	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
 	setCurrentSub(prev)
 	setCurrentTracking(prevTracking)
 	if not success then
@@ -401,7 +373,7 @@ local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> 
 	end
 	local prevSub = setCurrentSub(nil)
 	local prevScope = setCurrentScope(self)
-	local success, result: (() -> ())? = (if strict.enabled then noYield else pcall)(fn)
+	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
 	setCurrentScope(prevScope)
 	setCurrentSub(prevSub)
 	if not success then

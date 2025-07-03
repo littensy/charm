@@ -8,11 +8,11 @@ local cleanup = Vide.cleanup
 --- Subscribes to the state of an atom or selector. Returns a source that
 --- updates when the state changes.
 ---
---- @param selector The atom or selector to subscribe to.
+--- @param callback The atom or selector to subscribe to.
 --- @return The reactive source.
-local function useAtom<State>(selector: () -> State): () -> State
-	local state = source(selector())
-	cleanup(subscribe(selector, state))
+local function useAtom<State>(callback: () -> State): () -> State
+	local state = source(callback())
+	cleanup(subscribe(callback, state))
 	return state
 end
 

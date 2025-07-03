@@ -1,6 +1,8 @@
 local Charm = require("../Charm")
 local validate = require("./validate")
 
+local flags = Charm.flags
+
 --- A special symbol that denotes the absence of a value. Used to represent
 --- deleted values in patches.
 local None = { __none = "__none" }
@@ -63,7 +65,7 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serial
 		patches = stringifySparseArray(patches)
 	end
 
-	if serialize and Charm.strict.enabled then
+	if serialize and flags.strict then
 		for key, value in next, patches do
 			validate(value, key)
 		end
