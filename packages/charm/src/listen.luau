@@ -1,5 +1,5 @@
 local core = require("./core")
-local peek = require("./peek")
+local untracked = require("./untracked")
 
 local computed = core.computed
 local effect = core.effect
@@ -19,7 +19,7 @@ local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, d
 	dispose = effect(function()
 		local previous = current
 		current = tracked()
-		peek(listener, current, previous, dispose)
+		untracked(listener, current, previous, dispose)
 	end)
 
 	if disposed then

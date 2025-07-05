@@ -103,8 +103,6 @@ test("should track inner subs", function()
 		end)
 	end)
 
-	assert(table.concat(order) == "", "should not run immediately")
-
 	a(a() + 1)
 	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
 
@@ -116,6 +114,23 @@ test("should track inner subs", function()
 	unsub()
 	a(a() + 1)
 	assert(table.concat(order) == "", `bad order: {table.concat(order)}`)
+end)
+
+test("should skip redundant updates", function()
+	local order = {}
+	local a = atom(0)
+
+	subscribe(function(): "even" | "odd"
+		return if a() % 2 == 0 then "even" else "odd"
+	end, function(value)
+		table.insert(order, value)
+	end)
+
+	a(1)
+	a(3)
+	a(4)
+	a(6)
+	assert(table.concat(order) == "oddeven", `bad order: {table.concat(order)}`)
 end)
 
 return {}

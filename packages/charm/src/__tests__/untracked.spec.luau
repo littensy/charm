@@ -5,27 +5,28 @@ local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
 local untracked = Charm.untracked
-local onCleanup = Charm.onCleanup
 local test = suite.test
 
-test("should run detached", function()
+test("should not run detached", function()
 	local a = atom(1)
 	local spyCalls = 0
 
 	effect(function()
 		a()
 		untracked(function()
-			onCleanup(function()
-				spyCalls += 1
-			end, true)
+			effect(function()
+				return function()
+					spyCalls += 1
+				end
+			end)
 		end)
 	end)
 
-	assert(spyCalls == 0, "should not be called")
+	assert(spyCalls == 0, "should not be called yet")
 	a(2)
-	assert(spyCalls == 0, "rerun should not call cleanup")
+	assert(spyCalls == 1, "should be called once")
 	a(3)
-	assert(spyCalls == 0, "rerun should not call cleanup")
+	assert(spyCalls == 2, "should be called twice")
 end)
 
 test("should block tracking inside effects", function()

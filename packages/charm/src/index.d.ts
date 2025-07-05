@@ -12,6 +12,7 @@ export type Equals<T> = (current: T, incoming: T) => boolean;
 
 export const flags: {
 	strict: boolean;
+	frozen: boolean;
 };
 
 export function atom<T>(value: T, equals?: Equals<T>): Atom<T>;
@@ -63,6 +64,14 @@ export function batched<Args extends any[], Result>(
 	...args: Args
 ): (...args: Args) => Result;
 
-export function peek<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
-
 export function untracked<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+
+/**
+ * @deprecated Use `batched()` instead.
+ */
+export const batch: typeof batched;
+
+/**
+ * @deprecated Use `untracked()` instead.
+ */
+export const peek: typeof untracked;

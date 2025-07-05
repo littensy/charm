@@ -1,3 +1,7 @@
+-- Adapted from Alien Signals
+-- https://github.com/stackblitz/alien-signals
+-- https://github.com/Nicell/alien-signals-luau
+
 local config = require("./flags")
 local system = require("./system")
 local utils = require("./utils")
@@ -8,6 +12,7 @@ export type Link = system.Link
 
 local ReactiveFlags = system.ReactiveFlags
 local createReactiveSystem = system.createReactiveSystem
+local deepFreeze = utils.deepFreeze
 local noYield = utils.noYield
 
 local NONE = 0b0000000
@@ -211,6 +216,9 @@ end
 local function writeAtom<T>(atom: Atom<T>, oldValue: T, newValue: T): T
 	local equals = atom.equals
 	if if equals then not equals(oldValue, newValue :: T) else oldValue ~= newValue then
+		if config.frozen then
+			deepFreeze(newValue)
+		end
 		atom.value = newValue
 		atom.flags = bit32.bor(MUTABLE, DIRTY)
 		local subs = atom.subs
@@ -323,6 +331,9 @@ local function unwatched(node: Atom | Computed | Effect | EffectScope)
 end
 
 local function atom<T>(initialValue: T, equals: ((T, T) -> boolean)?): (...((T) -> T) | T) -> T
+	if config.frozen then
+		deepFreeze(initialValue)
+	end
 	return atomGetterSetter({
 		previousValue = initialValue,
 		value = initialValue,

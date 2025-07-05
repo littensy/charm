@@ -1,8 +1,9 @@
 local core = require("../../core")
 local suite = require("../../../../../test/suite")
 
-local computed = core.computed
 local atom = core.atom
+local computed = core.computed
+local effect = core.effect
 local test = suite.test
 
 test("should correctly propagate changes through computed core", function()
@@ -78,6 +79,29 @@ test("should not update if the atom value is reverted", function()
 	src(0)
 	c1()
 	assert(times == 1, "computed ran when it should not")
+end)
+
+test("should accept equality function", function()
+	local calls = {}
+	local src = atom(0)
+	local c1 = computed(function()
+		return src()
+	end, function(current, incoming)
+		return current == incoming or incoming % 2 == 1
+	end)
+
+	effect(function()
+		table.insert(calls, c1())
+	end)
+
+	src(2)
+	src(3)
+	assert(c1() == 2, "should skip odd value")
+
+	src(4)
+	src(5)
+	assert(c1() == 4, "should skip odd value")
+	assert(table.concat(calls) == "024", `should only call on even updates, got {table.concat(calls)}`)
 end)
 
 return {}

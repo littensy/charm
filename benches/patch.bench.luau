@@ -1,4 +1,6 @@
-local CharmSync = require("../packages/charm-sync/src")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local CharmSync = require(ReplicatedStorage.packages["charm-sync"].src)
 
 local patch = CharmSync.patch
 
