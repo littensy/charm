@@ -32,7 +32,9 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 			if currentData[key] ~= nil then
 				continue
 			end
+
 			local cachedKey = keyCache[key]
+
 			if cachedKey then
 				currentOutput = if currentOutput == previousOutput then table.clone(currentOutput) else currentOutput
 				currentOutput[cachedKey] = nil
@@ -44,7 +46,9 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 			if value == previousData[key] then
 				continue
 			end
+
 			local valueOut, keyOut = map(value, key)
+
 			if currentOutput[keyOut] ~= valueOut then
 				currentOutput = if currentOutput == previousOutput then table.clone(currentOutput) else currentOutput
 				currentOutput[keyOut] = valueOut

@@ -57,14 +57,14 @@ export function observe<V, K extends Key>(
 	observer: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 
-export function onCleanup(callback: Cleanup, failSilently?: boolean): void;
-
 export function batched<Args extends any[], Result>(
 	callback: (...args: Args) => Result,
 	...args: Args
 ): (...args: Args) => Result;
 
 export function untracked<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+
+export function onCleanup(callback: Cleanup, failSilently?: boolean): void;
 
 /**
  * @deprecated Use `batched()` instead.

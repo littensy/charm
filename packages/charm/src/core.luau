@@ -52,12 +52,14 @@ local startTracking: (sub: ReactiveNode) -> ()
 local shallowPropagate: (link: Link) -> ()
 
 local batchDepth = 0
-local queuedEffects: { Effect | EffectScope? } = {}
+
+local queuedEffects: { Effect } = {}
 local queuedEffectsLength = 0
 local notifyIndex = 0
-local activeSubTracking = true
-local activeSub: ReactiveNode?
+
 local activeScope: Effect | EffectScope?
+local activeSub: ReactiveNode?
+local activeSubWatching = true
 
 local function getCurrentSub(): ReactiveNode?
 	return activeSub
@@ -79,16 +81,16 @@ local function setCurrentScope(scope: Effect | EffectScope?)
 	return prevScope
 end
 
-local function setCurrentTracking(tracking: boolean): boolean
-	local prevSubTracking = activeSubTracking
-	activeSubTracking = tracking
-	return prevSubTracking
+local function setCurrentWatching(watching: boolean): boolean
+	local prevSubWatching = activeSubWatching
+	activeSubWatching = watching
+	return prevSubWatching
 end
 
 local function runCleanups(effect: EffectScope)
 	for _, cleanup in effect.cleanups do
 		local prev = setCurrentSub(nil)
-		local success, result: unknown = (if config.strict then noYield else pcall)(cleanup)
+		local success, result: any = (config.strict and noYield or pcall)(cleanup)
 		setCurrentSub(prev)
 		if not success then
 			error(result)
@@ -98,7 +100,7 @@ local function runCleanups(effect: EffectScope)
 end
 
 local function onCleanup(cleanup: () -> (), failSilently: boolean?)
-	if activeSub then
+	if activeSub and (activeSub :: Effect).cleanups then
 		table.insert((activeSub :: Effect).cleanups, cleanup)
 	elseif activeScope then
 		table.insert(activeScope.cleanups, cleanup)
@@ -107,16 +109,16 @@ local function onCleanup(cleanup: () -> (), failSilently: boolean?)
 	end
 end
 
-local function run(effect: Effect | EffectScope, flags: ReactiveFlags): ()
+local function run(effect: Effect, flags: ReactiveFlags): ()
 	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(effect.deps :: Link, effect)) then
 		runCleanups(effect)
 		local prev = setCurrentSub(effect)
-		local prevTracking = setCurrentTracking(true)
+		local prevTracking = setCurrentWatching(true)
 		startTracking(effect)
-		local success, result: (() -> ())? = (if config.strict then noYield else pcall)((effect :: Effect).fn)
+		local success, result: (() -> ())? = (config.strict and noYield or pcall)(effect.fn)
 		setCurrentSub(prev)
 		endTracking(effect)
-		setCurrentTracking(prevTracking)
+		setCurrentWatching(prevTracking)
 		if not success then
 			error(result)
 		elseif result then
@@ -124,7 +126,7 @@ local function run(effect: Effect | EffectScope, flags: ReactiveFlags): ()
 		end
 		return
 	elseif bit32.btest(flags, PENDING) then
-		(effect :: Effect).flags = bit32.band(flags, bit32.bnot(PENDING))
+		effect.flags = bit32.band(flags, bit32.bnot(PENDING))
 	end
 	local link = effect.deps
 	while link do
@@ -142,7 +144,7 @@ end
 local function flush(): ()
 	while notifyIndex < queuedEffectsLength do
 		notifyIndex += 1
-		local effect = queuedEffects[notifyIndex] :: Effect
+		local effect = queuedEffects[notifyIndex]
 		queuedEffects[notifyIndex] = nil
 		effect.flags = bit32.band(effect.flags, bit32.bnot(QUEUED))
 		run(effect, effect.flags)
@@ -168,13 +170,13 @@ end
 
 local function updateComputed(computed: Computed): boolean
 	local prevSub = setCurrentSub(computed)
-	local prevTracking = setCurrentTracking(true)
+	local prevWatching = setCurrentWatching(true)
 	startTracking(computed)
 	local oldValue = computed.value
-	local success, result = (if config.strict then noYield else pcall)(computed.getter, oldValue)
+	local success, result = (config.strict and noYield or pcall)(computed.getter, oldValue)
 	setCurrentSub(prevSub)
 	endTracking(computed)
-	setCurrentTracking(prevTracking)
+	setCurrentWatching(prevWatching)
 	if not success then
 		error(result)
 	end
@@ -207,7 +209,7 @@ local function readAtom<T>(atom: Atom<T>): T
 			end
 		end
 	end
-	if activeSub and activeSubTracking then
+	if activeSub and activeSubWatching then
 		link(atom, activeSub)
 	end
 	return value
@@ -215,7 +217,7 @@ end
 
 local function writeAtom<T>(atom: Atom<T>, oldValue: T, newValue: T): T
 	local equals = atom.equals
-	if if equals then not equals(oldValue, newValue :: T) else oldValue ~= newValue then
+	if if equals then not equals(oldValue, newValue) else oldValue ~= newValue then
 		if config.frozen then
 			deepFreeze(newValue)
 		end
@@ -242,7 +244,7 @@ local function atomGetterSetter<T>(atom: Atom<T>): (...((T) -> T) | T) -> T
 		local newValue = ...
 		if type(newValue) == "function" then
 			local prev = setCurrentSub(nil)
-			local success, result = (if config.strict then noYield else pcall)(newValue, oldValue)
+			local success, result = (config.strict and noYield or pcall)(newValue, oldValue)
 			setCurrentSub(prev)
 			if not success then
 				error(result)
@@ -268,10 +270,8 @@ local function computedGetter<T>(computed: Computed<T>): () -> T
 		elseif bit32.btest(flags, PENDING) then
 			computed.flags = bit32.band(flags, bit32.bnot(PENDING))
 		end
-		if activeSub then
-			if activeSubTracking then
-				link(computed, activeSub)
-			end
+		if activeSub and activeSubWatching then
+			link(computed, activeSub)
 		elseif activeScope then
 			link(computed, activeScope)
 		end
@@ -279,7 +279,7 @@ local function computedGetter<T>(computed: Computed<T>): () -> T
 	end
 end
 
-local function effectStop(self: Effect | EffectScope): () -> ()
+local function effectStop(self: EffectScope): () -> ()
 	return function()
 		local dep = self.deps
 		while dep do
@@ -289,38 +289,38 @@ local function effectStop(self: Effect | EffectScope): () -> ()
 		if sub then
 			unlink(sub)
 		end
-		(self :: Effect).flags = NONE
+		self.flags = NONE
 		runCleanups(self)
 	end
 end
 
-local function update(atom: Atom | Computed): boolean
+local function update(atom: ReactiveNode): boolean
 	if (atom :: Computed).getter then
 		return updateComputed(atom :: Computed)
 	else
-		return updateAtom(atom :: Atom, atom.value)
+		return updateAtom(atom :: Atom, (atom :: Atom).value)
 	end
 end
 
-local function notify(effect: Effect | EffectScope)
+local function notify(effect: ReactiveNode)
 	local flags = effect.flags
 	if not bit32.btest(flags, QUEUED) then
-		(effect :: Effect).flags = bit32.bor(flags, QUEUED)
+		effect.flags = bit32.bor(flags, QUEUED)
 		local subs = effect.subs
 		if subs then
 			notify(subs.sub :: Effect)
 		else
 			queuedEffectsLength += 1
-			queuedEffects[queuedEffectsLength] = effect
+			queuedEffects[queuedEffectsLength] = effect :: Effect
 		end
 	end
 end
 
-local function unwatched(node: Atom | Computed | Effect | EffectScope)
+local function unwatched(node: ReactiveNode)
 	if (node :: Computed).getter then
 		local toRemove = node.deps
 		if toRemove then
-			(node :: Computed).flags = bit32.bor(MUTABLE, DIRTY)
+			node.flags = bit32.bor(MUTABLE, DIRTY)
 			repeat
 				toRemove = unlink(toRemove, node)
 			until not toRemove
@@ -362,10 +362,10 @@ local function effect(fn: () -> ...(() -> ())?): () -> ()
 		link(self, activeScope)
 	end
 	local prev = setCurrentSub(self)
-	local prevTracking = setCurrentTracking(true)
-	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
+	local prevWatching = setCurrentWatching(true)
+	local success, result: (() -> ())? = (config.strict and noYield or pcall)(fn)
 	setCurrentSub(prev)
-	setCurrentTracking(prevTracking)
+	setCurrentWatching(prevWatching)
 	if not success then
 		error(result)
 	elseif result then
@@ -384,7 +384,7 @@ local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> 
 	end
 	local prevSub = setCurrentSub(nil)
 	local prevScope = setCurrentScope(self)
-	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
+	local success, result: (() -> ())? = (config.strict and noYield or pcall)(fn)
 	setCurrentScope(prevScope)
 	setCurrentSub(prevSub)
 	if not success then
@@ -396,9 +396,9 @@ local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> 
 end
 
 local reactiveSystem = createReactiveSystem({
-	update = update :: (ReactiveNode) -> boolean,
-	notify = notify :: (ReactiveNode) -> (),
-	unwatched = unwatched :: (ReactiveNode) -> (),
+	update = update,
+	notify = notify,
+	unwatched = unwatched,
 })
 
 link = reactiveSystem.link
@@ -416,7 +416,7 @@ return {
 	setCurrentSub = setCurrentSub,
 	getCurrentScope = getCurrentScope,
 	setCurrentScope = setCurrentScope,
-	setCurrentTracking = setCurrentTracking,
+	setCurrentWatching = setCurrentWatching,
 	onCleanup = onCleanup,
 	getBatchDepth = getBatchDepth,
 	startBatch = startBatch,
