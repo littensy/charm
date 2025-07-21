@@ -1,24 +1,29 @@
 {
 	"private": true,
 	"scripts": {
+		"test": "lune run test/spec.server.luau",
 		"build": "sh bin/build.sh",
 		"check": "sh bin/check.sh",
-		"wally": "sh bin/install.sh",
 		"publish:npm": "pnpm publish -r --access public",
 		"publish:wally": "pnpm -r --workspace-concurrency 1 publish:wally"
 	},
+	"packageManager": "pnpm@10.12.4",
 	"devDependencies": {
+		"@rbxts-js/react": "17.1.20-ts.1",
+		"@rbxts-js/react-roblox": "17.1.20-ts.1",
 		"@rbxts/compiler-types": "3.0.0-types.0",
-		"@rbxts/types": "^1.0.811",
-		"@typescript-eslint/eslint-plugin": "^7.18.0",
-		"@typescript-eslint/parser": "^7.18.0",
+		"@rbxts/react": "17.3.0-alpha.1",
+		"@rbxts/react-roblox": "17.3.0-alpha.1",
+		"@rbxts/types": "^1.0.861",
+		"@rbxts/vide": "^0.5.7",
+		"@typescript-eslint/eslint-plugin": "^8.35.1",
+		"@typescript-eslint/parser": "^8.35.1",
 		"eslint": "^8.57.1",
-		"eslint-config-prettier": "^9.1.0",
-		"eslint-plugin-prettier": "^5.2.1",
+		"eslint-config-prettier": "^10.1.5",
+		"eslint-plugin-prettier": "^5.5.1",
 		"eslint-plugin-roblox-ts": "^0.0.36",
-		"prettier": "^3.3.3",
+		"prettier": "^3.6.2",
 		"roblox-ts": "^3.0.0",
-		"typescript": "~5.5.4"
-	},
-	"packageManager": "pnpm@9.15.4"
+		"typescript": "^5.8.3"
+	}
 }

@@ -1,49 +1,51 @@
-local store = require(script.Parent.store)
-local subscribe = require(script.Parent.subscribe)
-local types = require(script.Parent.types)
-type Selector<T> = types.Selector<T>
+local core = require("./core")
 
-local function noop() end
+local effect = core.effect
+local effectScope = core.effectScope
+local onCleanup = core.onCleanup
 
---[=[
-	Creates an instance of `factory` for each item in the atom's state, and
-	cleans up the instance when the item is removed. Returns a cleanup function
-	that unsubscribes all instances.
-	
-	@param callback The atom or selector to observe.
-	@param factory The function that tracks the lifecycle of each item.
-	@return A function that unsubscribes all instances.
-]=]
-local function observe<K, V>(callback: Selector<{ [K]: V }>, factory: (value: V, key: K) -> (() -> ())?): () -> ()
-	local connections: { [K]: () -> () } = {}
+local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
+	local scopes: { [K]: () -> () } = {}
+	local currentItems: { [K]: V } = {}
 
-	local function listener(state: { [K]: V })
-		for key, disconnect in next, connections do
-			if state[key] == nil then
-				connections[key] = nil
-				disconnect()
+	local function updateScopes(currentItems: { [K]: V }, previousItems: { [K]: V })
+		for key in previousItems do
+			local dispose = scopes[key]
+			if currentItems[key] == nil and dispose then
+				dispose()
+				scopes[key] = nil
 			end
 		end
 
-		for key, value in next, state do
-			if not connections[key] then
-				connections[key] = factory(value, key) or noop
+		for key, value in currentItems do
+			if previousItems[key] == nil then
+				scopes[key] = effectScope(function()
+					return observer(value, key)
+				end, true)
 			end
 		end
 	end
 
-	local unsubscribe = subscribe(callback, listener)
+	local function disposeScopes()
+		for _, dispose in scopes do
+			dispose()
+		end
+		table.clear(scopes)
+	end
 
-	store.peek(function(): ()
-		listener(callback())
+	local disposeEffect = effect(function()
+		local previousItems = currentItems
+		currentItems = selector()
+		if currentItems ~= previousItems then
+			updateScopes(currentItems, previousItems)
+		end
 	end)
 
+	onCleanup(disposeScopes, true)
+
 	return function()
-		unsubscribe()
-		for _, disconnect in next, connections do
-			disconnect()
-		end
-		table.clear(connections)
+		disposeEffect()
+		disposeScopes()
 	end
 end
 

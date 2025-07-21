@@ -1,0 +1,17 @@
+[package]
+name = "littensy/vide-charm"
+version = "0.3.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+exclude = [
+	"node_modules",
+	"src/__tests__",
+	"src/index.d.ts",
+	"package.json",
+	"Vide.luau",
+	"Charm.luau",
+]
+
+[dependencies]
+Charm = "littensy/charm@^0.10"
+Vide = "centau/vide@^0.3"

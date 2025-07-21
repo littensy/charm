@@ -1,27 +1,24 @@
-local validate = require(script.Parent.validate)
+local Charm = require("../Charm")
+local validate = require("./validate")
 
-local __DEV__ = _G.__DEV__
+local flags = Charm.flags
 
---[=[
-	A special symbol that denotes the absence of a value. Used to represent
-	deleted values in patches.
-]=]
+--- A special symbol that denotes the absence of a value. Used to represent
+--- deleted values in patches.
 local None = { __none = "__none" }
 
 local function isNone(value: any): boolean
 	return type(value) == "table" and value.__none == "__none"
 end
 
---[=[
-	JSON serialization can drop the last values of a sparse array. For example,
-	`{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. Ambiguity in the
-	serialization of sparse arrays can be resolved by converting them to
-	dictionaries with string keys.
-
-	The `apply` function will convert these dictionaries back into arrays as
-	long as the target array is not sparse. This function ensures that the diff
-	function produces a patch that can be correctly applied.
-]=]
+--- JSON serialization can drop the last values of a sparse array. For example,
+--- `{ [1] = 1, [3] = 3 }` becomes `[1]` in some cases. Ambiguity in the
+--- serialization of sparse arrays can be resolved by converting them to
+--- dictionaries with string keys.
+---
+--- The `apply` function will convert these dictionaries back into arrays as
+--- long as the target array is not sparse. This function ensures that the diff
+--- function produces a patch that can be correctly applied.
 local function stringifySparseArray(object: { any }): { [string | number]: any }
 	local maxn = table.maxn(object)
 
@@ -39,15 +36,13 @@ local function stringifySparseArray(object: { any }): { [string | number]: any }
 	return dictionary
 end
 
---[=[
-	Compares two states and returns a patch that can be applied to the previous
-	state to produce the next state.
-
-	@param prevState The previous state.
-	@param nextState The next state.
-	@param serialize Whether to convert sparse arrays into dictionaries. Defaults to `true`.
-	@returns A patch that can be applied to the previous state.
-]=]
+--- Compares two states and returns a patch that can be applied to the previous
+--- state to produce the next state.
+---
+--- @param prevState The previous state.
+--- @param nextState The next state.
+--- @param serialize Whether to convert sparse arrays into dictionaries. Defaults to `true`.
+--- @returns A patch that can be applied to the previous state.
 local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serialize: boolean?)
 	serialize = serialize ~= false
 
@@ -70,7 +65,7 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serial
 		patches = stringifySparseArray(patches)
 	end
 
-	if serialize and __DEV__ then
+	if serialize and flags.strict then
 		for key, value in next, patches do
 			validate(value, key)
 		end
@@ -79,13 +74,11 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serial
 	return patches
 end
 
---[=[
-	Applies a patch to a state and returns the next state.
-
-	@param state The current state.
-	@param patches The patches to apply.
-	@returns The next state.
-]=]
+--- Applies a patch to a state and returns the next state.
+---
+--- @param state The current state.
+--- @param patches The patches to apply.
+--- @returns The next state.
 local function apply(state: any, patches: any): any
 	if type(patches) == "table" and patches.__none == "__none" then
 		return nil

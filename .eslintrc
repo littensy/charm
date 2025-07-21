@@ -5,7 +5,10 @@
 		"useJSXTextNode": true,
 		"ecmaVersion": 2018,
 		"sourceType": "module",
-		"project": "./tsconfig.json"
+		"project": [
+			"./tsconfig.json",
+			"./examples/ts/tsconfig.json"
+		]
 	},
 	"plugins": [
 		"@typescript-eslint",
@@ -20,7 +23,6 @@
 	],
 	"rules": {
 		"prettier/prettier": "warn",
-		"@typescript-eslint/no-explicit-any": "off",
-		"@typescript-eslint/no-unsafe-declaration-merging": "off"
+		"@typescript-eslint/no-explicit-any": "off"
 	}
 }

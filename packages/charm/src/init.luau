@@ -1,27 +1,36 @@
-local atom = require(script.atom)
-local computed = require(script.computed)
-local effect = require(script.effect)
-local mapped = require(script.mapped)
-local observe = require(script.observe)
-local store = require(script.store)
-local subscribe = require(script.subscribe)
-local types = require(script.types)
+local batched = require("@self/batched")
+local core = require("@self/core")
+local flags = require("@self/flags")
+local listen = require("@self/listen")
+local mapped = require("@self/mapped")
+local observe = require("@self/observe")
+local subscribe = require("@self/subscribe")
+local types = require("@self/types")
+local untracked = require("@self/untracked")
 
-export type Atom<State> = types.Atom<State>
-export type Selector<State> = types.Selector<State>
-export type Molecule<State> = types.Selector<State>
-export type SyncPayload = types.SyncPayload
+export type Atom<T = any> = types.Atom<T>
+export type Selector<T = any> = types.Selector<T>
+
+--- @deprecated Function `batch()` is deprecated, use `batched()` instead.
+local batch = batched
+--- @deprecated Function `peek()` is deprecated, use `untracked()` instead.
+local peek = untracked
 
 return {
-	atom = atom,
-	computed = computed,
-	effect = effect,
+	core = core,
+	flags = flags,
+	atom = core.atom,
+	computed = core.computed,
+	effect = core.effect,
+	effectScope = core.effectScope,
+	onCleanup = core.onCleanup,
+	batched = batched,
+	listen = listen,
 	mapped = mapped,
 	observe = observe,
 	subscribe = subscribe,
-	batch = store.batch,
-	capture = store.capture,
-	isAtom = store.isAtom,
-	notify = store.notify,
-	peek = store.peek,
+	untracked = untracked,
+	-- Temporary aliases for backwards compatibility
+	batch = batch,
+	peek = peek,
 }

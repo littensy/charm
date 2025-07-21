@@ -1,0 +1,10 @@
+{
+	"name": "Packages",
+	"tree": {
+		"$className": "Folder",
+		"Charm": { "$path": "packages/charm/src" },
+		"CharmSync": { "$path": "packages/charm-sync/src" },
+		"ReactCharm": { "$path": "packages/react-charm/src" },
+		"VideCharm": { "$path": "packages/vide-charm/src" }
+	}
+}

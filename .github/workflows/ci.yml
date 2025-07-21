@@ -1,31 +1,24 @@
 name: CI
 
-on:
-  push:
-    branches:
-      - main
-
-  pull_request:
-    branches:
-      - main
+on: [push, pull_request]
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: pnpm/action-setup@v4
         with:
           run_install: true
-
-      - name: Install Rokit
-        uses: CompeyDev/setup-rokit@v0.1.2
-
-      - name: Install Wally dependencies
-        run: pnpm wally
+      - uses: CompeyDev/setup-rokit@v0.1.2
 
       - name: Check code quality
-        run: pnpm check
+        run: sh bin/check.sh
+
+      - name: Run tests
+        run: lune run test/spec.server.luau
 
       - name: Build models
-        run: pnpm build
+        run: sh bin/build.sh

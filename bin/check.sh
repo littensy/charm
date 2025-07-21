@@ -1,29 +1,19 @@
-curl -o bin/roblox.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.lua
+curl -o bin/roblox.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.luau
 
 rojo sourcemap -o sourcemap.json
 
-check() {
-	echo "Checking $1"
+luau-lsp analyze \
+	--defs=bin/roblox.d.luau \
+	--flag:LuauFixIndexerSubtypingOrdering=true \
+	--flag:LuauInstantiateInSubtyping=true \
+	--sourcemap=sourcemap.json \
+	--ignore="**/node_modules/**" \
+	packages test benches
 
-	luau-lsp analyze \
-		--defs=bin/roblox.d.luau \
-		--defs=bin/testez.d.luau \
-		--flag:LuauFixIndexerSubtypingOrdering=true \
-		--flag:LuauInstantiateInSubtyping=true \
-		--sourcemap=sourcemap.json \
-		--ignore="**/_Index/**" \
-		$1
+selene packages test benches
 
-	selene $1
-	stylua --check $1
-}
+stylua --check packages test benches
 
-eslint packages
-
-for i in packages/*/src; do
-	check $i
-done
-
-check tests
+pnpm eslint packages
 
 rm bin/roblox.d.luau

@@ -1,38 +1,31 @@
-local Charm = require(script.Parent.Parent.Charm)
-local patch = require(script.Parent.patch)
-local types = require(script.Parent.types)
+local Charm = require("../Charm")
+local patch = require("./patch")
+local types = require("./types")
+
 type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
 type ClientOptions = {
-	--[=[
-		The atoms to synchronize with the server.
-	]=]
+	--- The atoms to synchronize with the server.
 	atoms: AtomMap,
-	--[=[
-		Whether to ignore patches sent before the client has been hydrated.
-		Default is `true`.
-	]=]
+	--- Whether to ignore patches sent before the client has been hydrated.
+	--- Default is `true`.
 	ignoreUnhydrated: boolean?,
 }
 
 type ClientSyncer = {
-	--[=[
-		Applies a patch or initializes the state of the atoms with the given
-		payload from the server.
-		
-		@param ...payloads The patches or hydration payloads to apply.
-	]=]
+	--- Applies a patch or initializes the state of the atoms with the given
+	--- payload from the server.
+	---
+	--- @param ...payloads The patches or hydration payloads to apply.
 	sync: (self: ClientSyncer, ...SyncPayload) -> (),
 }
 
---[=[
-	Creates a `ClientSyncer` object that receives patches from the server and
-	applies them to the local state.
-	
-	@param options The atoms to synchronize with the server.
-	@return A `ClientSyncer` object.
-]=]
+--- Creates a `ClientSyncer` object that receives patches from the server and
+--- applies them to the local state.
+---
+--- @param options The atoms to synchronize with the server.
+--- @return A `ClientSyncer` object.
 local function client(options: ClientOptions): ClientSyncer
 	local atoms = options.atoms
 	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
@@ -43,7 +36,7 @@ local function client(options: ClientOptions): ClientSyncer
 	local function hydrate(state: { [string | number]: any })
 		hydrated = true
 
-		for key, value in next, state do
+		for key, value in state do
 			local atom = atoms[key]
 			atom(value)
 		end
@@ -52,13 +45,13 @@ local function client(options: ClientOptions): ClientSyncer
 	local function apply(data: { [string | number]: any })
 		local target = {}
 
-		for key, atom in next, atoms do
+		for key, atom in atoms do
 			target[key] = atom()
 		end
 
 		target = patch.apply(target, data)
 
-		for key, atom in next, atoms do
+		for key, atom in atoms do
 			atom(target[key])
 		end
 	end
@@ -67,7 +60,7 @@ local function client(options: ClientOptions): ClientSyncer
 		for index = 1, select("#", ...) do
 			local payload: SyncPayload = select(index, ...)
 
-			Charm.batch(function()
+			Charm.batched(function()
 				if payload.type == "init" then
 					hydrate(payload.data)
 				elseif not ignoreUnhydrated or hydrated then

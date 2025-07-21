@@ -1,71 +1,63 @@
-local atom = require(script.Parent.atom)
-local store = require(script.Parent.store)
-local subscribe = require(script.Parent.subscribe)
-local types = require(script.Parent.types)
-type Atom<T> = types.Atom<T>
-type Selector<T> = types.Selector<T>
+local core = require("./core")
 
-type Map =
-	(<K0, V0, K1, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1)) -> Selector<{ [K1]: V1 }>)
-	& (<K0, V0, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> V1?) -> Selector<{ [K0]: V1 }>)
-	& (<K0, V0, K1, V1>(fn: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)) -> Selector<{ [K1]: V1 }>)
+local computed = core.computed
+local setCurrentSub = core.setCurrentSub
 
---[=[
-	Maps each entry in the atom's state to a new key-value pair. If the `mapper`
-	function returns `undefined`, the entry is omitted from the resulting map.
-	When the atom changes, the `mapper` is called for each entry in the state
-	to compute the new state.
-	
-	@param callback The atom or selector to map.
-	@param mapper The function that maps each entry.
-	@return A new atom with the mapped state.
-]=]
-local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: (V0, K0) -> (V1?, K1?)): Selector<{ [K1]: V1 }>
-	local mappedAtom = atom({})
-	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
-	local prevMappedItems: { [K1]: V1 } = {}
-	local unsubscribe
+type Mapped =
+	& (<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
+	& (<K, VI, VO>(selector: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO })
 
-	local function listener(items: { [K0]: V0 })
-		local mappedAtom = mappedAtomRef.current
+local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
+	local currentData: { [KI]: VI } = {}
+	local keyCache: { [KI]: KO } = {}
 
-		if not mappedAtom then
-			return unsubscribe()
+	local function map(value: VI, key: KI): (VO, KO)
+		local currentSub = setCurrentSub(nil)
+		local success, valueOut, keyOut = pcall(mapper, value, key)
+		setCurrentSub(currentSub)
+
+		if not success then
+			error(`mapped() transform function failed: {valueOut}`)
 		end
 
-		local mappedItems = table.clone(mappedAtom())
-		local mappedKeys = {}
-
-		-- TODO: Only call mapper if the item has changed.
-		for key, item in next, items do
-			local newItem, newKey = mapper(item, key)
-			if newKey == nil then
-				newKey = key :: any
-			end
-			if mappedItems[newKey :: K1] ~= newItem then
-				mappedItems[newKey :: K1] = newItem :: V1
-			else
-				mappedKeys[newKey] = key
-			end
-		end
-
-		for key in next, prevMappedItems do
-			if mappedKeys[key] == nil and mappedItems[key] == prevMappedItems[key] then
-				mappedItems[key] = nil
-			end
-		end
-
-		prevMappedItems = mappedItems
-		mappedAtom(mappedItems)
+		return valueOut, if keyOut == nil then key else keyOut :: any
 	end
 
-	unsubscribe = subscribe(callback, listener)
+	return computed(function(previousOutput)
+		local currentOutput: { [KO]: VO } = previousOutput or {}
+		local previousData = currentData
+		currentData = selector()
 
-	store.peek(function(): ()
-		listener(callback())
+		for key in previousData do
+			if currentData[key] ~= nil then
+				continue
+			end
+
+			local cachedKey = keyCache[key]
+
+			if cachedKey then
+				currentOutput = if currentOutput == previousOutput then table.clone(currentOutput) else currentOutput
+				currentOutput[cachedKey] = nil
+				keyCache[key] = nil
+			end
+		end
+
+		for key, value in currentData do
+			if value == previousData[key] then
+				continue
+			end
+
+			local valueOut, keyOut = map(value, key)
+
+			if currentOutput[keyOut] ~= valueOut then
+				currentOutput = if currentOutput == previousOutput then table.clone(currentOutput) else currentOutput
+				currentOutput[keyOut] = valueOut
+				keyCache[key] = keyOut
+			end
+		end
+
+		return currentOutput
 	end)
-
-	return mappedAtom
 end
 
-return mapped :: Map
+return mapped :: Mapped
