@@ -86,7 +86,7 @@ declare namespace Charm {
 	 * @param callback The function to run.
 	 * @returns A function that unsubscribes the callback.
 	 */
-	function effect(callback: () => Cleanup | void): Cleanup;
+	function effect(callback: (cleanup: Cleanup) => Cleanup | void): Cleanup;
 
 	/**
 	 * Returns the result of the function without subscribing to changes. If a
