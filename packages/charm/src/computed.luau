@@ -18,13 +18,18 @@ local function computed<T>(callback: Selector<T>, options: AtomOptions<T>?): Sel
 	local computedAtom = atom(state, options)
 	local computedRef = setmetatable({ current = computedAtom }, { __mode = "v" })
 
+	local pauseListening = false
 	local function listener()
+		if pauseListening then
+			return
+		end
+
 		local computedAtom = computedRef.current
 
 		if computedAtom then
-			store.disconnect(dependencies, listener)
+			pauseListening = true
 			dependencies, state = store.capture(callback)
-			store.connect(dependencies, listener, computedAtom)
+			pauseListening = false
 			computedAtom(state)
 		end
 	end
