@@ -1,5 +1,5 @@
 std = "selene_defs"
-exclude = ["**/node_modules/**"]
+exclude = ["*/node_modules/*"]
 
 [lints]
 global_usage = "allow"

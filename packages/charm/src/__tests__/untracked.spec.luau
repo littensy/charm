@@ -105,4 +105,26 @@ test("should block tracking inside computed atoms", function()
 	assert(c() == 3, "c should be 3")
 end)
 
+test("should track outside untracked", function()
+	local a = atom(1)
+	local b = atom(2)
+	local c = atom(3)
+	local spyCalls = 0
+
+	effect(function()
+		a()
+		untracked(c)
+		b()
+		spyCalls += 1
+	end)
+
+	assert(spyCalls == 1, "should be called once")
+	a(10)
+	assert(spyCalls == 2, "should be called twice")
+	b(20)
+	assert(spyCalls == 3, "should be called three times")
+	c(30)
+	assert(spyCalls == 3, "should not run on c change")
+end)
+
 return {}

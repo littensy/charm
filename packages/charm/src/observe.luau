@@ -3,6 +3,8 @@ local core = require("./core")
 local effect = core.effect
 local effectScope = core.effectScope
 local onCleanup = core.onCleanup
+local startBatch = core.startBatch
+local endBatch = core.endBatch
 
 local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local scopes: { [K]: () -> () } = {}
@@ -18,7 +20,7 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 		end
 
 		for key, value in currentItems do
-			if previousItems[key] == nil then
+			if previousItems[key] == nil and scopes[key] == nil then
 				scopes[key] = effectScope(function()
 					return observer(value, key)
 				end, true)
@@ -37,7 +39,9 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 		local previousItems = currentItems
 		currentItems = selector()
 		if currentItems ~= previousItems then
+			startBatch()
 			updateScopes(currentItems, previousItems)
+			endBatch()
 		end
 	end)
 

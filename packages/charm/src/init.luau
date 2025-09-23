@@ -1,3 +1,5 @@
+--!nolint DeprecatedApi
+
 local batched = require("@self/batched")
 local core = require("@self/core")
 local flags = require("@self/flags")

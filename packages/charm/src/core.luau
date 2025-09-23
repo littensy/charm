@@ -21,14 +21,16 @@ local WATCHING = 0b0000010
 local DIRTY = 0b0010000
 local PENDING = 0b0100000
 local QUEUED = 0b1000000
+local UNTRACKED = 0b10000000
 
 type EffectScope = ReactiveNode & {
 	cleanups: { () -> () },
 }
 
 type Effect = ReactiveNode & {
-	fn: () -> ...(() -> ())?,
+	fn: (dispose: () -> ()) -> ...(() -> ())?,
 	cleanups: { () -> () },
+	cleanup: () -> (),
 }
 
 type Computed<T = any> = ReactiveNode & {
@@ -59,7 +61,6 @@ local notifyIndex = 0
 
 local activeScope: Effect | EffectScope?
 local activeSub: ReactiveNode?
-local activeSubWatching = true
 
 local function getCurrentSub(): ReactiveNode?
 	return activeSub
@@ -81,16 +82,10 @@ local function setCurrentScope(scope: Effect | EffectScope?)
 	return prevScope
 end
 
-local function setCurrentWatching(watching: boolean): boolean
-	local prevSubWatching = activeSubWatching
-	activeSubWatching = watching
-	return prevSubWatching
-end
-
 local function runCleanups(effect: EffectScope)
 	for _, cleanup in effect.cleanups do
 		local prev = setCurrentSub(nil)
-		local success, result: any = (config.strict and noYield or pcall)(cleanup)
+		local success, result: any = (if config.strict then noYield else pcall)(cleanup)
 		setCurrentSub(prev)
 		if not success then
 			error(result)
@@ -113,12 +108,10 @@ local function run(effect: Effect, flags: ReactiveFlags): ()
 	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(effect.deps :: Link, effect)) then
 		runCleanups(effect)
 		local prev = setCurrentSub(effect)
-		local prevTracking = setCurrentWatching(true)
 		startTracking(effect)
-		local success, result: (() -> ())? = (config.strict and noYield or pcall)(effect.fn)
+		local success, result: (() -> ())? = (if config.strict then noYield else pcall)(effect.fn, effect.cleanup)
 		setCurrentSub(prev)
 		endTracking(effect)
-		setCurrentWatching(prevTracking)
 		if not success then
 			error(result)
 		elseif result then
@@ -170,13 +163,11 @@ end
 
 local function updateComputed(computed: Computed): boolean
 	local prevSub = setCurrentSub(computed)
-	local prevWatching = setCurrentWatching(true)
 	startTracking(computed)
 	local oldValue = computed.value
-	local success, result = (config.strict and noYield or pcall)(computed.getter, oldValue)
+	local success, result = (if config.strict then noYield else pcall)(computed.getter, oldValue)
 	setCurrentSub(prevSub)
 	endTracking(computed)
-	setCurrentWatching(prevWatching)
 	if not success then
 		error(result)
 	end
@@ -209,7 +200,7 @@ local function readAtom<T>(atom: Atom<T>): T
 			end
 		end
 	end
-	if activeSub and activeSubWatching then
+	if activeSub and not bit32.btest(activeSub.flags, UNTRACKED) then
 		link(atom, activeSub)
 	end
 	return value
@@ -244,7 +235,7 @@ local function atomGetterSetter<T>(atom: Atom<T>): (...((T) -> T) | T) -> T
 		local newValue = ...
 		if type(newValue) == "function" then
 			local prev = setCurrentSub(nil)
-			local success, result = (config.strict and noYield or pcall)(newValue, oldValue)
+			local success, result = (if config.strict then noYield else pcall)(newValue, oldValue)
 			setCurrentSub(prev)
 			if not success then
 				error(result)
@@ -270,7 +261,7 @@ local function computedGetter<T>(computed: Computed<T>): () -> T
 		elseif bit32.btest(flags, PENDING) then
 			computed.flags = bit32.band(flags, bit32.bnot(PENDING))
 		end
-		if activeSub and activeSubWatching then
+		if activeSub and not bit32.btest(activeSub.flags, UNTRACKED) then
 			link(computed, activeSub)
 		elseif activeScope then
 			link(computed, activeScope)
@@ -350,28 +341,28 @@ local function computed<T>(getter: (previousValue: T?) -> T, equals: ((T, T) -> 
 	})
 end
 
-local function effect(fn: () -> ...(() -> ())?): () -> ()
+local function effect(fn: (dispose: () -> ()) -> ...(() -> ())?): () -> ()
 	local self: Effect = {
 		fn = fn,
 		flags = WATCHING,
 		cleanups = {},
+		cleanup = nil :: any,
 	}
+	self.cleanup = effectStop(self)
 	if activeSub then
 		link(self, activeSub)
 	elseif activeScope then
 		link(self, activeScope)
 	end
 	local prev = setCurrentSub(self)
-	local prevWatching = setCurrentWatching(true)
-	local success, result: (() -> ())? = (config.strict and noYield or pcall)(fn)
+	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn, self.cleanup)
 	setCurrentSub(prev)
-	setCurrentWatching(prevWatching)
 	if not success then
 		error(result)
 	elseif result then
 		table.insert(self.cleanups, result)
 	end
-	return effectStop(self)
+	return self.cleanup
 end
 
 local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
@@ -384,7 +375,7 @@ local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> 
 	end
 	local prevSub = setCurrentSub(nil)
 	local prevScope = setCurrentScope(self)
-	local success, result: (() -> ())? = (config.strict and noYield or pcall)(fn)
+	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
 	setCurrentScope(prevScope)
 	setCurrentSub(prevSub)
 	if not success then
@@ -416,7 +407,6 @@ return {
 	setCurrentSub = setCurrentSub,
 	getCurrentScope = getCurrentScope,
 	setCurrentScope = setCurrentScope,
-	setCurrentWatching = setCurrentWatching,
 	onCleanup = onCleanup,
 	getBatchDepth = getBatchDepth,
 	startBatch = startBatch,

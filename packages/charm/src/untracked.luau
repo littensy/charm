@@ -1,9 +1,12 @@
 local core = require("./core")
 
-local setCurrentWatching = core.setCurrentWatching
+local UNTRACKED = core.ReactiveFlags.Untracked
+local getCurrentSub = core.getCurrentSub
 
-local function handleUntracked(prevWatching: boolean, ok: boolean, ...)
-	setCurrentWatching(prevWatching)
+local function handleUntracked(sub: core.ReactiveNode?, ok: boolean, ...)
+	if sub then
+		sub.flags = bit32.band(sub.flags, bit32.bnot(UNTRACKED))
+	end
 	if ok then
 		return ...
 	else
@@ -12,7 +15,13 @@ local function handleUntracked(prevWatching: boolean, ok: boolean, ...)
 end
 
 local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
-	return handleUntracked(setCurrentWatching(false), pcall(callback, ...))
+	local sub = getCurrentSub()
+	if not sub or bit32.btest(sub.flags, UNTRACKED) then
+		return callback(...)
+	else
+		sub.flags = bit32.bor(sub.flags, UNTRACKED)
+	end
+	return handleUntracked(sub, pcall(callback, ...))
 end
 
 return untracked

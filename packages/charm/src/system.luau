@@ -11,6 +11,7 @@ export type ReactiveNode = {
 }
 
 export type Link = {
+	version: number,
 	dep: ReactiveNode,
 	sub: ReactiveNode,
 	prevSub: Link?,
@@ -26,13 +27,14 @@ type Stack<T> = {
 
 export type ReactiveFlags = number
 
-local NONE = 0b0000000
-local MUTABLE = 0b0000001
-local WATCHING = 0b0000010
-local RECURSED_CHECK = 0b0000100
-local RECURSED = 0b0001000
-local DIRTY = 0b0010000
-local PENDING = 0b0100000
+local NONE = 0b00000000
+local MUTABLE = 0b00000001
+local WATCHING = 0b00000010
+local RECURSED_CHECK = 0b00000100
+local RECURSED = 0b00001000
+local DIRTY = 0b00010000
+local PENDING = 0b00100000
+local UNTRACKED = 0b10000000
 
 local ReactiveFlags = {
 	None = NONE,
@@ -42,6 +44,7 @@ local ReactiveFlags = {
 	Recursed = RECURSED,
 	Dirty = DIRTY,
 	Pending = PENDING,
+	Untracked = UNTRACKED,
 }
 
 local function createReactiveSystem(props: {
@@ -52,20 +55,15 @@ local function createReactiveSystem(props: {
 	local update = props.update
 	local notify = props.notify
 	local unwatched = props.unwatched
+	local currentVersion = 0
 
 	local function isValidLink(checkLink: Link, sub: ReactiveNode): boolean
-		local depsTail = sub.depsTail
-		if depsTail then
-			local link = sub.deps :: Link
-			repeat
-				if link == checkLink then
-					return true
-				end
-				if link == depsTail then
-					break
-				end
-				link = link.nextDep :: Link
-			until not link
+		local link = sub.depsTail
+		while link do
+			if link == checkLink then
+				return true
+			end
+			link = link.prevDep
 		end
 		return false
 	end
@@ -75,20 +73,18 @@ local function createReactiveSystem(props: {
 		if prevDep and prevDep.dep == dep then
 			return
 		end
-		local nextDep: Link?
-		local recursedCheck = bit32.btest(sub.flags, RECURSED_CHECK)
-		if recursedCheck then
-			nextDep = if prevDep then prevDep.nextDep else sub.deps
-			if nextDep and nextDep.dep == dep then
-				sub.depsTail = nextDep
-				return
-			end
+		local nextDep = if prevDep then prevDep.nextDep else sub.deps
+		if nextDep and nextDep.dep == dep then
+			nextDep.version = currentVersion
+			sub.depsTail = nextDep
+			return
 		end
 		local prevSub = dep.subsTail
-		if prevSub and prevSub.sub == sub and (not recursedCheck or isValidLink(prevSub, sub)) then
+		if prevSub and prevSub.version == currentVersion and prevSub.sub == sub then
 			return
 		end
 		local newLink: Link = {
+			version = currentVersion,
 			dep = dep,
 			sub = sub,
 			prevDep = prevDep,
@@ -154,35 +150,34 @@ local function createReactiveSystem(props: {
 
 			local flags = sub.flags
 
-			if bit32.btest(flags, bit32.bor(MUTABLE, WATCHING)) then
-				if not bit32.btest(flags, bit32.bor(RECURSED_CHECK, RECURSED, DIRTY, PENDING)) then
-					sub.flags = bit32.bor(flags, PENDING)
-				elseif not bit32.btest(flags, bit32.bor(RECURSED_CHECK, RECURSED)) then
-					flags = NONE
-				elseif not bit32.btest(flags, RECURSED_CHECK) then
-					sub.flags = bit32.bor(bit32.band(flags, bit32.bnot(RECURSED)), PENDING)
-				elseif not bit32.btest(flags, bit32.bor(DIRTY, PENDING)) and isValidLink(link, sub) then
-					sub.flags = bit32.bor(flags, bit32.bor(RECURSED, PENDING))
-					flags = bit32.band(flags, MUTABLE)
-				else
-					-- selene: allow(if_same_then_else)
-					flags = NONE
-				end
+			if not bit32.btest(flags, bit32.bor(RECURSED_CHECK, RECURSED, DIRTY, PENDING)) then
+				sub.flags = bit32.bor(flags, PENDING)
+			elseif not bit32.btest(flags, bit32.bor(RECURSED_CHECK, RECURSED)) then
+				flags = NONE
+			elseif not bit32.btest(flags, RECURSED_CHECK) then
+				sub.flags = bit32.bor(bit32.band(flags, bit32.bnot(RECURSED)), PENDING)
+			elseif not bit32.btest(flags, bit32.bor(DIRTY, PENDING)) and isValidLink(link, sub) then
+				sub.flags = bit32.bor(flags, bit32.bor(RECURSED, PENDING))
+				flags = bit32.band(flags, MUTABLE)
+			else
+				-- selene: allow(if_same_then_else)
+				flags = NONE
+			end
 
-				if bit32.btest(flags, WATCHING) then
-					notify(sub)
-				end
+			if bit32.btest(flags, WATCHING) then
+				notify(sub)
+			end
 
-				if bit32.btest(flags, MUTABLE) then
-					local subSubs = sub.subs
-					if subSubs then
-						link = subSubs
-						if subSubs.nextSub then
-							stack = { value = next, prev = stack }
-							next = link.nextSub
-						end
-						continue
+			if bit32.btest(flags, MUTABLE) then
+				local subSubs = sub.subs
+				if subSubs then
+					link = subSubs
+					local nextSub = link.nextSub
+					if nextSub then
+						stack = { value = next, prev = stack }
+						next = nextSub
 					end
+					continue
 				end
 			end
 
@@ -214,6 +209,7 @@ local function createReactiveSystem(props: {
 	end
 
 	local function startTracking(sub: ReactiveNode): ()
+		currentVersion += 1
 		sub.depsTail = nil
 		sub.flags = bit32.bor(bit32.band(sub.flags, bit32.bnot(bit32.bor(RECURSED, DIRTY, PENDING))), RECURSED_CHECK)
 	end
@@ -230,10 +226,10 @@ local function createReactiveSystem(props: {
 	local function shallowPropagate(link: Link): ()
 		repeat
 			local sub = link.sub
-			local subFlags = sub.flags
-			if bit32.band(subFlags, bit32.bor(PENDING, DIRTY)) == PENDING then
-				sub.flags = bit32.bor(subFlags, DIRTY)
-				if bit32.btest(subFlags, WATCHING) then
+			local flags = sub.flags
+			if bit32.band(flags, bit32.bor(PENDING, DIRTY)) == PENDING then
+				sub.flags = bit32.bor(flags, DIRTY)
+				if bit32.btest(flags, WATCHING) then
 					notify(sub)
 				end
 			end
@@ -244,16 +240,15 @@ local function createReactiveSystem(props: {
 	local function checkDirty(link: Link, sub: ReactiveNode): boolean
 		local stack: Stack<Link>?
 		local checkDepth = 0
+		local dirty = false
 
 		repeat
 			local dep = link.dep
-			local depFlags = dep.flags
-
-			local dirty = false
+			local flags = dep.flags
 
 			if bit32.btest(sub.flags, DIRTY) then
 				dirty = true
-			elseif bit32.band(depFlags, bit32.bor(MUTABLE, DIRTY)) == bit32.bor(MUTABLE, DIRTY) then
+			elseif bit32.band(flags, bit32.bor(MUTABLE, DIRTY)) == bit32.bor(MUTABLE, DIRTY) then
 				if update(dep) then
 					local subs = dep.subs :: Link
 					if subs.nextSub then
@@ -261,7 +256,7 @@ local function createReactiveSystem(props: {
 					end
 					dirty = true
 				end
-			elseif bit32.band(depFlags, bit32.bor(MUTABLE, PENDING)) == bit32.bor(MUTABLE, PENDING) then
+			elseif bit32.band(flags, bit32.bor(MUTABLE, PENDING)) == bit32.bor(MUTABLE, PENDING) then
 				if link.nextSub or link.prevSub then
 					stack = { value = link, prev = stack }
 				end
@@ -271,9 +266,12 @@ local function createReactiveSystem(props: {
 				continue
 			end
 
-			if not dirty and link.nextDep then
-				link = link.nextDep
-				continue
+			if not dirty then
+				local nextDep = link.nextDep
+				if nextDep then
+					link = nextDep
+					continue
+				end
 			end
 
 			local continueTop = false
@@ -296,16 +294,17 @@ local function createReactiveSystem(props: {
 						sub = link.sub
 						continue
 					end
+					dirty = false
 				else
 					sub.flags = bit32.band(sub.flags, bit32.bnot(PENDING))
 				end
 				sub = link.sub
-				if link.nextDep then
-					link = link.nextDep
+				local nextDep = link.nextDep
+				if nextDep then
+					link = nextDep
 					continueTop = true
 					break
 				end
-				dirty = false
 			end
 
 			if continueTop then

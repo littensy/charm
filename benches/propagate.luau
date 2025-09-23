@@ -4,6 +4,7 @@ local bench = require("./bench")
 local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
+local listen = Charm.listen
 
 for _, w in { 10, 100 } do
 	for _, h in { 10, 100 } do
@@ -20,6 +21,25 @@ for _, w in { 10, 100 } do
 				effect(function()
 					last()
 				end)
+			end
+			src(src() + 1)
+		end)
+	end
+end
+
+for _, w in { 10, 100 } do
+	for _, h in { 10, 100 } do
+		bench.run(`propagate (listen) {w}*{h}`, function()
+			local src = atom(1)
+			for _ = 1, w do
+				local last = src
+				for _ = 1, h do
+					local prev = last
+					last = computed(function()
+						return prev() + 1
+					end)
+				end
+				listen(last, function() end)
 			end
 			src(src() + 1)
 		end)

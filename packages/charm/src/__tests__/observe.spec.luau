@@ -61,4 +61,36 @@ test("should dispose scopes", function()
 	assert(table.concat(runs) == "", `should not rerun: {table.concat(runs)}`)
 end)
 
+test("should queue addition", function()
+	local items = atom({ 1 })
+	local edits = {}
+
+	observe(items, function(item)
+		items({ 1, 2 })
+		items({ 1, 2, 3, 4 })
+		table.insert(edits, `+{item}`)
+		return function()
+			table.insert(edits, `-{item}`)
+		end
+	end)
+
+	assert(table.concat(edits) == "+1+2+3+4", `bad edits: {table.concat(edits)}`)
+end)
+
+test("should queue removal", function()
+	local items = atom({ 1, 2, 3, 4 })
+	local edits = {}
+
+	observe(items, function(item)
+		items({ 1, 2, 3 })
+		items({ 1 })
+		table.insert(edits, `+{item}`)
+		return function()
+			table.insert(edits, `-{item}`)
+		end
+	end)
+
+	assert(table.concat(edits) == "+1+2+3+4-2-3-4", `bad edits: {table.concat(edits)}`)
+end)
+
 return {}
