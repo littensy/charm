@@ -6,7 +6,7 @@ local onCleanup = core.onCleanup
 local startBatch = core.startBatch
 local endBatch = core.endBatch
 
-local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
+local function observe<K, V>(getter: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local scopes: { [K]: () -> () } = {}
 	local currentItems: { [K]: V } = {}
 
@@ -37,7 +37,7 @@ local function observe<K, V>(selector: () -> { [K]: V }, observer: (item: V, key
 
 	local disposeEffect = effect(function()
 		local previousItems = currentItems
-		currentItems = selector()
+		currentItems = getter()
 		if currentItems ~= previousItems then
 			startBatch()
 			updateScopes(currentItems, previousItems)

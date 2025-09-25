@@ -37,6 +37,7 @@ test("tracks dependencies", function()
 	assert(hook.result:getValue() == 0, "should return 0")
 	state(1)
 	assert(hook.result:getValue() == 1, "should return 1")
+
 	state = atom(0)
 	hook.rerender()
 	assert(hook.result:getValue() == 0, "should return 0")

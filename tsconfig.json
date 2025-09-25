@@ -8,6 +8,7 @@
 		"jsxFragmentFactory": "Roact.createFragment",
 		"module": "commonjs",
 		"moduleResolution": "Node",
+		"ignoreDeprecations": "6.0",
 		"noLib": true,
 		"resolveJsonModule": true,
 		"experimentalDecorators": true,

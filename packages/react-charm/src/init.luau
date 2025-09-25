@@ -1,28 +1,23 @@
 local Charm = require("./Charm")
 local React = require("./React")
 
-local effect = Charm.effect
-local useBinding = React.useBinding
-local useEffect = React.useEffect
-local useState = React.useState
-local useMemo = React.useMemo
-
 --- A hook that subscribes to changes in the given atom or selector. The
 --- component is re-rendered with the new state after an update.
 ---
 --- If the `dependencies` array is provided, a new effect is created for the
---- current `callback` when the dependencies change. Otherwise, the effect is
+--- current `getter` when the dependencies change. Otherwise, the effect is
 --- created only once, when the component is mounted.
 ---
---- @param callback The atom or selector to watch.
---- @param dependencies An array of values used to memoize the callback.
+--- @param getter The atom or selector to watch.
+--- @param dependencies An array of values used to memoize the getter.
 --- @return The current state.
-local function useAtom<T>(callback: () -> T, dependencies: { any }?): T
-	local state, setState = useState(callback)
+local function useAtom<T>(getter: () -> T, dependencies: { any }?): T
+	local state, setState = React.useState(getter)
 
-	useEffect(function()
-		return effect(function()
-			setState(callback())
+	React.useLayoutEffect(function()
+		setState(getter())
+		return Charm.effect(function()
+			setState(getter())
 		end)
 	end, dependencies or {})
 
@@ -33,19 +28,20 @@ end
 --- a binding that updates when the state changes.
 ---
 --- If the `dependencies` array is provided, a new effect is created for the
---- current `callback` when the dependencies change. Otherwise, the effect is
+--- current `getter` when the dependencies change. Otherwise, the effect is
 --- created only once, when the component is mounted.
 ---
---- @param callback The atom or selector to watch.
---- @param dependencies An array of values used to memoize the callback.
+--- @param getter The atom or selector to watch.
+--- @param dependencies An array of values used to memoize the getter.
 --- @return A binding that stores the current state.
-local function useAtomBinding<T>(callback: () -> T, dependencies: { any }?)
-	local initialState = useMemo(callback, {})
-	local binding, setBinding = useBinding(initialState)
+local function useAtomBinding<T>(getter: () -> T, dependencies: { any }?)
+	local initialState = React.useMemo(getter, {})
+	local binding, setBinding = React.useBinding(initialState)
 
-	useEffect(function()
-		return effect(function()
-			setBinding(callback())
+	React.useEffect(function()
+		setBinding(getter())
+		return Charm.effect(function()
+			setBinding(getter())
 		end)
 	end, dependencies or {})
 

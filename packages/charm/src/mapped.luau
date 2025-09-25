@@ -4,10 +4,10 @@ local computed = core.computed
 local setCurrentSub = core.setCurrentSub
 
 type Mapped =
-	& (<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
-	& (<K, VI, VO>(selector: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO })
+	& (<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
+	& (<K, VI, VO>(getter: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO })
 
-local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
+local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
 	local currentData: { [KI]: VI } = {}
 	local keyCache: { [KI]: KO } = {}
 
@@ -26,7 +26,7 @@ local function mapped<KI, VI, KO, VO>(selector: () -> { [KI]: VI }, mapper: (ite
 	return computed(function(previousOutput)
 		local currentOutput: { [KO]: VO } = previousOutput or {}
 		local previousData = currentData
-		currentData = selector()
+		currentData = getter()
 
 		for key in previousData do
 			if currentData[key] ~= nil then

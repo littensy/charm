@@ -4,9 +4,9 @@ local untracked = require("./untracked")
 local computed = core.computed
 local effect = core.effect
 
-local function listen<T>(selector: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
+local function listen<T>(getter: () -> T, listener: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
 	local tracked = computed(function()
-		return selector()
+		return getter()
 	end)
 
 	local current: T

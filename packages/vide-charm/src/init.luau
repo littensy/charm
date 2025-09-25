@@ -5,14 +5,14 @@ local subscribe = Charm.subscribe
 local source = Vide.source
 local cleanup = Vide.cleanup
 
---- Subscribes to the state of an atom or selector. Returns a source that
---- updates when the state changes.
+--- Returns a reactive source that updates when the given getter function's
+--- value changes.
 ---
---- @param callback The atom or selector to subscribe to.
+--- @param getter The atom or selector to subscribe to.
 --- @return The reactive source.
-local function useAtom<State>(callback: () -> State): () -> State
-	local state = source(callback())
-	cleanup(subscribe(callback, state))
+local function useAtom<State>(getter: () -> State): () -> State
+	local state = source(getter())
+	cleanup(subscribe(getter, state))
 	return state
 end
 
