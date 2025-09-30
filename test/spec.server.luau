@@ -8,7 +8,7 @@ suite.describe("charm", function()
 	require("../packages/charm/src/__tests__/spec")
 end)
 
-suite.describe.ingame("charm-sync", function()
+suite.describe("charm-sync", function()
 	require("../packages/charm-sync/src/__tests__/spec")
 end)
 

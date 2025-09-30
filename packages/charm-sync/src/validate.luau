@@ -2,25 +2,26 @@ local SAFE_KEYS = { string = true, number = true }
 local UNSAFE_VALUES = { ["function"] = true, thread = true }
 
 local function isTableUnsafe(object: { [any]: any })
-	local keyType = nil
-	local objectSize = 0
+	local key = next(object)
 
-	-- All keys must have the same type
-	for key in next, object do
-		local currentType = type(key)
-
-		if not keyType and SAFE_KEYS[currentType] then
-			keyType = currentType
-		elseif keyType ~= currentType then
-			return true
-		end
-
-		objectSize += 1
+	if key == nil then
+		-- An empty table is always safe
+		return false
 	end
 
-	-- If there are more keys than the length of the array, it's an array with
-	-- non-sequential keys.
-	if objectSize > #object and keyType == "number" then
+	local keyType = type(key)
+	local keyCount = 0
+
+	-- Keys must either be all strings or all numbers
+	for key in object do
+		if type(key) ~= keyType then
+			return true
+		end
+		keyCount += 1
+	end
+
+	-- Array keys must be sequential
+	if keyType == "number" and keyCount > #object then
 		return true
 	end
 
@@ -33,19 +34,21 @@ end
 --- @param key The key of the value in the table.
 --- @error Throws an error if the value cannot be synced.
 local function validate(value: any, key: any)
-	local typeOfKey = type(key)
-	local typeOfValue = type(value)
+	local typeKey = type(key)
+	local typeValue = type(value)
 
-	if not SAFE_KEYS[typeOfKey] then
-		error(`Invalid key type '{typeOfKey}' at key '{key}'`)
-	elseif UNSAFE_VALUES[typeOfValue] then
-		error(`Invalid value type '{typeOfValue}' at key '{key}'`)
-	elseif typeOfValue == "table" then
+	if not SAFE_KEYS[typeKey] then
+		error(`Invalid key type '{typeKey}' at key '{key}'`)
+	elseif UNSAFE_VALUES[typeValue] then
+		error(`Invalid value type '{typeValue}' at key '{key}'`)
+	end
+
+	if typeValue == "table" then
 		if getmetatable(value) ~= nil then
 			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
 		elseif isTableUnsafe(value) then
 			error(
-				`Cannot sync tables unsupported by remote events! The value has the key '{key}'.\n\n`
+				`Cannot sync tables unsupported by remote events! The table was found at the key '{key}'.\n\n`
 					.. "This can be for the following reasons:\n"
 					.. "1. The object is an array with non-sequential keys\n"
 					.. "2. The object is a dictionary with mixed key types (e.g. string and number)\n\n"
@@ -54,7 +57,7 @@ local function validate(value: any, key: any)
 		end
 	end
 
-	if typeOfKey == "number" then
+	if typeKey == "number" then
 		if key == math.huge or key == -math.huge then
 			error("Cannot sync infinity as key")
 		elseif key ~= math.floor(key) then

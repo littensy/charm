@@ -1,9 +1,8 @@
 local Charm = require("../../Charm")
-local CharmSync = require("../")
 local suite = require("../../../../test/suite")
+local validate = require("../validate")
 
 local atom = Charm.atom
-local validate = CharmSync.validate
 local test = suite.test
 
 test("validates inputs", function()

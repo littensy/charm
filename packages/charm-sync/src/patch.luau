@@ -1,14 +1,26 @@
 local Charm = require("../Charm")
+local config = require("./config")
+local types = require("./types")
 local validate = require("./validate")
 
 local flags = Charm.flags
 
+export type None = types.None
+
 --- A special symbol that denotes the absence of a value. Used to represent
 --- deleted values in patches.
-local None = { __none = "__none" }
+local None: None = { __none = "__none" }
 
+--- Checks if a value is the special `None` symbol.
 local function isNone(value: any): boolean
 	return type(value) == "table" and value.__none == "__none"
+end
+
+--- Converts `nil` values to the special `None` symbol. This is useful when
+--- preparing data for serialization, since `nil` can represent both the absence
+--- of a value and the removal of a value in patches.
+local function nilToNone<T>(value: T?): T | None
+	return if value == nil then None else value
 end
 
 --- JSON serialization can drop the last values of a sparse array. For example,
@@ -29,7 +41,7 @@ local function stringifySparseArray(object: { any }): { [string | number]: any }
 
 	local dictionary = {}
 
-	for index, value in next, object do
+	for index, value in object do
 		dictionary[tostring(index)] = value
 	end
 
@@ -41,14 +53,11 @@ end
 ---
 --- @param prevState The previous state.
 --- @param nextState The next state.
---- @param serialize Whether to convert sparse arrays into dictionaries. Defaults to `true`.
 --- @returns A patch that can be applied to the previous state.
-local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serialize: boolean?)
-	serialize = serialize ~= false
-
+local function diff(prevState: { [any]: any }, nextState: { [any]: any })
 	local patches = table.clone(nextState)
 
-	for key, previous in next, prevState do
+	for key, previous in prevState do
 		local current = nextState[key]
 
 		if previous == current then
@@ -56,18 +65,20 @@ local function diff(prevState: { [any]: any }, nextState: { [any]: any }, serial
 		elseif current == nil then
 			patches[key] = None
 		elseif type(previous) == "table" and type(current) == "table" then
-			patches[key] = diff(previous, current, serialize)
+			patches[key] = diff(previous, current)
 		end
 	end
 
-	-- Coerce sparse array patches into dictionaries
-	if serialize and (prevState[1] ~= nil or nextState[1] ~= nil) then
-		patches = stringifySparseArray(patches)
-	end
+	if config.autoSerialize then
+		-- Coerce sparse array patches into dictionaries
+		if prevState[1] ~= nil or nextState[1] ~= nil then
+			patches = stringifySparseArray(patches)
+		end
 
-	if serialize and flags.strict then
-		for key, value in next, patches do
-			validate(value, key)
+		if flags.strict and config.validatePatches then
+			for key, value in patches do
+				validate(value, key)
+			end
 		end
 	end
 
@@ -80,7 +91,7 @@ end
 --- @param patches The patches to apply.
 --- @returns The next state.
 local function apply(state: any, patches: any): any
-	if type(patches) == "table" and patches.__none == "__none" then
+	if isNone(patches) then
 		return nil
 	elseif type(state) ~= "table" or type(patches) ~= "table" then
 		return patches
@@ -89,7 +100,7 @@ local function apply(state: any, patches: any): any
 	local nextState = table.clone(state)
 	local stateIsArray = state[1] ~= nil
 
-	for key, patch in next, patches do
+	for key, patch in patches do
 		-- Diff-checking an array produces a sparse array, which will not be
 		-- preserved when converted to JSON. To prevent this, we turn string
 		-- keys back into numeric keys.
@@ -105,6 +116,7 @@ end
 
 return {
 	isNone = isNone,
+	nilToNone = nilToNone,
 	diff = diff,
 	apply = apply,
 }

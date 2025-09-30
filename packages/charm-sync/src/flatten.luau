@@ -1,13 +1,9 @@
-local types = require("./types")
-
-type AtomMap = types.AtomMap
-
 type NestedAtomMap = {
-	[string]: NestedAtomMap | () -> (),
+	[string]: NestedAtomMap | () -> any,
 }
 
-local function flatten(atoms: NestedAtomMap): AtomMap
-	local result: AtomMap = {}
+local function flatten(atoms: NestedAtomMap): { [string]: () -> any }
+	local result: { [string]: () -> any } = {}
 
 	local function visit(node: NestedAtomMap, path: string)
 		for key, value in node do

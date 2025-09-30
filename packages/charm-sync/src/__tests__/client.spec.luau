@@ -1,19 +1,22 @@
 local Charm = require("../../Charm")
-local CharmSync = require("../")
+local client = require("../client")
 local suite = require("../../../../test/suite")
 
 local atom = Charm.atom
 local subscribe = Charm.subscribe
-local client = CharmSync.client
 local test = suite.test
+local afterEach = suite.afterEach
+
+afterEach(function()
+	client.clearAtoms()
+end)
 
 test("should sync state payload", function()
 	local a = atom(1)
-	local client = client({ atoms = { a = a } })
 
-	client:sync({
-		type = "init",
-		data = { a = 2 },
+	client.registerAtoms({ a = a })
+	client.applyPayloads({
+		{ type = "init", data = { a = 2 } },
 	})
 
 	assert(a() == 2, "should set a to the initial value")
@@ -22,18 +25,16 @@ end)
 test("should sync state patch", function()
 	local a = atom({ b = 1, c = 2 })
 	local previous = a()
-	local client = client({ atoms = { a = a } })
 
-	client:sync({
-		type = "init",
-		data = { a = a() },
+	client.registerAtoms({ a = a })
+	client.applyPayloads({
+		{ type = "init", data = { a = a() } },
 	})
 
 	assert(a() == previous, "should set a to the initial value")
 
-	client:sync({
-		type = "patch",
-		data = { a = { b = 3 } },
+	client.applyPayloads({
+		{ type = "patch", data = { a = { b = 3 } } },
 	})
 
 	assert(a() ~= previous, "should apply patch")
@@ -43,19 +44,17 @@ end)
 
 test("should fix sparse array patches", function()
 	local a = atom({ 1 })
-	local client = client({ atoms = { a = a } })
 
-	client:sync({
-		type = "init",
-		data = { a = a() },
+	client.registerAtoms({ a = a })
+	client.applyPayloads({
+		{ type = "init", data = { a = a() } },
 	})
 
 	-- This patch would be the result of a diff between { 1 } and { 1, 2 } that
 	-- was JSON-serialized and deserialized. The client should be able to catch
 	-- this and convert the string key back to a number.
-	client:sync({
-		type = "patch",
-		data = { a = { ["2"] = 2 } },
+	client.applyPayloads({
+		{ type = "patch", data = { a = { ["2"] = 2 } } },
 	})
 
 	assert(a()["2" :: any] == nil, "should convert serialized arrays to use numbers")
@@ -64,24 +63,21 @@ end)
 
 test("should apply multiple patches", function()
 	local a = atom(1)
-	local client = client({ atoms = { a = a } })
 	local calls = {}
+
+	client.registerAtoms({ a = a })
 
 	subscribe(a, function(value)
 		table.insert(calls, value)
 	end)
 
-	client:sync({
-		type = "init",
-		data = { a = a() },
+	client.applyPayloads({
+		{ type = "init", data = { a = a() } },
 	})
 
-	client:sync({
-		type = "patch",
-		data = { a = 2 },
-	}, {
-		type = "patch",
-		data = { a = 3 },
+	client.applyPayloads({
+		{ type = "patch", data = { a = 2 } },
+		{ type = "patch", data = { a = 3 } },
 	})
 
 	assert(a() == 3, "should apply the last patch")
@@ -91,8 +87,9 @@ end)
 test("should batch patches", function()
 	local a = atom(0)
 	local b = atom(0)
-	local client = client({ atoms = { a = a, b = b } })
 	local states = {}
+
+	client.registerAtoms({ a = a, b = b })
 
 	subscribe(a, function()
 		states.b = b()
@@ -102,14 +99,12 @@ test("should batch patches", function()
 		states.a = a()
 	end)
 
-	client:sync({
-		type = "init",
-		data = { a = a(), b = b() },
+	client.applyPayloads({
+		{ type = "init", data = { a = a(), b = b() } },
 	})
 
-	client:sync({
-		type = "patch",
-		data = { a = 1, b = 2 },
+	client.applyPayloads({
+		{ type = "patch", data = { a = 1, b = 2 } },
 	})
 
 	assert(a() == 1, "should set a to the new value")

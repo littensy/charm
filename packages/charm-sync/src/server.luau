@@ -1,250 +1,265 @@
 local Charm = require("../Charm")
-local interval = require("./interval")
+local config = require("./config")
 local patch = require("./patch")
 local types = require("./types")
 
-type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
-type ServerOptions = {
-	--- The atoms to synchronize with the client.
-	atoms: AtomMap,
-	--- The interval at which to send patches to the client, in seconds.
-	--- Defaults to `0` (patches are sent up to once per frame). Set to a
-	--- negative value to disable automatic syncing.
-	interval: number?,
-	--- Whether the history of state changes since the client's last update
-	--- should be preserved. This is useful for values that change multiple times
-	--- per frame, where each individual change is important. Defaults to `false`.
-	preserveHistory: boolean?,
-	--- When `true`, Charm will apply validation and serialize unsafe arrays
-	--- to address remote event argument limitations. Defaults to `true`.
-	---
-	--- This option should be disabled if your network library uses a custom
-	--- serialization method (i.e. Zap, ByteNet) to prevent interference.
-	autoSerialize: boolean?,
+type RegisteredAtom<T = any> = {
+	atom: () -> T,
+	value: T,
+	valueLastSynced: T,
+	stop: () -> (),
 }
 
-type ServerSyncer = {
-	--- Sets up a subscription to each atom that schedules a patch to be sent to
-	--- the client whenever the state changes. When a change occurs, the `callback`
-	--- is called with the player and the payload to send.
-	---
-	--- Note that the `payload` object should not be mutated. If you need to
-	--- modify the payload, apply the changes to a copy of the object.
-	---
-	--- @param callback The function to call when the state changes.
-	--- @return A cleanup function that unsubscribes all listeners.
-	connect: (self: ServerSyncer, callback: (player: Player, ...SyncPayload) -> ()) -> () -> (),
-	--- Hydrates the client's state with the server's state. This should be
-	--- called when a player joins the game and requires the server's state.
-	---
-	--- @param player The player to hydrate.
-	hydrate: (self: ServerSyncer, player: Player) -> (),
-	--- @deprecated For internal use only.
-	_sendPatch: (self: ServerSyncer, player: Player) -> (),
-}
+type SyncStatus = number
 
---- Creates a `ServerSyncer` object that sends patches to the client and
---- hydrates the client's state.
----
---- @param options The atoms to synchronize with the client.
---- @return A `ServerSyncer` object.
-local function server(options: ServerOptions): ServerSyncer
-	local atoms = options.atoms
-	local autoSerialize = options.autoSerialize ~= false
-	local preserveHistory = options.preserveHistory
-	local syncRate = options.interval or 0
+local PENDING_INITIAL_STATE: SyncStatus = 0
+local LISTENING_FOR_CHANGES: SyncStatus = 1
 
-	local self = {} :: ServerSyncer
-	local sync: (player: Player, payload: SyncPayload) -> ()
+local atomRegister: { [string]: RegisteredAtom } = {}
+local clientRegister: { [any]: { [string]: SyncStatus } } = {}
+local globalUpdates: { { key: string, value: any, previousValue: any } } = {}
+local connection: RBXScriptConnection?
 
-	local function createSnapshot()
-		local snapshot = {}
-
-		for key, atom in atoms do
-			snapshot[key] = atom()
+local function registerAtom<T>(key: string, atom: () -> T)
+	if atomRegister[key] then
+		if atomRegister[key].atom ~= atom then
+			warn("[Charm] Attempted to sync different atoms with the same key:", key)
 		end
-
-		return snapshot
+		return
 	end
 
-	-- Send the initial state to a player when they join the server.
-	function self:hydrate(player)
-		assert(sync, "connect() must be called before hydrate()")
+	local registeredAtom: RegisteredAtom<T> = {
+		atom = atom,
+		value = atom(),
+		valueLastSynced = atom(),
+		stop = function() end,
+	}
 
-		sync(player, {
-			type = "init",
-			data = createSnapshot(),
-		})
-	end
+	registeredAtom.stop = Charm.effect(function()
+		local value = atom()
 
-	-- If the history of state changes should be preserved, keep a list of
-	-- previous snapshots and diff-check each one from the last.
-	if preserveHistory then
-		local snapshots = { createSnapshot() }
-		local changed = false
-
-		function self:connect(callback)
-			local subscriptions = {}
-
-			sync = callback
-
-			local function pushSnapshot(key: string | number, current: any, previous: any)
-				local lastSnapshot = snapshots[#snapshots]
-				local previousSnapshot = snapshots[#snapshots - 1]
-
-				-- Optimize snapshots by updating the most recent snapshot if the
-				-- previous and current values are the same, since this allows us
-				-- to group multiple changes into a single snapshot.
-				if previousSnapshot and previousSnapshot[key] == previous and lastSnapshot[key] == previous then
-					lastSnapshot[key] = current
-				else
-					local nextSnapshot = table.clone(lastSnapshot)
-					nextSnapshot[key] = current
-					table.insert(snapshots, nextSnapshot)
-				end
-			end
-
-			-- Populate the snapshot with the initial state of each atom.
-			-- Subscribe to each atom and update the state when it changes.
-			for key, atom in atoms do
-				subscriptions[key] = Charm.subscribe(atom, function(current, previous)
-					pushSnapshot(key, current, previous)
-					changed = true
-				end)
-			end
-
-			local disconnect = interval(function()
-				if not changed then
-					return
-				end
-
-				local payloads: { SyncPayload } = {}
-				local lastSnapshot
-
-				for index, snapshot in snapshots do
-					lastSnapshot = snapshot
-
-					if index == 1 then
-						continue
-					end
-
-					table.insert(payloads, {
-						type = "patch",
-						data = patch.diff(snapshots[index - 1], snapshot, autoSerialize),
-					})
-				end
-
-				snapshots = { lastSnapshot }
-				changed = false
-
-				for _, player in game:GetService("Players"):GetPlayers() do
-					callback(player, unpack(payloads))
-				end
-			end, syncRate)
-
-			return function()
-				disconnect()
-
-				for _, unsubscribe in subscriptions do
-					unsubscribe()
-				end
-			end
+		if config.preserveHistory and registeredAtom.value ~= value then
+			table.insert(globalUpdates, {
+				key = key,
+				value = value,
+				previousValue = registeredAtom.value,
+			})
 		end
 
-		function self:_sendPatch(player: Player)
-			assert(sync, "connect() must be called before _sendPatch()")
+		registeredAtom.value = value
+	end)
 
-			if not changed then
-				return
-			end
-
-			local payloads: { SyncPayload } = {}
-
-			for index, snapshot in snapshots do
-				if index == 1 then
-					continue
-				end
-
-				table.insert(payloads, {
-					type = "patch",
-					data = patch.diff(snapshots[index - 1], snapshot, autoSerialize),
-				})
-			end
-
-			snapshots = { snapshots[#snapshots] }
-			changed = false
-
-			sync(player, unpack(payloads))
-		end
-
-		return self
-	end
-
-	local previousSnapshot = createSnapshot()
-	local currentSnapshot = table.clone(previousSnapshot)
-	local changed = false
-
-	function self:connect(callback)
-		local subscriptions = {}
-
-		sync = callback
-
-		-- Subscribe to each atom and update the state when one changes.
-		for key, atom in atoms do
-			subscriptions[key] = Charm.subscribe(atom, function(state)
-				currentSnapshot[key] = state
-				changed = true
-			end)
-		end
-
-		local disconnect = interval(function()
-			if not changed then
-				return
-			end
-
-			local payload: SyncPayload = {
-				type = "patch",
-				data = patch.diff(previousSnapshot, currentSnapshot, autoSerialize),
-			}
-
-			previousSnapshot = table.clone(currentSnapshot)
-			changed = false
-
-			for _, player in game:GetService("Players"):GetPlayers() do
-				callback(player, payload)
-			end
-		end, syncRate)
-
-		return function()
-			disconnect()
-
-			for _, unsubscribe in subscriptions do
-				unsubscribe()
-			end
-		end
-	end
-
-	function self:_sendPatch(player)
-		assert(sync, "connect() must be called before _sendPatch()")
-
-		if not changed then
-			return
-		end
-
-		local payload: SyncPayload = {
-			type = "patch",
-			data = patch.diff(previousSnapshot, currentSnapshot, autoSerialize),
-		}
-
-		previousSnapshot = table.clone(currentSnapshot)
-		changed = false
-
-		sync(player, payload)
-	end
-
-	return self
+	atomRegister[key] = registeredAtom
 end
 
-return server
+local function unregisterAtom(key: string)
+	local registeredAtom = atomRegister[key]
+
+	if registeredAtom then
+		registeredAtom.stop()
+		atomRegister[key] = nil
+	end
+end
+
+local function unregisterUnusedAtoms()
+	local used: { [string]: boolean } = {}
+
+	for _, clientAtoms in clientRegister do
+		for key in clientAtoms do
+			used[key] = true
+		end
+	end
+
+	for key in atomRegister do
+		if not used[key] then
+			unregisterAtom(key)
+		end
+	end
+end
+
+local function createHistoricalPatches(): { any }
+	local patchCount = #globalUpdates
+	local patches: { any } = table.create(patchCount)
+
+	for index, update in globalUpdates do
+		patches[index] = patch.diff(update.previousValue, update.value)
+	end
+
+	return patches
+end
+
+local function createHistoricalPayloadsForClient(client: any, patches: { any }): { SyncPayload }
+	local syncedAtoms = clientRegister[client]
+
+	if not syncedAtoms then
+		return {}
+	end
+
+	local payloads: { SyncPayload } = {}
+
+	for index, update in globalUpdates do
+		local patchData = patches[index]
+
+		if not patchData then
+			continue
+		end
+
+		local key = update.key
+		local status = syncedAtoms[key]
+
+		if status == LISTENING_FOR_CHANGES then
+			table.insert(payloads, {
+				type = "patch",
+				data = { [key] = patchData },
+			})
+		elseif status == PENDING_INITIAL_STATE then
+			table.insert(payloads, {
+				type = "init",
+				data = { [key] = update.value },
+			})
+
+			syncedAtoms[key] = LISTENING_FOR_CHANGES
+		end
+	end
+
+	return payloads
+end
+
+local function createPatch(): any
+	local current: { [string]: any } = {}
+	local previous: { [string]: any } = {}
+
+	for key, registeredAtom in atomRegister do
+		current[key] = registeredAtom.value
+		previous[key] = registeredAtom.valueLastSynced
+		registeredAtom.valueLastSynced = registeredAtom.value
+	end
+
+	return patch.diff(previous, current)
+end
+
+local function createPayloadsForClient(client: any, patchData: any): { SyncPayload }
+	local syncedAtoms = clientRegister[client]
+	local payloads: { SyncPayload } = {}
+
+	if not syncedAtoms then
+		return payloads
+	end
+
+	local shouldSendInitialState = false
+	local initPayload: { [string]: any } = {}
+	local patchPayload: { [string]: any } = {}
+
+	for key, status in syncedAtoms do
+		local registeredAtom = atomRegister[key]
+
+		if status == LISTENING_FOR_CHANGES then
+			patchPayload[key] = patchData[key]
+		elseif status == PENDING_INITIAL_STATE then
+			initPayload[key] = registeredAtom.value
+			syncedAtoms[key] = LISTENING_FOR_CHANGES
+			shouldSendInitialState = true
+		end
+	end
+
+	if shouldSendInitialState then
+		table.insert(payloads, { type = "init", data = initPayload })
+	end
+
+	if next(patchPayload) ~= nil then
+		table.insert(payloads, { type = "patch", data = patchPayload })
+	end
+
+	return payloads
+end
+
+--- @server
+local function syncAtomsToClient(client: any, atoms: { [string]: () -> any })
+	if not clientRegister[client] then
+		clientRegister[client] = {}
+	end
+
+	local syncedAtoms = clientRegister[client]
+
+	for key, atom in atoms do
+		registerAtom(key, atom)
+
+		if not syncedAtoms[key] then
+			syncedAtoms[key] = PENDING_INITIAL_STATE
+		end
+	end
+end
+
+--- @server
+local function unsyncClient(client: any)
+	clientRegister[client] = nil
+end
+
+--- @server
+local function unsyncAtomsFromClient(client: any, ...: string)
+	local syncedAtoms = clientRegister[client]
+
+	if not syncedAtoms then
+		return
+	end
+
+	for index = 1, select("#", ...) do
+		local key = select(index, ...)
+		syncedAtoms[key] = nil
+	end
+
+	if next(syncedAtoms) == nil then
+		clientRegister[client] = nil
+	end
+end
+
+--- @server
+local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
+	if connection then
+		connection:Disconnect()
+	end
+
+	local elapsedTime = 0
+
+	local function sync()
+		local patches = if config.preserveHistory then createHistoricalPatches() else createPatch()
+
+		if Charm.flags.frozen then
+			Charm.deepFreeze(patches)
+		end
+
+		for client in clientRegister do
+			local payloads: { SyncPayload } = if config.preserveHistory
+				then createHistoricalPayloadsForClient(client, patches)
+				else createPayloadsForClient(client, patches)
+
+			if payloads[1] then
+				task.spawn(onSync, client, payloads)
+			end
+		end
+
+		unregisterUnusedAtoms()
+		table.clear(globalUpdates)
+	end
+
+	connection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime: number)
+		elapsedTime += deltaTime
+
+		if elapsedTime >= config.interval then
+			elapsedTime %= config.interval
+
+			debug.profilebegin("CharmSync")
+			sync()
+			debug.profileend()
+		end
+	end)
+end
+
+return {
+	syncAtomsToClient = syncAtomsToClient,
+	unsyncClient = unsyncClient,
+	unsyncAtomsFromClient = unsyncAtomsFromClient,
+	startSync = startSync,
+}

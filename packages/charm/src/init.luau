@@ -1,5 +1,3 @@
---!nolint DeprecatedApi
-
 local batched = require("@self/batched")
 local core = require("@self/core")
 local flags = require("@self/flags")
@@ -9,14 +7,10 @@ local observe = require("@self/observe")
 local subscribe = require("@self/subscribe")
 local types = require("@self/types")
 local untracked = require("@self/untracked")
+local utils = require("@self/utils")
 
 export type Atom<T = any> = types.Atom<T>
 export type Selector<T = any> = types.Selector<T>
-
---- @deprecated Function `batch()` is deprecated, use `batched()` instead.
-local batch = batched
---- @deprecated Function `peek()` is deprecated, use `untracked()` instead.
-local peek = untracked
 
 return {
 	core = core,
@@ -32,7 +26,5 @@ return {
 	observe = observe,
 	subscribe = subscribe,
 	untracked = untracked,
-	-- Temporary aliases for backwards compatibility
-	batch = batch,
-	peek = peek,
+	deepFreeze = utils.deepFreeze,
 }

@@ -1,9 +1,8 @@
 local Charm = require("../../Charm")
-local CharmSync = require("../")
+local flatten = require("../flatten")
 local suite = require("../../../../test/suite")
 
 local atom = Charm.atom
-local flatten = CharmSync.flatten
 local test = suite.test
 
 test("should flatten atoms", function()

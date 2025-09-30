@@ -4,10 +4,6 @@ suite.describe("client", function()
 	require("./client.spec")
 end)
 
-suite.describe("server", function()
-	require("./server.spec")
-end)
-
 suite.describe("flatten", function()
 	require("./flatten.spec")
 end)

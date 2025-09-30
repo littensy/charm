@@ -2,75 +2,72 @@ local Charm = require("../Charm")
 local patch = require("./patch")
 local types = require("./types")
 
-type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
-type ClientOptions = {
-	--- The atoms to synchronize with the server.
-	atoms: AtomMap,
-	--- Whether to ignore patches sent before the client has been hydrated.
-	--- Default is `true`.
-	ignoreUnhydrated: boolean?,
-}
+local atomRegister: { [string]: Charm.Atom } = {}
 
-type ClientSyncer = {
-	--- Applies a patch or initializes the state of the atoms with the given
-	--- payload from the server.
-	---
-	--- @param ...payloads The patches or hydration payloads to apply.
-	sync: (self: ClientSyncer, ...SyncPayload) -> (),
-}
+--- @client
+local function registerAtoms(atoms: { [string]: Charm.Atom })
+	for key, atom in atoms do
+		if atomRegister[key] and atomRegister[key] ~= atom then
+			warn("[Charm] Attempted to sync different atoms with the same key:", key)
+			continue
+		end
 
---- Creates a `ClientSyncer` object that receives patches from the server and
---- applies them to the local state.
----
---- @param options The atoms to synchronize with the server.
---- @return A `ClientSyncer` object.
-local function client(options: ClientOptions): ClientSyncer
-	local atoms = options.atoms
-	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
+		atomRegister[key] = atom
+	end
+end
 
-	local self = {} :: ClientSyncer
-	local hydrated = false
+--- @client
+local function clearAtoms()
+	table.clear(atomRegister)
+end
 
-	local function hydrate(state: { [string | number]: any })
-		hydrated = true
+--- @client
+local function unregisterAtoms(...: string)
+	for index = 1, select("#", ...) do
+		local key = select(index, ...)
+		atomRegister[key] = nil
+	end
+end
 
-		for key, value in state do
-			local atom = atoms[key]
+local function applyInitPayload(data: { [string]: any })
+	for key, value in data do
+		local atom = atomRegister[key]
+		if atom then
 			atom(value)
 		end
 	end
-
-	local function apply(data: { [string | number]: any })
-		local target = {}
-
-		for key, atom in atoms do
-			target[key] = atom()
-		end
-
-		target = patch.apply(target, data)
-
-		for key, atom in atoms do
-			atom(target[key])
-		end
-	end
-
-	function self:sync(...)
-		for index = 1, select("#", ...) do
-			local payload: SyncPayload = select(index, ...)
-
-			Charm.batched(function()
-				if payload.type == "init" then
-					hydrate(payload.data)
-				elseif not ignoreUnhydrated or hydrated then
-					apply(payload.data)
-				end
-			end)
-		end
-	end
-
-	return self
 end
 
-return client
+local function applyPatchPayload(data: { [string | number]: any })
+	local target = {}
+
+	for key, atom in atomRegister do
+		target[key] = atom()
+	end
+
+	target = patch.apply(target, data)
+
+	for key, atom in atomRegister do
+		atom(target[key])
+	end
+end
+
+--- @client
+local function applyPayloads(payloads: { SyncPayload })
+	for _, payload in payloads do
+		if payload.type == "init" then
+			Charm.batched(applyInitPayload, payload.data)
+		elseif payload.type == "patch" then
+			Charm.batched(applyPatchPayload, payload.data)
+		end
+	end
+end
+
+return {
+	registerAtoms = registerAtoms,
+	clearAtoms = clearAtoms,
+	unregisterAtoms = unregisterAtoms,
+	applyPayloads = applyPayloads,
+}

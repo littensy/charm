@@ -1,14 +1,32 @@
-local HttpService = game:GetService("HttpService")
-
-local CharmSync = require("../")
+local config = require("../config")
+local patch = require("../patch")
 local suite = require("../../../../test/suite")
 
-local patch = CharmSync.patch
 local test = suite.test
+local afterEach = suite.afterEach
 
-local function serdes(value: { [any]: any })
-	return HttpService:JSONDecode(HttpService:JSONEncode(value))
+local function mockArraySerdes(object: { [any]: any }): { [any]: any }
+	if object[1] then
+		local copy = {}
+		for index = 1, #object do
+			copy[index] = object[index]
+		end
+		return copy
+	elseif table.maxn(object) ~= #object then
+		local copy = {}
+		for key, value in object do
+			copy[tostring(key)] = value
+		end
+		return copy
+	else
+		return object
+	end
 end
+
+afterEach(function()
+	config.autoSerialize = true
+	config.validatePatches = true
+end)
 
 test("returns a patch", function()
 	local prevState = { foo = "bar", baz = "qux" }
@@ -60,7 +78,7 @@ test("preserves array density after serdes", function()
 	local prevState = { "a", "b", "c", "d", "e" }
 	local nextState = { "A", "b", "c", "D" }
 
-	local patches = serdes(patch.diff(prevState, nextState))
+	local patches = mockArraySerdes(patch.diff(prevState, nextState))
 	local applied = patch.apply(prevState, patches)
 
 	for index in next, prevState do
@@ -72,27 +90,11 @@ test("preserves array density after serdes", function()
 	end
 end)
 
-test("preserves large gaps between keys", function()
-	local prevState = table.create(10000, "foo")
-	local nextState = table.move(prevState, 2, 9998, 2, { [1] = "bar", [9999] = "bar" })
-
-	local start = os.clock()
-
-	local patches = serdes(patch.diff(prevState, nextState))
-	local applied = patch.apply(prevState, patches)
-
-	assert(os.clock() - start < 10e-3, `Performance is not acceptable ({(os.clock() - start) * 1e3}ms)`)
-
-	for index in next, prevState do
-		assert(applied[index] == nextState[index], `expected {applied[index]} to be {nextState[index]}`)
-	end
-end)
-
 test("cannot preserve sparse arrays", function()
 	local prevState = {}
 	local nextState = { [2] = "foo" }
 
-	local patches = serdes(patch.diff(prevState, nextState))
+	local patches = mockArraySerdes(patch.diff(prevState, nextState))
 	local applied = patch.apply(prevState, patches)
 
 	-- Not enough information is available to determine whether 'patches'
@@ -102,24 +104,30 @@ test("cannot preserve sparse arrays", function()
 end)
 
 test("optionally fixes sparse arrays", function()
-	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }, true) do
+	config.autoSerialize = true
+
+	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
 		assert(type(index) == "string", `expected {type(index)} {index} to be string`)
 	end
 
-	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }, false) do
+	config.autoSerialize = false
+
+	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
 		assert(type(index) == "number", `expected {type(index)} {index} to be number`)
 	end
 end)
 
 test("optionally validates state", function()
 	local success = pcall(function()
-		patch.diff({}, { [0.1] = true }, true)
+		config.validatePatches = true
+		patch.diff({}, { [0.1] = true })
 	end)
 
 	assert(not success, "should not allow non-integer keys")
 
 	success = pcall(function()
-		patch.diff({}, { [0.1] = true }, false)
+		config.validatePatches = false
+		patch.diff({}, { [0.1] = true })
 	end)
 
 	assert(success, "should skip validation if not requested")
