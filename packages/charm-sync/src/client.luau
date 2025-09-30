@@ -6,7 +6,6 @@ type SyncPayload = types.SyncPayload
 
 local atomRegister: { [string]: Charm.Atom } = {}
 
---- @client
 local function registerAtoms(atoms: { [string]: Charm.Atom })
 	for key, atom in atoms do
 		if atomRegister[key] and atomRegister[key] ~= atom then
@@ -18,12 +17,10 @@ local function registerAtoms(atoms: { [string]: Charm.Atom })
 	end
 end
 
---- @client
 local function clearAtoms()
 	table.clear(atomRegister)
 end
 
---- @client
 local function unregisterAtoms(...: string)
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
@@ -54,7 +51,6 @@ local function applyPatchPayload(data: { [string | number]: any })
 	end
 end
 
---- @client
 local function applyPayloads(payloads: { SyncPayload })
 	for _, payload in payloads do
 		if payload.type == "init" then

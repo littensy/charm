@@ -40,6 +40,8 @@ local function registerAtom<T>(key: string, atom: () -> T)
 	registeredAtom.stop = Charm.effect(function()
 		local value = atom()
 
+		-- When preserving history, we need to keep track of previous values
+		-- so we can create granular patches for each change.
 		if config.preserveHistory and registeredAtom.value ~= value then
 			table.insert(globalUpdates, {
 				key = key,
@@ -81,7 +83,7 @@ end
 
 local function createHistoricalPatches(): { any }
 	local patchCount = #globalUpdates
-	local patches: { any } = table.create(patchCount)
+	local patches = table.create(patchCount)
 
 	for index, update in globalUpdates do
 		patches[index] = patch.diff(update.previousValue, update.value)
@@ -99,6 +101,8 @@ local function createHistoricalPayloadsForClient(client: any, patches: { any }):
 
 	local payloads: { SyncPayload } = {}
 
+	-- Iterate over all global updates and see if the client is interested in
+	-- any of them. If so, we create a patch payload for the update.
 	for index, update in globalUpdates do
 		local patchData = patches[index]
 
@@ -122,6 +126,23 @@ local function createHistoricalPayloadsForClient(client: any, patches: { any }):
 
 			syncedAtoms[key] = LISTENING_FOR_CHANGES
 		end
+	end
+
+	-- If a pending atom was never updated, we still need to send its initial
+	-- state. This can happen if the atom was registered after its last change.
+	local initPayload: { [string]: any } = {}
+
+	for key, status in syncedAtoms do
+		local registeredAtom = atomRegister[key]
+
+		if status == PENDING_INITIAL_STATE and registeredAtom then
+			initPayload[key] = registeredAtom.value
+			syncedAtoms[key] = LISTENING_FOR_CHANGES
+		end
+	end
+
+	if next(initPayload) ~= nil then
+		table.insert(payloads, 1, { type = "init" :: "init", data = initPayload })
 	end
 
 	return payloads
@@ -148,10 +169,11 @@ local function createPayloadsForClient(client: any, patchData: any): { SyncPaylo
 		return payloads
 	end
 
-	local shouldSendInitialState = false
 	local initPayload: { [string]: any } = {}
 	local patchPayload: { [string]: any } = {}
 
+	-- Create patches for initialized atoms that changed, and add atoms that
+	-- are still pending initial state to the init payload.
 	for key, status in syncedAtoms do
 		local registeredAtom = atomRegister[key]
 
@@ -160,11 +182,10 @@ local function createPayloadsForClient(client: any, patchData: any): { SyncPaylo
 		elseif status == PENDING_INITIAL_STATE then
 			initPayload[key] = registeredAtom.value
 			syncedAtoms[key] = LISTENING_FOR_CHANGES
-			shouldSendInitialState = true
 		end
 	end
 
-	if shouldSendInitialState then
+	if next(initPayload) ~= nil then
 		table.insert(payloads, { type = "init", data = initPayload })
 	end
 
@@ -175,7 +196,6 @@ local function createPayloadsForClient(client: any, patchData: any): { SyncPaylo
 	return payloads
 end
 
---- @server
 local function syncAtomsToClient(client: any, atoms: { [string]: () -> any })
 	if not clientRegister[client] then
 		clientRegister[client] = {}
@@ -187,17 +207,17 @@ local function syncAtomsToClient(client: any, atoms: { [string]: () -> any })
 		registerAtom(key, atom)
 
 		if not syncedAtoms[key] then
+			-- Mark the atom as pending initial state so we send its full value
+			-- the next time we sync.
 			syncedAtoms[key] = PENDING_INITIAL_STATE
 		end
 	end
 end
 
---- @server
 local function unsyncClient(client: any)
 	clientRegister[client] = nil
 end
 
---- @server
 local function unsyncAtomsFromClient(client: any, ...: string)
 	local syncedAtoms = clientRegister[client]
 
@@ -215,7 +235,6 @@ local function unsyncAtomsFromClient(client: any, ...: string)
 	end
 end
 
---- @server
 local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
 	if connection then
 		connection:Disconnect()
@@ -226,6 +245,8 @@ local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
 	local function sync()
 		local patches = if config.preserveHistory then createHistoricalPatches() else createPatch()
 
+		-- While payload objects are technically mutable as they are unique to
+		-- each client, the data inside them is not safe to mutate.
 		if Charm.flags.frozen then
 			Charm.deepFreeze(patches)
 		end
