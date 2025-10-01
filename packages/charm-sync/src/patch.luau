@@ -54,19 +54,19 @@ end
 --- @param prevState The previous state.
 --- @param nextState The next state.
 --- @returns A patch that can be applied to the previous state.
-local function diff(prevState: { [any]: any }, nextState: { [any]: any })
-	local patches = table.clone(nextState)
+local function diff(prevState: any, nextState: any): any
+	if prevState == nextState then
+		return nil
+	elseif nextState == nil then
+		return None
+	elseif type(prevState) ~= "table" or type(nextState) ~= "table" then
+		return nextState
+	end
+
+	local patches: { [any]: any } = table.clone(nextState)
 
 	for key, previous in prevState do
-		local current = nextState[key]
-
-		if previous == current then
-			patches[key] = nil
-		elseif current == nil then
-			patches[key] = None
-		elseif type(previous) == "table" and type(current) == "table" then
-			patches[key] = diff(previous, current)
-		end
+		patches[key] = diff(previous, nextState[key])
 	end
 
 	if config.autoSerialize then
@@ -87,20 +87,20 @@ end
 
 --- Applies a patch to a state and returns the next state.
 ---
---- @param state The current state.
---- @param patches The patches to apply.
+--- @param prevState The current state.
+--- @param statePatch The patches to apply.
 --- @returns The next state.
-local function apply(state: any, patches: any): any
-	if isNone(patches) then
+local function apply(prevState: any, statePatch: any): any
+	if isNone(statePatch) then
 		return nil
-	elseif type(state) ~= "table" or type(patches) ~= "table" then
-		return patches
+	elseif type(prevState) ~= "table" or type(statePatch) ~= "table" then
+		return statePatch
 	end
 
-	local nextState = table.clone(state)
-	local stateIsArray = state[1] ~= nil
+	local nextState = table.clone(prevState)
+	local stateIsArray = prevState[1] ~= nil
 
-	for key, patch in patches do
+	for key, value in statePatch do
 		-- Diff-checking an array produces a sparse array, which will not be
 		-- preserved when converted to JSON. To prevent this, we turn string
 		-- keys back into numeric keys.
@@ -108,7 +108,7 @@ local function apply(state: any, patches: any): any
 			key = tonumber(key) or key
 		end
 
-		nextState[key] = apply(nextState[key], patch)
+		nextState[key] = apply(nextState[key], value)
 	end
 
 	return nextState

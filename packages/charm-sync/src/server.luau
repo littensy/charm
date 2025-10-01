@@ -235,47 +235,73 @@ local function unsyncAtomsFromClient(client: any, ...: string)
 	end
 end
 
-local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
+local function onSyncCallback(_client: any, _payloads: { SyncPayload })
+	warn("[Charm] Override the onSync function by passing a custom function to startSync")
+end
+
+local function flush()
+	local patches = if config.preserveHistory then createHistoricalPatches() else createPatch()
+
+	-- While payload objects are technically mutable as they are unique to
+	-- each client, the data inside them is not safe to mutate.
+	if Charm.flags.frozen then
+		Charm.deepFreeze(patches)
+	end
+
+	for client in clientRegister do
+		local payloads: { SyncPayload } = if config.preserveHistory
+			then createHistoricalPayloadsForClient(client, patches)
+			else createPayloadsForClient(client, patches)
+
+		if payloads[1] then
+			if task then
+				task.spawn(onSyncCallback, client, payloads)
+			else
+				onSyncCallback(client, payloads)
+			end
+		end
+	end
+
+	unregisterUnusedAtoms()
+	table.clear(globalUpdates)
+end
+
+local function stopSync()
+	if connection then
+		connection:Disconnect()
+		connection = nil
+	end
+end
+
+local function reset()
+	table.clear(atomRegister)
+	table.clear(clientRegister)
+	table.clear(globalUpdates)
+	stopSync()
+end
+
+local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ()): () -> ()
 	if connection then
 		connection:Disconnect()
 	end
 
-	local elapsedTime = 0
+	onSyncCallback = onSync
 
-	local function sync()
-		local patches = if config.preserveHistory then createHistoricalPatches() else createPatch()
+	if game then
+		local elapsedTime = 0
 
-		-- While payload objects are technically mutable as they are unique to
-		-- each client, the data inside them is not safe to mutate.
-		if Charm.flags.frozen then
-			Charm.deepFreeze(patches)
-		end
-
-		for client in clientRegister do
-			local payloads: { SyncPayload } = if config.preserveHistory
-				then createHistoricalPayloadsForClient(client, patches)
-				else createPayloadsForClient(client, patches)
-
-			if payloads[1] then
-				task.spawn(onSync, client, payloads)
+		connection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime)
+			elapsedTime += deltaTime
+			if elapsedTime >= config.interval then
+				elapsedTime %= config.interval
+				debug.profilebegin("CharmSync")
+				flush()
+				debug.profileend()
 			end
-		end
-
-		unregisterUnusedAtoms()
-		table.clear(globalUpdates)
+		end)
 	end
 
-	connection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime: number)
-		elapsedTime += deltaTime
-
-		if elapsedTime >= config.interval then
-			elapsedTime %= config.interval
-
-			debug.profilebegin("CharmSync")
-			sync()
-			debug.profileend()
-		end
-	end)
+	return stopSync
 end
 
 return {
@@ -283,4 +309,7 @@ return {
 	unsyncClient = unsyncClient,
 	unsyncAtomsFromClient = unsyncAtomsFromClient,
 	startSync = startSync,
+	stopSync = stopSync,
+	flush = flush,
+	reset = reset,
 }
