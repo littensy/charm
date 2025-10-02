@@ -127,4 +127,21 @@ test("should track outside untracked", function()
 	assert(spyCalls == 3, "should not run on c change")
 end)
 
+test("should stack untracked", function()
+	local a = atom(1)
+	local spyCalls = 0
+
+	effect(function()
+		untracked(function()
+			untracked(a)
+			return a()
+		end)
+		spyCalls += 1
+	end)
+
+	assert(spyCalls == 1, "should be called once")
+	a(2)
+	assert(spyCalls == 1, "should not be called twice")
+end)
+
 return {}

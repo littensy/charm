@@ -6,7 +6,7 @@ type SyncPayload = types.SyncPayload
 
 local atomRegister: { [string]: Charm.Atom } = {}
 
-local function registerAtoms(atoms: { [string]: Charm.Atom })
+local function syncAtoms(atoms: { [string]: Charm.Atom })
 	for key, atom in atoms do
 		if atomRegister[key] and atomRegister[key] ~= atom then
 			warn("[Charm] Attempted to sync different atoms with the same key:", key)
@@ -17,15 +17,15 @@ local function registerAtoms(atoms: { [string]: Charm.Atom })
 	end
 end
 
-local function clearAtoms()
-	table.clear(atomRegister)
-end
-
-local function unregisterAtoms(...: string)
+local function unsyncAtoms(...: string)
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
 		atomRegister[key] = nil
 	end
+end
+
+local function reset()
+	table.clear(atomRegister)
 end
 
 local function applyInitPayload(data: { [string]: any })
@@ -62,8 +62,8 @@ local function applyPayloads(payloads: { SyncPayload })
 end
 
 return {
-	registerAtoms = registerAtoms,
-	clearAtoms = clearAtoms,
-	unregisterAtoms = unregisterAtoms,
+	syncAtoms = syncAtoms,
+	unsyncAtoms = unsyncAtoms,
+	reset = reset,
 	applyPayloads = applyPayloads,
 }

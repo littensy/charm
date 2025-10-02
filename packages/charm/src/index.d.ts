@@ -21,7 +21,7 @@ export function atom<T>(): Atom<T | undefined>;
 
 export function computed<T>(getter: (previousValue?: T) => T, equals?: Equals<T>): () => T;
 
-export function effect(callback: () => Cleanup | void): Cleanup;
+export function effect(callback: (dispose: Cleanup) => Cleanup | void): Cleanup;
 
 export function effectScope(callback: () => Cleanup | void, detached?: boolean): Cleanup;
 
@@ -65,13 +65,3 @@ export function batched<Args extends any[], Result>(
 export function untracked<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
 
 export function onCleanup(callback: Cleanup, failSilently?: boolean): void;
-
-/**
- * @deprecated Use `batched()` instead.
- */
-export const batch: typeof batched;
-
-/**
- * @deprecated Use `untracked()` instead.
- */
-export const peek: typeof untracked;

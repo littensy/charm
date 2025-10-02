@@ -41,9 +41,7 @@ local function validate(value: any, key: any)
 		error(`Invalid key type '{typeKey}' at key '{key}'`)
 	elseif UNSAFE_VALUES[typeValue] then
 		error(`Invalid value type '{typeValue}' at key '{key}'`)
-	end
-
-	if typeValue == "table" then
+	elseif typeValue == "table" then
 		if getmetatable(value) ~= nil then
 			error(`Cannot sync tables with metatables! Got {value} at key '{key}'`)
 		elseif isTableUnsafe(value) then

@@ -287,19 +287,26 @@ local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
 
 	onSyncCallback = onSync
 
-	if game then
-		local elapsedTime = 0
-
-		connection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime)
-			elapsedTime += deltaTime
-			if elapsedTime >= config.interval then
-				elapsedTime %= config.interval
-				debug.profilebegin("CharmSync")
-				flush()
-				debug.profileend()
-			end
-		end)
+	if not game then
+		return stopSync
 	end
+
+	local timer = 0
+
+	connection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime)
+		if config.interval < 0 then
+			return
+		end
+
+		timer += deltaTime
+
+		if timer >= config.interval then
+			timer %= config.interval
+			debug.profilebegin("CharmSync")
+			flush()
+			debug.profileend()
+		end
+	end)
 
 	return stopSync
 end

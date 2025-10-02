@@ -9,7 +9,7 @@ local test = suite.test
 
 afterEach(function()
 	server.reset()
-	client.clearAtoms()
+	client.reset()
 	config.preserveHistory = false
 end)
 
@@ -20,7 +20,7 @@ test("should replicate server state to client", function()
 	local clientA = Charm.atom({ count = -1 })
 	local clientB = Charm.atom({ count = -1 })
 
-	client.registerAtoms({ a = clientA, b = clientB })
+	client.syncAtoms({ a = clientA, b = clientB })
 	server.syncAtomsToClient(target, { a = serverA, b = serverB })
 	server.startSync(function(syncTarget, payloads)
 		if syncTarget == target then
@@ -54,7 +54,7 @@ test("should replicate historical server state to client", function()
 
 	config.preserveHistory = true
 
-	client.registerAtoms({ a = clientA, b = clientB })
+	client.syncAtoms({ a = clientA, b = clientB })
 	server.syncAtomsToClient(target, { a = serverA, b = serverB })
 	server.startSync(function(syncTarget, payloads)
 		if syncTarget == target then

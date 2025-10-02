@@ -15,7 +15,6 @@ local function useAtom<T>(getter: () -> T, dependencies: { any }?): T
 	local state, setState = React.useState(getter)
 
 	React.useLayoutEffect(function()
-		setState(getter())
 		return Charm.effect(function()
 			setState(getter())
 		end)
@@ -38,8 +37,7 @@ local function useAtomBinding<T>(getter: () -> T, dependencies: { any }?)
 	local initialState = React.useMemo(getter, {})
 	local binding, setBinding = React.useBinding(initialState)
 
-	React.useEffect(function()
-		setBinding(getter())
+	React.useLayoutEffect(function()
 		return Charm.effect(function()
 			setBinding(getter())
 		end)

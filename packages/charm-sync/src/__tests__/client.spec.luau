@@ -8,13 +8,13 @@ local test = suite.test
 local afterEach = suite.afterEach
 
 afterEach(function()
-	client.clearAtoms()
+	client.reset()
 end)
 
 test("should sync state payload", function()
 	local a = atom(1)
 
-	client.registerAtoms({ a = a })
+	client.syncAtoms({ a = a })
 	client.applyPayloads({
 		{ type = "init", data = { a = 2 } },
 	})
@@ -26,7 +26,7 @@ test("should sync state patch", function()
 	local a = atom({ b = 1, c = 2 })
 	local previous = a()
 
-	client.registerAtoms({ a = a })
+	client.syncAtoms({ a = a })
 	client.applyPayloads({
 		{ type = "init", data = { a = a() } },
 	})
@@ -45,7 +45,7 @@ end)
 test("should fix sparse array patches", function()
 	local a = atom({ 1 })
 
-	client.registerAtoms({ a = a })
+	client.syncAtoms({ a = a })
 	client.applyPayloads({
 		{ type = "init", data = { a = a() } },
 	})
@@ -65,7 +65,7 @@ test("should apply multiple patches", function()
 	local a = atom(1)
 	local calls = {}
 
-	client.registerAtoms({ a = a })
+	client.syncAtoms({ a = a })
 
 	subscribe(a, function(value)
 		table.insert(calls, value)
@@ -89,7 +89,7 @@ test("should batch patches", function()
 	local b = atom(0)
 	local states = {}
 
-	client.registerAtoms({ a = a, b = b })
+	client.syncAtoms({ a = a, b = b })
 
 	subscribe(a, function()
 		states.b = b()
