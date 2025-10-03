@@ -16,7 +16,7 @@ local function useAtom<T>(getter: () -> T, dependencies: { any }?): T
 
 	React.useLayoutEffect(function()
 		return Charm.effect(function()
-			setState(getter())
+			Charm.untracked(setState, getter())
 		end)
 	end, dependencies or {})
 
@@ -39,7 +39,7 @@ local function useAtomBinding<T>(getter: () -> T, dependencies: { any }?)
 
 	React.useLayoutEffect(function()
 		return Charm.effect(function()
-			setBinding(getter())
+			Charm.untracked(setBinding, getter())
 		end)
 	end, dependencies or {})
 

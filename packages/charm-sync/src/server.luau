@@ -301,7 +301,7 @@ local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
 		timer += deltaTime
 
 		if timer >= config.interval then
-			timer %= config.interval
+			timer = 0
 			debug.profilebegin("CharmSync")
 			flush()
 			debug.profileend()

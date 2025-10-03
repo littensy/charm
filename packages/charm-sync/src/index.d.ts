@@ -115,7 +115,7 @@ export namespace client {
 
 	export function reset(): void;
 
-	export function applyPayloads<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean>(
+	export function applyPayloads<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean = true>(
 		payloads: SyncPayload<Atoms, Serialize>[],
 	): void;
 }
@@ -127,8 +127,8 @@ export namespace server {
 
 	export function unsyncClient(client: Player): void;
 
-	export function startSync<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean>(
-		onSync: (client: Player, payload: SyncPayload<Atoms, Serialize>) => void,
+	export function startSync<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean = true>(
+		onSync: (client: Player, payloads: SyncPayload<Atoms, Serialize>[]) => void,
 	): Cleanup;
 
 	export function stopSync(): void;
