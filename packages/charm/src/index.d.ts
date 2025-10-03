@@ -2,8 +2,8 @@ type Key = string | number | symbol;
 type Cleanup = () => void;
 
 export interface Atom<T> {
-	(): T;
 	(value: T | ((value: T) => T)): T;
+	(): T;
 }
 
 export type Selector<T> = () => T;
@@ -63,5 +63,7 @@ export function batched<Args extends any[], Result>(
 ): (...args: Args) => Result;
 
 export function untracked<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+
+export function peek<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
 
 export function onCleanup(callback: Cleanup, failSilently?: boolean): void;

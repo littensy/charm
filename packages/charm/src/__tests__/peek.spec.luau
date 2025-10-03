@@ -4,59 +4,29 @@ local suite = require("../../../../test/suite")
 local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
-local effectScope = Charm.effectScope
-local untracked = Charm.untracked
+local peek = Charm.peek
 local test = suite.test
 
-test("should run detached from effect", function()
+test("should not run detached", function()
 	local a = atom(1)
-	local effects = 0
-	local innerEffects = {}
+	local spyCalls = 0
 
-	local stopEffect = effect(function()
+	effect(function()
 		a()
-		untracked(function()
-			local stopInnerEffect = effect(function()
-				effects += 1
+		peek(function()
+			effect(function()
 				return function()
-					effects -= 1
+					spyCalls += 1
 				end
 			end)
-			table.insert(innerEffects, stopInnerEffect)
 		end)
 	end)
 
-	assert(effects == 1, "should have one effect")
+	assert(spyCalls == 0, "should not be called yet")
 	a(2)
-	assert(effects == 2, "should have two effects")
-	stopEffect()
-	assert(effects == 2, "should still have two effects")
-	for _, stopInnerEffect in innerEffects do
-		stopInnerEffect()
-	end
-	assert(effects == 0, "should have zero effects")
-end)
-
-test("should run detached from effect scope", function()
-	local effects = 0
-	local stopEffect
-
-	local stopScope = effectScope(function()
-		untracked(function()
-			stopEffect = effect(function()
-				effects += 1
-				return function()
-					effects -= 1
-				end
-			end)
-		end)
-	end)
-
-	assert(effects == 1, "should have one effect")
-	stopScope()
-	assert(effects == 1, "should still have one effect")
-	stopEffect()
-	assert(effects == 0, "should have zero effects")
+	assert(spyCalls == 1, "should be called once")
+	a(3)
+	assert(spyCalls == 2, "should be called twice")
 end)
 
 test("should block tracking inside effects", function()
@@ -65,7 +35,7 @@ test("should block tracking inside effects", function()
 	local spyCalls = 0
 
 	effect(function()
-		untracked(function()
+		peek(function()
 			spyCalls += 1
 			return a() + b()
 		end)
@@ -77,13 +47,13 @@ test("should block tracking inside effects", function()
 	assert(spyCalls == 1, "should be called once")
 end)
 
-test("should block tracking even when run inside effect run inside untracked", function()
+test("should block tracking even when run inside effect run inside peek", function()
 	local s = atom(1)
 	local spyCalls = 0
 
-	untracked(function()
+	peek(function()
 		effect(function()
-			untracked(function()
+			peek(function()
 				spyCalls += 1
 				return s()
 			end)
@@ -101,7 +71,7 @@ test("should not cause atom assignments throw", function()
 
 	local dispose = effect(function()
 		a()
-		untracked(function()
+		peek(function()
 			aChangedTime(aChangedTime() + 1)
 		end)
 	end)
@@ -119,7 +89,7 @@ test("should block tracking inside computed atoms", function()
 	local b = atom(2)
 	local spyCalls = 0
 	local c = computed(function()
-		return untracked(function()
+		return peek(function()
 			spyCalls += 1
 			return a() + b()
 		end)
@@ -135,7 +105,7 @@ test("should block tracking inside computed atoms", function()
 	assert(c() == 3, "c should be 3")
 end)
 
-test("should track outside untracked", function()
+test("should track outside peek", function()
 	local a = atom(1)
 	local b = atom(2)
 	local c = atom(3)
@@ -143,7 +113,7 @@ test("should track outside untracked", function()
 
 	effect(function()
 		a()
-		untracked(c)
+		peek(c)
 		b()
 		spyCalls += 1
 	end)
@@ -157,13 +127,13 @@ test("should track outside untracked", function()
 	assert(spyCalls == 3, "should not run on c change")
 end)
 
-test("should stack untracked", function()
+test("should stack peek", function()
 	local a = atom(1)
 	local spyCalls = 0
 
 	effect(function()
-		untracked(function()
-			untracked(a)
+		peek(function()
+			peek(a)
 			return a()
 		end)
 		spyCalls += 1

@@ -36,5 +36,8 @@ end)
 suite.describe("untracked", function()
 	require("./untracked.spec")
 end)
+suite.describe("peek", function()
+	require("./peek.spec")
+end)
 
 return {}

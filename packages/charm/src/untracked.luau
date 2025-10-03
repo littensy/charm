@@ -1,11 +1,20 @@
 local core = require("./core")
 
-local UNTRACKED = core.ReactiveFlags.Untracked
+local setCurrentSub = core.setCurrentSub
+local setCurrentScope = core.setCurrentScope
 local getCurrentSub = core.getCurrentSub
+local getCurrentScope = core.getCurrentScope
 
-local function handleUntracked(sub: core.ReactiveNode?, ok: boolean, ...)
-	if sub then
-		sub.flags = bit32.band(sub.flags, bit32.bnot(UNTRACKED))
+local function handleUntracked(
+	prevSub: core.ReactiveNode?,
+	prevScope: core.Effect | core.EffectScope?,
+	ok: boolean,
+	...
+)
+	if prevSub then
+		setCurrentSub(prevSub)
+	elseif prevScope then
+		setCurrentScope(prevScope)
 	end
 	if ok then
 		return ...
@@ -15,13 +24,13 @@ local function handleUntracked(sub: core.ReactiveNode?, ok: boolean, ...)
 end
 
 local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
-	local sub = getCurrentSub()
-	if not sub or bit32.btest(sub.flags, UNTRACKED) then
-		return callback(...)
+	if getCurrentSub() then
+		return handleUntracked(setCurrentSub(nil), nil, pcall(callback, ...))
+	elseif getCurrentScope() then
+		return handleUntracked(nil, setCurrentScope(nil), pcall(callback, ...))
 	else
-		sub.flags = bit32.bor(sub.flags, UNTRACKED)
+		return callback(...)
 	end
-	return handleUntracked(sub, pcall(callback, ...))
 end
 
 return untracked

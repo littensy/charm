@@ -4,6 +4,7 @@ local flags = require("@self/flags")
 local listen = require("@self/listen")
 local mapped = require("@self/mapped")
 local observe = require("@self/observe")
+local peek = require("@self/peek")
 local subscribe = require("@self/subscribe")
 local types = require("@self/types")
 local untracked = require("@self/untracked")
@@ -24,6 +25,7 @@ return {
 	listen = listen,
 	mapped = mapped,
 	observe = observe,
+	peek = peek,
 	subscribe = subscribe,
 	untracked = untracked,
 	deepFreeze = utils.deepFreeze,

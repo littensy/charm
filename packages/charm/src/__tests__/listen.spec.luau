@@ -28,7 +28,7 @@ test("should listen to selector", function()
 	assert(current == 2 and previous == 1, "should not run after unsub")
 end)
 
-test("should run in untracked", function()
+test("should run in peek", function()
 	local runs = 0
 	local cleanups = 0
 	local a = atom(0)

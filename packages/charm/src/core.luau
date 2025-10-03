@@ -23,11 +23,11 @@ local PENDING = 0b0100000
 local QUEUED = 0b1000000
 local UNTRACKED = 0b10000000
 
-type EffectScope = ReactiveNode & {
+export type EffectScope = ReactiveNode & {
 	cleanups: { () -> () },
 }
 
-type Effect = ReactiveNode & {
+export type Effect = ReactiveNode & {
 	fn: (dispose: () -> ()) -> ...(() -> ())?,
 	cleanups: { () -> () },
 	cleanup: () -> (),
