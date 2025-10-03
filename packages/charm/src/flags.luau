@@ -12,4 +12,8 @@ return {
 	--- Enforces immutability of atoms by deep-freezing table values. Enabled
 	--- if the optimization level is below 2, which is true in studio.
 	frozen = not isO2,
+	--- Whether inner effects should clean up after themselves when their
+	--- parent effect re-runs. This is usually desirable, but can be disabled
+	--- to revert to the old behavior. Defaults to `true`.
+	trackInnerEffects = true,
 }

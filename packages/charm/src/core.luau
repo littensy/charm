@@ -349,7 +349,7 @@ local function effect(fn: (dispose: () -> ()) -> ...(() -> ())?): () -> ()
 		cleanup = nil :: any,
 	}
 	self.cleanup = effectStop(self)
-	if activeSub then
+	if activeSub and config.trackInnerEffects then
 		link(self, activeSub)
 	elseif activeScope then
 		link(self, activeScope)

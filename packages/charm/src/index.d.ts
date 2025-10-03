@@ -13,6 +13,7 @@ export type Equals<T> = (current: T, incoming: T) => boolean;
 export const flags: {
 	strict: boolean;
 	frozen: boolean;
+	trackInnerEffects: boolean;
 };
 
 export function atom<T>(value: T, equals?: Equals<T>): Atom<T>;

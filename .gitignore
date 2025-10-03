@@ -8,5 +8,6 @@
 node_modules
 *.tsbuildinfo
 *.rbxm
+*.tgz
 .DS_Store
 roblox.d.luau
