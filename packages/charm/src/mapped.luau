@@ -36,7 +36,9 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item:
 			local cachedKey = keyCache[key]
 
 			if cachedKey then
-				currentOutput = if currentOutput == previousOutput then table.clone(currentOutput) else currentOutput
+				if currentOutput == previousOutput then
+					currentOutput = table.clone(currentOutput)
+				end
 				currentOutput[cachedKey] = nil
 				keyCache[key] = nil
 			end
@@ -50,7 +52,9 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item:
 			local valueOut, keyOut = map(value, key)
 
 			if currentOutput[keyOut] ~= valueOut then
-				currentOutput = if currentOutput == previousOutput then table.clone(currentOutput) else currentOutput
+				if currentOutput == previousOutput then
+					currentOutput = table.clone(currentOutput)
+				end
 				currentOutput[keyOut] = valueOut
 				keyCache[key] = keyOut
 			end
@@ -60,4 +64,13 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item:
 	end)
 end
 
-return mapped :: Mapped
+--- Creates a new atom that is computed by mapping over the entries of an
+--- existing atom. The returned atom is read-only, and its value is
+--- automatically updated when the source atom changes.
+---
+--- @param getter A function that returns the table to map over.
+--- @param mapper A function that transforms each value-key pair from the source into a new value or value-key pair for the resulting table.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
+local mapped = mapped :: Mapped
+
+return mapped

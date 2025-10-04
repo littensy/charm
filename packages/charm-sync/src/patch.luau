@@ -11,7 +11,11 @@ export type None = types.None
 --- deleted values in patches.
 local None: None = { __none = "__none" }
 
---- Checks if a value is the special `None` symbol.
+--- Checks whether a value is `None`. If `true`, the value is scheduled to be
+--- removed from the state when the patch is applied.
+---
+--- @param value The value to check.
+--- @return `true` if the value is `None`, otherwise `false`.
 local function isNone(value: any): boolean
 	return type(value) == "table" and value.__none == "__none"
 end
@@ -48,30 +52,30 @@ local function stringifySparseArray(object: { any }): { [string | number]: any }
 	return dictionary
 end
 
---- Compares two states and returns a patch that can be applied to the previous
+--- Compares two states and returns a patch that can be applied to the current
 --- state to produce the next state.
 ---
---- @param prevState The previous state.
+--- @param currentState The current state.
 --- @param nextState The next state.
---- @returns A patch that can be applied to the previous state.
-local function diff(prevState: any, nextState: any): any
-	if prevState == nextState then
+--- @return A patch that can be applied to the current state.
+local function diff(currentState: any, nextState: any): any
+	if currentState == nextState then
 		return nil
 	elseif nextState == nil then
 		return None
-	elseif type(prevState) ~= "table" or type(nextState) ~= "table" then
+	elseif type(currentState) ~= "table" or type(nextState) ~= "table" then
 		return nextState
 	end
 
 	local patches: { [any]: any } = table.clone(nextState)
 
-	for key, previous in prevState do
+	for key, previous in currentState do
 		patches[key] = diff(previous, nextState[key])
 	end
 
 	if config.autoSerialize then
 		-- Coerce sparse array patches into dictionaries
-		if prevState[1] ~= nil or nextState[1] ~= nil then
+		if currentState[1] ~= nil or nextState[1] ~= nil then
 			patches = stringifySparseArray(patches)
 		end
 
@@ -85,20 +89,20 @@ local function diff(prevState: any, nextState: any): any
 	return patches
 end
 
---- Applies a patch to a state and returns the next state.
+--- Applies a patch to a state and returns the resulting value.
 ---
---- @param prevState The current state.
+--- @param currentState The current state.
 --- @param statePatch The patches to apply.
---- @returns The next state.
-local function apply(prevState: any, statePatch: any): any
+--- @return The new state with the patch applied.
+local function apply(currentState: any, statePatch: any): any
 	if isNone(statePatch) then
 		return nil
-	elseif type(prevState) ~= "table" or type(statePatch) ~= "table" then
+	elseif type(currentState) ~= "table" or type(statePatch) ~= "table" then
 		return statePatch
 	end
 
-	local nextState = table.clone(prevState)
-	local stateIsArray = prevState[1] ~= nil
+	local nextState = table.clone(currentState)
+	local stateIsArray = currentState[1] ~= nil
 
 	for key, value in statePatch do
 		-- Diff-checking an array produces a sparse array, which will not be

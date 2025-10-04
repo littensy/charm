@@ -1,4 +1,5 @@
 local core = require("./core")
+local flags = require("./flags")
 
 local effect = core.effect
 local effectScope = core.effectScope
@@ -6,6 +7,17 @@ local onCleanup = core.onCleanup
 local startBatch = core.startBatch
 local endBatch = core.endBatch
 
+--- Calls the observer function for each unique key in the table returned by the
+--- getter. The observer is called once for each key, and again when a new key
+--- is added.
+---
+--- The observer may return a cleanup function, which will be called when the
+--- key is removed or when the entire observer is disposed.
+---
+--- @param getter A function that returns the table to observe.
+--- @param observer A function that is called for each key in the table.
+--- @return A function for disposing the observer.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-observer
 local function observe<K, V>(getter: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local scopes: { [K]: () -> () } = {}
 	local currentItems: { [K]: V } = {}
@@ -45,7 +57,9 @@ local function observe<K, V>(getter: () -> { [K]: V }, observer: (item: V, key: 
 		end
 	end)
 
-	onCleanup(disposeScopes, true)
+	if flags.trackInnerEffects then
+		onCleanup(disposeScopes, true)
+	end
 
 	return function()
 		disposeEffect()

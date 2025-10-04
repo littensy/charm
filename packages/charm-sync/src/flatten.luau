@@ -2,6 +2,11 @@ type NestedAtomMap = {
 	[string]: NestedAtomMap | () -> any,
 }
 
+--- Flattens a nested atom map into a single object with slash-separated keys.
+--- Useful for recursively collecting atoms returned by modules.
+---
+--- @param atoms The nested atom map to flatten.
+--- @return A flattened atom map.
 local function flatten(atoms: NestedAtomMap): { [string]: () -> any }
 	local result: { [string]: () -> any } = {}
 

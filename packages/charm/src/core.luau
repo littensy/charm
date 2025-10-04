@@ -2,16 +2,16 @@
 -- https://github.com/stackblitz/alien-signals
 -- https://github.com/Nicell/alien-signals-luau
 
+local alien = require("./alien")
 local config = require("./flags")
-local system = require("./system")
 local utils = require("./utils")
 
-export type ReactiveFlags = system.ReactiveFlags
-export type ReactiveNode = system.ReactiveNode
-export type Link = system.Link
+export type ReactiveFlags = alien.ReactiveFlags
+export type ReactiveNode = alien.ReactiveNode
+export type Link = alien.Link
 
-local ReactiveFlags = system.ReactiveFlags
-local createReactiveSystem = system.createReactiveSystem
+local ReactiveFlags = alien.ReactiveFlags
+local createReactiveSystem = alien.createReactiveSystem
 local deepFreeze = utils.deepFreeze
 local noYield = utils.noYield
 
@@ -23,11 +23,11 @@ local PENDING = 0b0100000
 local QUEUED = 0b1000000
 local UNTRACKED = 0b10000000
 
-export type EffectScope = ReactiveNode & {
+type EffectScope = ReactiveNode & {
 	cleanups: { () -> () },
 }
 
-export type Effect = ReactiveNode & {
+type Effect = ReactiveNode & {
 	fn: (dispose: () -> ()) -> ...(() -> ())?,
 	cleanups: { () -> () },
 	cleanup: () -> (),
@@ -36,7 +36,6 @@ export type Effect = ReactiveNode & {
 type Computed<T = any> = ReactiveNode & {
 	value: T?,
 	getter: (previousValue: T?) -> T,
-	equals: ((T, T) -> boolean)?,
 }
 
 type Atom<T = any> = ReactiveNode & {
@@ -92,16 +91,6 @@ local function runCleanups(effect: EffectScope)
 		end
 	end
 	table.clear(effect.cleanups)
-end
-
-local function onCleanup(cleanup: () -> (), failSilently: boolean?)
-	if activeSub and (activeSub :: Effect).cleanups then
-		table.insert((activeSub :: Effect).cleanups, cleanup)
-	elseif activeScope then
-		table.insert(activeScope.cleanups, cleanup)
-	elseif not failSilently then
-		warn(debug.traceback("onCleanup() can only be called inside an effect or a scope.", 2))
-	end
 end
 
 local function run(effect: Effect, flags: ReactiveFlags): ()
@@ -171,8 +160,7 @@ local function updateComputed(computed: Computed): boolean
 	if not success then
 		error(result)
 	end
-	local equals = computed.equals
-	if if equals then not equals(oldValue, result) else oldValue ~= result then
+	if oldValue ~= result then
 		computed.value = result
 		return true
 	else
@@ -321,26 +309,63 @@ local function unwatched(node: ReactiveNode)
 	end
 end
 
-local function atom<T>(initialValue: T, equals: ((T, T) -> boolean)?): (...((T) -> T) | T) -> T
+--- Creates a reactive atom that acts as both a getter and setter. Calling the
+--- atom with an argument sets its value, while calling it with no arguments
+--- returns its current value.
+---
+--- @param value The initial value of the atom. If empty, the atom's value will be `undefined`.
+--- @param equals A comparator function to determine if the atom's value has changed.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#atomstate-options
+local function atom<T>(value: T, equals: ((T, T) -> boolean)?): (...((T) -> T) | T) -> T
 	if config.frozen then
-		deepFreeze(initialValue)
+		deepFreeze(value)
 	end
 	return atomGetterSetter({
-		previousValue = initialValue,
-		value = initialValue,
+		previousValue = value,
+		value = value,
 		flags = MUTABLE,
 		equals = equals,
 	})
 end
 
-local function computed<T>(getter: (previousValue: T?) -> T, equals: ((T, T) -> boolean)?): () -> T
+--- Creates a new atom that is computed based on the values of other atoms.
+--- The returned atom is read-only, and its value is automatically updated when
+--- any atoms accessed from within the getter function change.
+---
+--- If an initial value is provided, the getter will receive this value as its
+--- first argument on the initial run, instead of `undefined`.
+---
+--- @example
+--- ```ts
+--- const count = atom(1);
+--- const plusOne = computed(() => count() + 1);
+--- print(plusOne()); // 2
+--- ```
+---
+--- @param getter A function that produces the next value.
+--- @param value An optional initial value for the selector.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#computedcallback-options
+local function computed<T>(getter: (previousValue: T?) -> T, value: T?): () -> T
 	return computedGetter({
 		flags = bit32.bor(MUTABLE, DIRTY),
 		getter = getter,
-		equals = equals,
+		value = value,
 	})
 end
 
+--- Creates an effect that runs a callback in response to atom state changes.
+--- An effect tracks which atoms are accessed during its execution, and re-runs
+--- the callback when those atoms change.
+---
+--- The effect callback may return a cleanup function, which gets called once,
+--- either before the effect re-runs or when it is disposed.
+---
+--- If the effect is called within another effect, it will be disposed when the
+--- outer effect re-runs.
+---
+--- @param fn The function to run when dependencies change.
+--- @return A function for disposing the effect.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
 local function effect(fn: (dispose: () -> ()) -> ...(() -> ())?): () -> ()
 	local self: Effect = {
 		fn = fn,
@@ -365,6 +390,14 @@ local function effect(fn: (dispose: () -> ()) -> ...(() -> ())?): () -> ()
 	return self.cleanup
 end
 
+--- Creates an effect scope that can capture multiple reactive effects (i.e.
+--- computed, effect, subscribe) created within it so that they can be disposed
+--- together.
+---
+--- @param fn A function that may create reactive effects.
+--- @param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
+--- @return A function for disposing all effects created within the scope.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
 local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
 	local self: EffectScope = {
 		flags = NONE,
@@ -384,6 +417,81 @@ local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> 
 		table.insert(self.cleanups, result)
 	end
 	return effectStop(self)
+end
+
+--- Registers a cleanup function to the current active effect or effect scope.
+--- If there is no active effect or scope, a warning is logged and the callback
+--- is not registered, unless `failSilently` is set to true.
+---
+--- @param callback The cleanup function to register.
+--- @param failSilently If true, suppresses the warning when there is no active effect or scope. Defaults to false.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
+local function onCleanup(cleanup: () -> (), failSilently: boolean?)
+	if activeSub and (activeSub :: Effect).cleanups then
+		table.insert((activeSub :: Effect).cleanups, cleanup)
+	elseif activeScope then
+		table.insert(activeScope.cleanups, cleanup)
+	elseif not failSilently then
+		warn(debug.traceback("onCleanup() can only be called inside an effect or a scope.", 2))
+	end
+end
+
+--- Runs the callback without subscribing to atom updates or capturing inner
+--- effects in the parent effect or scope.
+---
+--- For an alternative that still cleans up inner effects, use `peek` instead.
+---
+--- @param callback The callback function.
+--- @param args Arguments to pass to the callback.
+--- @return The return value of the callback.
+local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
+	local prevSub = setCurrentSub(nil)
+	local prevScope = setCurrentScope(nil)
+	local results: { any } = { pcall(callback, ...) }
+	setCurrentSub(prevSub)
+	setCurrentScope(prevScope)
+	if not results[1] then
+		error(results[2])
+	end
+	return unpack(results, 2)
+end
+
+--- Runs the callback without subscribing to atom updates, but still captures
+--- inner effects so that they dispose with the parent effect.
+---
+--- To avoid capturing inner effects, use `untracked` instead.
+---
+--- @param callback The callback function.
+--- @param args Arguments to pass to the callback.
+--- @return The return value of the callback.
+local function peek<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
+	if not activeSub or bit32.btest(activeSub.flags, UNTRACKED) then
+		return callback(...)
+	else
+		activeSub.flags = bit32.bor(activeSub.flags, UNTRACKED)
+		local results: { any } = { pcall(callback, ...) }
+		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(UNTRACKED))
+		if not results[1] then
+			error(results[2])
+		end
+		return unpack(results, 2)
+	end
+end
+
+--- Combines multiple atom updates into a single "commit" that runs effects at
+--- the end of the provided callback.
+---
+--- @param callback A function that performs multiple atom updates.
+--- @param args Arguments to pass to the callback.
+--- @return The return value of the callback.
+local function batched<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
+	startBatch()
+	local results: { any } = { (if config.strict then noYield else pcall)(callback, ...) }
+	endBatch()
+	if not results[1] then
+		error(results[2])
+	end
+	return unpack(results, 2)
 end
 
 local reactiveSystem = createReactiveSystem({
@@ -415,4 +523,7 @@ return {
 	computed = computed,
 	effect = effect,
 	effectScope = effectScope,
+	untracked = untracked,
+	peek = peek,
+	batched = batched,
 }

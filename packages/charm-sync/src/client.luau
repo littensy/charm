@@ -6,6 +6,10 @@ type SyncPayload = types.SyncPayload
 
 local atomRegister: { [string]: Charm.Atom } = {}
 
+--- Registers atoms to be kept in sync with the server. Atoms with matching
+--- keys on the server will be synced to these atoms.
+---
+--- @param atoms An object mapping string keys to atoms to be synced.
 local function syncAtoms(atoms: { [string]: Charm.Atom })
 	for key, atom in atoms do
 		if atomRegister[key] and atomRegister[key] ~= atom then
@@ -17,6 +21,11 @@ local function syncAtoms(atoms: { [string]: Charm.Atom })
 	end
 end
 
+--- Unregisters one or more atoms from being kept in sync with the server.
+--- The atoms will retain their current values, but will no longer receive
+--- updates from the server.
+---
+--- @param keys The keys of the atoms to stop syncing.
 local function unsyncAtoms(...: string)
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
@@ -24,6 +33,9 @@ local function unsyncAtoms(...: string)
 	end
 end
 
+--- Unregisters all atoms from being kept in sync with the server. The
+--- atoms will retain their current values, but will no longer receive
+--- updates from the server.
 local function reset()
 	table.clear(atomRegister)
 end
@@ -51,6 +63,11 @@ local function applyPatchPayload(data: { [string | number]: any })
 	end
 end
 
+--- Applies one or more payloads received from the server to the synced
+--- atoms. Payloads are state patches or initial state updates sent by the
+--- server, and are usually received via a remote event.
+---
+--- @param payloads The payloads to apply.
 local function applyPayloads(payloads: { SyncPayload })
 	for _, payload in payloads do
 		if payload.type == "init" then

@@ -20,7 +20,9 @@ local LISTENING_FOR_CHANGES: SyncStatus = 1
 local atomRegister: { [string]: RegisteredAtom } = {}
 local clientRegister: { [any]: { [string]: SyncStatus } } = {}
 local globalUpdates: { { key: string, value: any, previousValue: any } } = {}
+
 local connection: RBXScriptConnection?
+local onSyncCallback: (client: any, payloads: { SyncPayload }) -> ()?
 
 local function registerAtom<T>(key: string, atom: () -> T)
 	if atomRegister[key] then
@@ -196,6 +198,15 @@ local function createPayloadsForClient(client: any, patchData: any): { SyncPaylo
 	return payloads
 end
 
+--- Registers atoms to be kept in sync with a specific client. Should be
+--- called when a player joins the game to start syncing atoms to them. Call
+--- `unsyncAtomsFromClient` or `unsyncClient` to stop syncing.
+---
+--- Each atom should be assigned a unique key, allowing the server to re-use
+--- patches between multiple clients.
+---
+--- @param client The player to sync atoms to.
+--- @param atoms An object mapping string keys to atoms to be synced.
 local function syncAtomsToClient(client: any, atoms: { [string]: () -> any })
 	if not clientRegister[client] then
 		clientRegister[client] = {}
@@ -214,10 +225,19 @@ local function syncAtomsToClient(client: any, atoms: { [string]: () -> any })
 	end
 end
 
+--- Unregisters all atoms from being kept in sync with a specific client.
+--- Should be called when a player leaves the game.
+---
+--- @param client The player to stop syncing atoms to.
 local function unsyncClient(client: any)
 	clientRegister[client] = nil
 end
 
+--- Unregisters one or more atoms from being kept in sync with a specific
+--- client.
+---
+--- @param client The player to stop syncing atoms to.
+--- @param keys The keys of the atoms to stop syncing.
 local function unsyncAtomsFromClient(client: any, ...: string)
 	local syncedAtoms = clientRegister[client]
 
@@ -235,11 +255,14 @@ local function unsyncAtomsFromClient(client: any, ...: string)
 	end
 end
 
-local function onSyncCallback(_client: any, _payloads: { SyncPayload })
-	warn("[Charm] Override the onSync function by passing a custom function to startSync")
-end
-
+--- Immediately sends pending updates and initial states to all clients.
+--- Normally, updates are sent at the interval specified in `config.interval`.
+--- Calling this function forces all pending updates to be sent immediately.
 local function flush()
+	if not onSyncCallback then
+		return
+	end
+
 	local patches = if config.preserveHistory then createHistoricalPatches() else createPatch()
 
 	-- While payload objects are technically mutable as they are unique to
@@ -266,6 +289,8 @@ local function flush()
 	table.clear(globalUpdates)
 end
 
+--- Stops automatically syncing registered atoms to clients. Patches will
+--- no longer be sent to clients until `startSync` is called again.
 local function stopSync()
 	if connection then
 		connection:Disconnect()
@@ -273,6 +298,8 @@ local function stopSync()
 	end
 end
 
+--- Unregisters all atoms from being kept in sync with all clients, and
+--- stops automatic syncing.
 local function reset()
 	table.clear(atomRegister)
 	table.clear(clientRegister)
@@ -280,6 +307,11 @@ local function reset()
 	stopSync()
 end
 
+--- Starts automatically syncing registered atoms to clients. Patches will
+--- be sent to clients whenever the atoms are updated.
+---
+--- @param onSync The function to call when patches can be sent to a client.
+--- @return `stopSync()`
 local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ()): () -> ()
 	if connection then
 		connection:Disconnect()

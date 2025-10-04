@@ -14,4 +14,4 @@ export type SyncPayload =
 --- differentiate between a value that was set to `nil` and an unchanged value.
 export type None = { __none: "__none" }
 
-return nil
+return {}

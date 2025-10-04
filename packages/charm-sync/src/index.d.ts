@@ -26,9 +26,6 @@ type DataTypes = {
 	[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];
 };
 
-/**
- * A type that should not be made partial in patches.
- */
 type DataType = DataTypes[keyof DataTypes];
 
 /**
@@ -63,14 +60,8 @@ export type SyncPayload<Selectors extends SelectorMap = SelectorMap, Serialize e
 	| { type: "patch"; data: SyncPatch<StateOfMap<Selectors>, Serialize> };
 
 /**
- * Checks whether a value is `None`. If `true`, the value is scheduled to be
- * removed from the state when the patch is applied.
- *
- * @param value The value to check.
- * @returns `true` if the value is `None`, otherwise `false`.
+ * Global configuration options that affect the behavior of Charm Sync.
  */
-export function isNone(value: unknown): value is None;
-
 export const config: {
 	/**
 	 * The interval at which to send patches to the client, in seconds.
@@ -108,49 +99,142 @@ export const config: {
 	validatePatches: boolean;
 };
 
+/**
+ * @client
+ */
 export namespace client {
+	/**
+	 * Registers atoms to be kept in sync with the server. Atoms with matching
+	 * keys on the server will be synced to these atoms.
+	 *
+	 * @param atoms An object mapping string keys to atoms to be synced.
+	 */
 	export function syncAtoms(atoms: { [key: string]: Atom<any> }): void;
 
+	/**
+	 * Unregisters one or more atoms from being kept in sync with the server.
+	 * The atoms will retain their current values, but will no longer receive
+	 * updates from the server.
+	 *
+	 * @param keys The keys of the atoms to stop syncing.
+	 */
 	export function unsyncAtoms(...keys: string[]): void;
 
+	/**
+	 * Unregisters all atoms from being kept in sync with the server. The
+	 * atoms will retain their current values, but will no longer receive
+	 * updates from the server.
+	 */
 	export function reset(): void;
 
+	/**
+	 * Applies one or more payloads received from the server to the synced
+	 * atoms. Payloads are state patches or initial state updates sent by the
+	 * server, and are usually received via a remote event.
+	 *
+	 * @param payloads The payloads to apply.
+	 */
 	export function applyPayloads<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean = true>(
 		payloads: SyncPayload<Atoms, Serialize>[],
 	): void;
 }
 
+/**
+ * @server
+ */
 export namespace server {
+	/**
+	 * Registers atoms to be kept in sync with a specific client. Should be
+	 * called when a player joins the game to start syncing atoms to them. Call
+	 * `unsyncAtomsFromClient` or `unsyncClient` to stop syncing.
+	 *
+	 * Each atom should be assigned a unique key, allowing the server to re-use
+	 * patches between multiple clients.
+	 *
+	 * @param client The player to sync atoms to.
+	 * @param atoms An object mapping string keys to atoms to be synced.
+	 */
 	export function syncAtomsToClient(client: Player, atoms: { [key: string]: Atom<any> }): void;
 
+	/**
+	 * Unregisters one or more atoms from being kept in sync with a specific
+	 * client.
+	 *
+	 * @param client The player to stop syncing atoms to.
+	 * @param keys The keys of the atoms to stop syncing.
+	 */
 	export function unsyncAtomsFromClient(client: Player, ...keys: string[]): void;
 
+	/**
+	 * Unregisters all atoms from being kept in sync with a specific client.
+	 * Should be called when a player leaves the game.
+	 *
+	 * @param client The player to stop syncing atoms to.
+	 */
 	export function unsyncClient(client: Player): void;
 
+	/**
+	 * Starts automatically syncing registered atoms to clients. Patches will
+	 * be sent to clients whenever the atoms are updated.
+	 *
+	 * @param onSync The function to call when patches can be sent to a client.
+	 * @returns `stopSync()`
+	 */
 	export function startSync<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean = true>(
 		onSync: (client: Player, payloads: SyncPayload<Atoms, Serialize>[]) => void,
 	): Cleanup;
 
+	/**
+	 * Stops automatically syncing registered atoms to clients. Patches will
+	 * no longer be sent to clients until `startSync` is called again.
+	 */
 	export function stopSync(): void;
 
+	/**
+	 * Immediately sends pending updates and initial states to all clients.
+	 * Normally, updates are sent at the interval specified in `config.interval`.
+	 * Calling this function forces all pending updates to be sent immediately.
+	 */
 	export function flush(): void;
 
+	/**
+	 * Unregisters all atoms from being kept in sync with all clients, and
+	 * stops automatic syncing.
+	 */
 	export function reset(): void;
 }
 
 export namespace patch {
-	export function isNone(value: unknown): value is None;
-
+	/**
+	 * Converts `nil` values to the special `None` symbol. This is useful when
+	 * preparing data for serialization, since `nil` can represent both the absence
+	 * of a value and the removal of a value in patches.
+	 */
 	export function nilToNone<T>(value: T | undefined): T | None;
 
+	/**
+	 * Compares two states and returns a patch that can be applied to the
+	 * current state to produce the next state.
+	 *
+	 * @param currentState The current state.
+	 * @param nextState The next state.
+	 * @returns A patch that can be applied to the current state.
+	 */
 	export function diff<State, Serialize extends boolean = true>(
 		currentState: State,
 		nextState: State,
 	): SyncPatch<State, Serialize>;
 
+	/**
+	 * Applies a patch to a state and returns the resulting value.
+	 *
+	 * @param currentState The current state.
+	 * @param statePatch The patches to apply.
+	 * @returns The new state with the patch applied.
+	 */
 	export function apply<State, Serialize extends boolean = true>(
-		state: State,
-		patch: SyncPatch<State, Serialize>,
+		currentState: State,
+		statePatch: SyncPatch<State, Serialize>,
 	): State;
 }
 
@@ -170,7 +254,10 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 
 type IntersectValues<T> = UnionToIntersection<{ readonly [K in keyof T]: T[K] }[keyof T]>;
 
-type FlattenNestedAtoms<Atoms extends NestedAtomMap, Path extends Key | undefined = undefined> = IntersectValues<{
+export type FlattenNestedAtoms<
+	Atoms extends NestedAtomMap,
+	Path extends Key | undefined = undefined,
+> = IntersectValues<{
 	readonly [Name in keyof Atoms as AppendPath<Path, Name>]: Atoms[Name] extends Atom<any>
 		? { readonly [K in AppendPath<Path, Name>]: Atoms[Name] }
 		: Atoms[Name] extends NestedAtomMap
@@ -183,6 +270,15 @@ type FlattenNestedAtoms<Atoms extends NestedAtomMap, Path extends Key | undefine
  * Useful for recursively collecting atoms returned by modules.
  *
  * @param atoms The nested atom map to flatten.
- * @return A flattened atom map.
+ * @returns A flattened atom map.
  */
 export function flatten<Atoms extends NestedAtomMap>(atoms: Atoms): FlattenNestedAtoms<Atoms>;
+
+/**
+ * Checks whether a value is `None`. If `true`, the value is scheduled to be
+ * removed from the state when the patch is applied.
+ *
+ * @param value The value to check.
+ * @returns `true` if the value is `None`, otherwise `false`.
+ */
+export function isNone(value: unknown): value is None;

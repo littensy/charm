@@ -81,13 +81,12 @@ test("should not update if the atom value is reverted", function()
 	assert(times == 1, "computed ran when it should not")
 end)
 
-test("should accept equality function", function()
+test("should receive previous value", function()
 	local calls = {}
 	local src = atom(0)
-	local c1 = computed(function()
-		return src()
-	end, function(current, incoming)
-		return current == incoming or incoming % 2 == 1
+	local c1 = computed(function(current): number
+		local incoming = src()
+		return if current == incoming or incoming % 2 == 1 then current or incoming else incoming
 	end)
 
 	effect(function()
