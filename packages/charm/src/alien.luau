@@ -1,7 +1,3 @@
--- Adapted from Alien Signals
--- https://github.com/stackblitz/alien-signals
--- https://github.com/Nicell/alien-signals-luau
-
 export type ReactiveNode = {
 	deps: Link?,
 	depsTail: Link?,
@@ -34,7 +30,7 @@ local RECURSED_CHECK = 0b00000100
 local RECURSED = 0b00001000
 local DIRTY = 0b00010000
 local PENDING = 0b00100000
-local UNTRACKED = 0b10000000
+local PEEKING = 0b10000000
 
 local ReactiveFlags = {
 	None = NONE,
@@ -44,7 +40,6 @@ local ReactiveFlags = {
 	Recursed = RECURSED,
 	Dirty = DIRTY,
 	Pending = PENDING,
-	Untracked = UNTRACKED,
 }
 
 local function createReactiveSystem(props: {
@@ -55,7 +50,6 @@ local function createReactiveSystem(props: {
 	local update = props.update
 	local notify = props.notify
 	local unwatched = props.unwatched
-	local currentVersion = 0
 
 	local function isValidLink(checkLink: Link, sub: ReactiveNode): boolean
 		local link = sub.depsTail
@@ -68,23 +62,27 @@ local function createReactiveSystem(props: {
 		return false
 	end
 
-	local function link(dep: ReactiveNode, sub: ReactiveNode): ()
+	local function link(dep: ReactiveNode, sub: ReactiveNode, version: number): ()
+		-- DEVIATION: Do not link signals to sub while peeking
+		if bit32.btest(sub.flags, PEEKING) and bit32.btest(dep.flags, MUTABLE) then
+			return
+		end
 		local prevDep = sub.depsTail
 		if prevDep and prevDep.dep == dep then
 			return
 		end
 		local nextDep = if prevDep then prevDep.nextDep else sub.deps
 		if nextDep and nextDep.dep == dep then
-			nextDep.version = currentVersion
+			nextDep.version = version
 			sub.depsTail = nextDep
 			return
 		end
 		local prevSub = dep.subsTail
-		if prevSub and prevSub.version == currentVersion and prevSub.sub == sub then
+		if prevSub and prevSub.version == version and prevSub.sub == sub then
 			return
 		end
 		local newLink: Link = {
-			version = currentVersion,
+			version = version,
 			dep = dep,
 			sub = sub,
 			prevDep = prevDep,
@@ -208,21 +206,6 @@ local function createReactiveSystem(props: {
 		until false
 	end
 
-	local function startTracking(sub: ReactiveNode): ()
-		currentVersion += 1
-		sub.depsTail = nil
-		sub.flags = bit32.bor(bit32.band(sub.flags, bit32.bnot(bit32.bor(RECURSED, DIRTY, PENDING))), RECURSED_CHECK)
-	end
-
-	local function endTracking(sub: ReactiveNode): ()
-		local depsTail = sub.depsTail
-		local toRemove = if depsTail then depsTail.nextDep else sub.deps
-		while toRemove do
-			toRemove = unlink(toRemove, sub)
-		end
-		sub.flags = bit32.band(sub.flags, bit32.bnot(RECURSED_CHECK))
-	end
-
 	local function shallowPropagate(link: Link): ()
 		repeat
 			local sub = link.sub
@@ -320,8 +303,6 @@ local function createReactiveSystem(props: {
 		unlink = unlink,
 		propagate = propagate,
 		checkDirty = checkDirty,
-		endTracking = endTracking,
-		startTracking = startTracking,
 		shallowPropagate = shallowPropagate,
 	}
 end

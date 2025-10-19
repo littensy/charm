@@ -1,7 +1,7 @@
 local core = require("./core")
 
 local computed = core.computed
-local setCurrentSub = core.setCurrentSub
+local setActiveSub = core.setActiveSub
 
 type Mapped =
 	& (<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)) -> () -> { [KO]: VO })
@@ -12,9 +12,9 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item:
 	local keyCache: { [KI]: KO } = {}
 
 	local function map(value: VI, key: KI): (VO, KO)
-		local currentSub = setCurrentSub(nil)
+		local prevSub = setActiveSub(nil)
 		local success, valueOut, keyOut = pcall(mapper, value, key)
-		setCurrentSub(currentSub)
+		setActiveSub(prevSub)
 
 		if not success then
 			error(`mapped() transform function failed: {valueOut}`)

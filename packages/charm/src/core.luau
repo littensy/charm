@@ -1,7 +1,3 @@
--- Adapted from Alien Signals
--- https://github.com/stackblitz/alien-signals
--- https://github.com/Nicell/alien-signals-luau
-
 local alien = require("./alien")
 local config = require("./flags")
 local utils = require("./utils")
@@ -15,22 +11,23 @@ local createReactiveSystem = alien.createReactiveSystem
 local deepFreeze = utils.deepFreeze
 local noYield = utils.noYield
 
-local NONE = 0b0000000
-local MUTABLE = 0b0000001
-local WATCHING = 0b0000010
-local DIRTY = 0b0010000
-local PENDING = 0b0100000
-local QUEUED = 0b1000000
-local UNTRACKED = 0b10000000
+local NONE = 0b00000000
+local MUTABLE = 0b00000001
+local WATCHING = 0b00000010
+local RECURSED_CHECK = 0b00000100
+local DIRTY = 0b00010000
+local PENDING = 0b00100000
+local QUEUED = 0b01000000
+local PEEKING = 0b10000000
 
 type EffectScope = ReactiveNode & {
 	cleanups: { () -> () },
 }
 
 type Effect = ReactiveNode & {
-	fn: (dispose: () -> ()) -> ...(() -> ())?,
+	fn: (stop: () -> ()) -> (() -> ())?,
 	cleanups: { () -> () },
-	cleanup: () -> (),
+	stop: () -> (),
 }
 
 type Computed<T = any> = ReactiveNode & {
@@ -38,54 +35,47 @@ type Computed<T = any> = ReactiveNode & {
 	getter: (previousValue: T?) -> T,
 }
 
-type Atom<T = any> = ReactiveNode & {
-	previousValue: T,
-	value: T,
-	equals: ((T, T) -> boolean)?,
+type Signal<T = any> = ReactiveNode & {
+	currentValue: T,
+	pendingValue: T,
 }
 
-local link: (dep: ReactiveNode, sub: ReactiveNode) -> ()
+local link: (dep: ReactiveNode, sub: ReactiveNode, version: number) -> ()
 local unlink: (link: Link, sub: ReactiveNode?) -> Link?
 local propagate: (link: Link) -> ()
 local checkDirty: (link: Link, sub: ReactiveNode) -> boolean
-local endTracking: (sub: ReactiveNode) -> ()
-local startTracking: (sub: ReactiveNode) -> ()
 local shallowPropagate: (link: Link) -> ()
 
+local cycle = 0
 local batchDepth = 0
-
-local queuedEffects: { Effect } = {}
-local queuedEffectsLength = 0
 local notifyIndex = 0
-
-local activeScope: Effect | EffectScope?
+local queuedEffects: { Effect | EffectScope? } = {}
+local queuedEffectsLength = 0
 local activeSub: ReactiveNode?
 
-local function getCurrentSub(): ReactiveNode?
+local function getActiveSub(): ReactiveNode?
 	return activeSub
 end
 
-local function setCurrentSub(sub: ReactiveNode?)
+local function setActiveSub(sub: ReactiveNode?)
 	local prevSub = activeSub
 	activeSub = sub
 	return prevSub
 end
 
-local function getCurrentScope(): Effect | EffectScope?
-	return activeScope
-end
-
-local function setCurrentScope(scope: Effect | EffectScope?)
-	local prevScope = activeScope
-	activeScope = scope
-	return prevScope
+local function purgeDeps(sub: ReactiveNode)
+	local depsTail = sub.depsTail
+	local dep = if depsTail then depsTail.nextDep else sub.deps
+	while dep do
+		dep = unlink(dep, sub)
+	end
 end
 
 local function runCleanups(effect: EffectScope)
 	for _, cleanup in effect.cleanups do
-		local prev = setCurrentSub(nil)
+		local prevSub = setActiveSub(nil)
 		local success, result: any = (if config.strict then noYield else pcall)(cleanup)
-		setCurrentSub(prev)
+		activeSub = prevSub
 		if not success then
 			error(result)
 		end
@@ -93,40 +83,49 @@ local function runCleanups(effect: EffectScope)
 	table.clear(effect.cleanups)
 end
 
-local function run(effect: Effect, flags: ReactiveFlags): ()
-	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(effect.deps :: Link, effect)) then
-		runCleanups(effect)
-		local prev = setCurrentSub(effect)
-		startTracking(effect)
-		local success, result: (() -> ())? = (if config.strict then noYield else pcall)(effect.fn, effect.cleanup)
-		setCurrentSub(prev)
-		endTracking(effect)
+local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
+	sub.flags = bit32.band(flags, bit32.bnot(PENDING))
+end
+
+local function run(e: Effect | EffectScope, flags: ReactiveFlags): ()
+	if
+		bit32.btest(flags, DIRTY)
+		or (bit32.btest(flags, PENDING) and (checkDirty(e.deps :: Link, e) or setNotPending(e, flags)))
+	then
+		runCleanups(e)
+		local e = e :: Effect
+		cycle += 1
+		e.depsTail = nil
+		e.flags = bit32.bor(WATCHING, RECURSED_CHECK)
+		local prevSub = setActiveSub(e)
+		local success, result: (() -> ())? = (if config.strict then noYield else pcall)(e.fn, e.stop)
+		activeSub = prevSub
+		e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
+		purgeDeps(e)
 		if not success then
 			error(result)
 		elseif result then
-			table.insert(effect.cleanups, result)
+			table.insert(e.cleanups, result)
 		end
-		return
-	elseif bit32.btest(flags, PENDING) then
-		effect.flags = bit32.band(flags, bit32.bnot(PENDING))
-	end
-	local link = effect.deps
-	while link do
-		local dep = link.dep
-		local depFlags = dep.flags
-		if bit32.btest(depFlags, QUEUED) then
-			depFlags = bit32.band(depFlags, bit32.bnot(QUEUED))
-			dep.flags = depFlags
-			run(dep :: Effect, depFlags)
+	else
+		local link = e.deps
+		while link do
+			local dep = link.dep
+			local depFlags = dep.flags
+			if bit32.btest(depFlags, QUEUED) then
+				depFlags = bit32.band(depFlags, bit32.bnot(QUEUED))
+				dep.flags = depFlags
+				run(dep :: Effect, depFlags)
+			end
+			link = link.nextDep
 		end
-		link = link.nextDep
 	end
 end
 
 local function flush(): ()
 	while notifyIndex < queuedEffectsLength do
 		notifyIndex += 1
-		local effect = queuedEffects[notifyIndex]
+		local effect = queuedEffects[notifyIndex] :: Effect
 		queuedEffects[notifyIndex] = nil
 		effect.flags = bit32.band(effect.flags, bit32.bnot(QUEUED))
 		run(effect, effect.flags)
@@ -150,163 +149,134 @@ local function endBatch()
 	end
 end
 
-local function updateComputed(computed: Computed): boolean
-	local prevSub = setCurrentSub(computed)
-	startTracking(computed)
-	local oldValue = computed.value
-	local success, result = (if config.strict then noYield else pcall)(computed.getter, oldValue)
-	setCurrentSub(prevSub)
-	endTracking(computed)
+local function updateComputed(c: Computed): boolean
+	cycle += 1
+	c.depsTail = nil
+	c.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
+	local prevSub = setActiveSub(c)
+	local oldValue = c.value
+	local success, result: unknown = (if config.strict then noYield else pcall)(c.getter, oldValue)
+	activeSub = prevSub
+	c.flags = bit32.band(c.flags, bit32.bnot(RECURSED_CHECK))
+	purgeDeps(c)
 	if not success then
 		error(result)
 	end
 	if oldValue ~= result then
-		computed.value = result
-		return true
-	else
-		return false
-	end
-end
-
-local function updateAtom(atom: Atom, value: any): boolean
-	atom.flags = MUTABLE
-	if atom.previousValue ~= value then
-		atom.previousValue = value
-		return true
-	else
-		return false
-	end
-end
-
-local function readAtom<T>(atom: Atom<T>): T
-	local value = atom.value
-	if bit32.btest(atom.flags, DIRTY) then
-		if updateAtom(atom, value) then
-			local subs = atom.subs
-			if subs then
-				shallowPropagate(subs)
-			end
-		end
-	end
-	if activeSub and not bit32.btest(activeSub.flags, UNTRACKED) then
-		link(atom, activeSub)
-	end
-	return value
-end
-
-local function writeAtom<T>(atom: Atom<T>, oldValue: T, newValue: T): T
-	local equals = atom.equals
-	if if equals then not equals(oldValue, newValue) else oldValue ~= newValue then
 		if config.frozen then
-			deepFreeze(newValue)
+			deepFreeze(result)
 		end
-		atom.value = newValue
-		atom.flags = bit32.bor(MUTABLE, DIRTY)
-		local subs = atom.subs
-		if subs then
-			propagate(subs)
-			if batchDepth == 0 then
-				flush()
-			end
-		end
-		return newValue
-	end
-	return oldValue
-end
-
-local function atomGetterSetter<T>(atom: Atom<T>): (...((T) -> T) | T) -> T
-	return function(...)
-		if select("#", ...) == 0 then
-			return readAtom(atom)
-		end
-		local oldValue = atom.value
-		local newValue = ...
-		if type(newValue) == "function" then
-			local prev = setCurrentSub(nil)
-			local success, result = (if config.strict then noYield else pcall)(newValue, oldValue)
-			setCurrentSub(prev)
-			if not success then
-				error(result)
-			end
-			newValue = result
-		end
-		return writeAtom(atom, oldValue, newValue :: T)
+		c.value = result
+		return true
+	else
+		return false
 	end
 end
 
-local function computedGetter<T>(computed: Computed<T>): () -> T
-	return function()
-		local flags = computed.flags
+local function updateSignal(s: Signal): boolean
+	s.flags = MUTABLE
+	local pendingValue = s.pendingValue
+	if s.currentValue ~= pendingValue then
+		s.currentValue = pendingValue
+		return true
+	else
+		return false
+	end
+end
+
+local function computedOper<T>(this: Computed<T>): () -> T
+	return function(): T
+		local flags = this.flags
 		if
-			bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(computed.deps :: Link, computed))
+			bit32.btest(flags, DIRTY)
+			or (bit32.btest(flags, PENDING) and (checkDirty(this.deps :: Link, this) or setNotPending(this, flags)))
 		then
-			if updateComputed(computed) then
-				local subs = computed.subs
+			if updateComputed(this) then
+				local subs = this.subs
 				if subs then
 					shallowPropagate(subs)
 				end
 			end
-		elseif bit32.btest(flags, PENDING) then
-			computed.flags = bit32.band(flags, bit32.bnot(PENDING))
 		end
-		if activeSub and not bit32.btest(activeSub.flags, UNTRACKED) then
-			link(computed, activeSub)
-		elseif activeScope then
-			link(computed, activeScope)
+		if activeSub then
+			link(this, activeSub, cycle)
 		end
-		return computed.value :: T
+		return this.value :: T
 	end
 end
 
-local function effectStop(self: EffectScope): () -> ()
-	return function()
-		local dep = self.deps
-		while dep do
-			dep = unlink(dep, self)
-		end
-		local sub = self.subs
-		if sub then
-			unlink(sub)
-		end
-		self.flags = NONE
-		runCleanups(self)
-	end
-end
-
-local function update(atom: ReactiveNode): boolean
-	if (atom :: Computed).getter then
-		return updateComputed(atom :: Computed)
-	else
-		return updateAtom(atom :: Atom, (atom :: Atom).value)
-	end
-end
-
-local function notify(effect: ReactiveNode)
-	local flags = effect.flags
-	if not bit32.btest(flags, QUEUED) then
-		effect.flags = bit32.bor(flags, QUEUED)
-		local subs = effect.subs
-		if subs then
-			notify(subs.sub :: Effect)
+local function signalOper<T>(this: Signal<T>, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
+	return function(...: ((T) -> T) | T): T
+		if select("#", ...) ~= 0 then
+			local update = ...
+			local value: T
+			if type(update) == "function" then
+				local prevSub = setActiveSub(nil)
+				local success, result: T = (if config.strict then noYield else pcall)(update, this.currentValue)
+				activeSub = prevSub
+				if not success then
+					error(result)
+				end
+				value = result
+			else
+				value = update
+			end
+			if if equals then not equals(this.pendingValue, value) else this.pendingValue ~= value then
+				if config.frozen then
+					deepFreeze(value)
+				end
+				this.pendingValue = value
+				this.flags = bit32.bor(MUTABLE, DIRTY)
+				local subs = this.subs
+				if subs then
+					propagate(subs)
+					if batchDepth == 0 then
+						flush()
+					end
+				end
+				return value
+			end
+			return this.currentValue
 		else
-			queuedEffectsLength += 1
-			queuedEffects[queuedEffectsLength] = effect :: Effect
+			if bit32.btest(this.flags, DIRTY) then
+				if updateSignal(this) then
+					local subs = this.subs
+					if subs then
+						shallowPropagate(subs)
+					end
+				end
+			end
+			local sub = activeSub
+			while sub do
+				if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
+					link(this, sub, cycle)
+					break
+				end
+				local subs = sub.subs
+				if subs then
+					sub = subs.sub
+				end
+			end
+			return this.currentValue
 		end
 	end
 end
 
-local function unwatched(node: ReactiveNode)
-	if (node :: Computed).getter then
-		local toRemove = node.deps
-		if toRemove then
-			node.flags = bit32.bor(MUTABLE, DIRTY)
-			repeat
-				toRemove = unlink(toRemove, node)
-			until not toRemove
+local function effectScopeOper(this: EffectScope): () -> ()
+	return function()
+		this.depsTail = nil
+		this.flags = NONE
+		purgeDeps(this)
+		local sub = this.subs
+		if sub then
+			unlink(sub, this)
 		end
-	elseif (node :: Effect).cleanups then
-		effectStop(node :: Effect)()
+		runCleanups(this)
 	end
+end
+
+local function effectOper(this: Effect): () -> ()
+	return effectScopeOper(this)
 end
 
 --- Creates a reactive atom that acts as both a getter and setter. Calling the
@@ -316,16 +286,15 @@ end
 --- @param value The initial value of the atom. If empty, the atom's value will be `undefined`.
 --- @param equals A comparator function to determine if the atom's value has changed.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#atomstate-options
-local function atom<T>(value: T, equals: ((T, T) -> boolean)?): (...((T) -> T) | T) -> T
+local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
 	if config.frozen then
-		deepFreeze(value)
+		deepFreeze(initialValue)
 	end
-	return atomGetterSetter({
-		previousValue = value,
-		value = value,
+	return signalOper({
+		currentValue = initialValue,
+		pendingValue = initialValue,
 		flags = MUTABLE,
-		equals = equals,
-	})
+	}, equals)
 end
 
 --- Creates a new atom that is computed based on the values of other atoms.
@@ -345,11 +314,10 @@ end
 --- @param getter A function that produces the next value.
 --- @param value An optional initial value for the selector.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#computedcallback-options
-local function computed<T>(getter: (previousValue: T?) -> T, value: T?): () -> T
-	return computedGetter({
+local function computed<T>(getter: (previousValue: T?) -> T): () -> T
+	return computedOper({
 		flags = bit32.bor(MUTABLE, DIRTY),
 		getter = getter,
-		value = value,
 	})
 end
 
@@ -366,28 +334,32 @@ end
 --- @param fn The function to run when dependencies change.
 --- @return A function for disposing the effect.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
-local function effect(fn: (dispose: () -> ()) -> ...(() -> ())?): () -> ()
-	local self: Effect = {
+local function effect(fn: (stop: () -> ()) -> ()): () -> ()
+	local e: Effect = {
 		fn = fn,
 		flags = WATCHING,
 		cleanups = {},
-		cleanup = nil :: any,
+		stop = nil :: any,
 	}
-	self.cleanup = effectStop(self)
-	if activeSub and config.trackInnerEffects then
-		link(self, activeSub)
-	elseif activeScope then
-		link(self, activeScope)
+	e.stop = effectOper(e)
+	local prevSub = setActiveSub(e)
+	if prevSub and (config.trackInnerEffects or prevSub.flags == NONE) then
+		link(e, prevSub, 0)
 	end
-	local prev = setCurrentSub(self)
-	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn, self.cleanup)
-	setCurrentSub(prev)
+	local stopped = false
+	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn, function()
+		stopped = true
+	end)
+	activeSub = prevSub
 	if not success then
 		error(result)
 	elseif result then
-		table.insert(self.cleanups, result)
+		table.insert(e.cleanups, result)
 	end
-	return self.cleanup
+	if stopped then
+		e.stop()
+	end
+	return e.stop
 end
 
 --- Creates an effect scope that can capture multiple reactive effects (i.e.
@@ -398,25 +370,23 @@ end
 --- @param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
 --- @return A function for disposing all effects created within the scope.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
-local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
-	local self: EffectScope = {
+local function effectScope(fn: () -> (), detached: boolean?): () -> ()
+	local e: EffectScope = {
 		flags = NONE,
 		cleanups = {},
 	}
-	if activeScope and not detached then
-		link(self, activeScope)
+	local prevSub = setActiveSub(e)
+	if prevSub and not detached then
+		link(e, prevSub, 0)
 	end
-	local prevSub = setCurrentSub(nil)
-	local prevScope = setCurrentScope(self)
 	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
-	setCurrentScope(prevScope)
-	setCurrentSub(prevSub)
+	activeSub = prevSub
 	if not success then
 		error(result)
 	elseif result then
-		table.insert(self.cleanups, result)
+		table.insert(e.cleanups, result)
 	end
-	return effectStop(self)
+	return effectScopeOper(e)
 end
 
 --- Registers a cleanup function to the current active effect or effect scope.
@@ -429,8 +399,6 @@ end
 local function onCleanup(cleanup: () -> (), failSilently: boolean?)
 	if activeSub and (activeSub :: Effect).cleanups then
 		table.insert((activeSub :: Effect).cleanups, cleanup)
-	elseif activeScope then
-		table.insert(activeScope.cleanups, cleanup)
 	elseif not failSilently then
 		warn(debug.traceback("onCleanup() can only be called inside an effect or a scope.", 2))
 	end
@@ -445,11 +413,9 @@ end
 --- @param args Arguments to pass to the callback.
 --- @return The return value of the callback.
 local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
-	local prevSub = setCurrentSub(nil)
-	local prevScope = setCurrentScope(nil)
+	local prevSub = setActiveSub(nil)
 	local results: { any } = { pcall(callback, ...) }
-	setCurrentSub(prevSub)
-	setCurrentScope(prevScope)
+	activeSub = prevSub
 	if not results[1] then
 		error(results[2])
 	end
@@ -465,16 +431,20 @@ end
 --- @param args Arguments to pass to the callback.
 --- @return The return value of the callback.
 local function peek<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
-	if not activeSub or bit32.btest(activeSub.flags, UNTRACKED) then
-		return callback(...)
-	else
-		activeSub.flags = bit32.bor(activeSub.flags, UNTRACKED)
+	if
+		activeSub
+		and bit32.band(activeSub.flags, PEEKING) == 0
+		and bit32.btest(activeSub.flags, bit32.bor(WATCHING, MUTABLE))
+	then
+		activeSub.flags = bit32.bor(activeSub.flags, PEEKING)
 		local results: { any } = { pcall(callback, ...) }
-		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(UNTRACKED))
+		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(PEEKING))
 		if not results[1] then
 			error(results[2])
 		end
 		return unpack(results, 2)
+	else
+		return callback(...)
 	end
 end
 
@@ -494,28 +464,51 @@ local function batched<Args..., Results...>(callback: (Args...) -> Results..., .
 	return unpack(results, 2)
 end
 
+local function notify(e: ReactiveNode)
+	local flags = e.flags
+	if not bit32.btest(flags, QUEUED) then
+		e.flags = bit32.bor(flags, QUEUED)
+		local subs = e.subs
+		if subs then
+			notify(subs.sub)
+		else
+			queuedEffectsLength += 1
+			queuedEffects[queuedEffectsLength] = e :: Effect
+		end
+	end
+end
+
 local reactiveSystem = createReactiveSystem({
-	update = update,
+	update = function(node: ReactiveNode): boolean
+		if node.depsTail then
+			return updateComputed(node :: Computed)
+		else
+			return updateSignal(node :: Signal)
+		end
+	end,
 	notify = notify,
-	unwatched = unwatched,
+	unwatched = function(node: ReactiveNode)
+		if bit32.band(node.flags, MUTABLE) == 0 then
+			effectScopeOper(node :: EffectScope)()
+		elseif node.depsTail then
+			node.depsTail = nil
+			node.flags = bit32.bor(MUTABLE, DIRTY)
+			purgeDeps(node)
+		end
+	end,
 })
 
 link = reactiveSystem.link
 unlink = reactiveSystem.unlink
 propagate = reactiveSystem.propagate
 checkDirty = reactiveSystem.checkDirty
-endTracking = reactiveSystem.endTracking
-startTracking = reactiveSystem.startTracking
 shallowPropagate = reactiveSystem.shallowPropagate
 
 return {
 	ReactiveFlags = ReactiveFlags,
 	createReactiveSystem = createReactiveSystem,
-	getCurrentSub = getCurrentSub,
-	setCurrentSub = setCurrentSub,
-	getCurrentScope = getCurrentScope,
-	setCurrentScope = setCurrentScope,
-	onCleanup = onCleanup,
+	getActiveSub = getActiveSub,
+	setActiveSub = setActiveSub,
 	getBatchDepth = getBatchDepth,
 	startBatch = startBatch,
 	endBatch = endBatch,
@@ -523,6 +516,7 @@ return {
 	computed = computed,
 	effect = effect,
 	effectScope = effectScope,
+	onCleanup = onCleanup,
 	untracked = untracked,
 	peek = peek,
 	batched = batched,

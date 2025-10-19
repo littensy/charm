@@ -5,7 +5,7 @@ local computed = core.computed
 local effect = core.effect
 local effectScope = core.effectScope
 local endBatch = core.endBatch
-local setCurrentSub = core.setCurrentSub
+local setActiveSub = core.setActiveSub
 local onCleanup = core.onCleanup
 local atom = core.atom
 local startBatch = core.startBatch
@@ -202,9 +202,9 @@ test("should duplicate subscribers do not affect the notify order", function()
 
 	effect(function()
 		table.insert(order, "a")
-		local currentSub = setCurrentSub(nil)
+		local currentSub = setActiveSub(nil)
 		local isOne = src2() == 1
-		setCurrentSub(currentSub)
+		setActiveSub(currentSub)
 		if isOne then
 			src1()
 		end
