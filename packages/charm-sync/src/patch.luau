@@ -3,7 +3,7 @@ local config = require("./config")
 local types = require("./types")
 local validate = require("./validate")
 
-local flags = Charm.flags
+local globals = Charm.globals
 
 export type None = types.None
 
@@ -73,13 +73,13 @@ local function diff(currentState: any, nextState: any): any
 		patches[key] = diff(previous, nextState[key])
 	end
 
-	if config.autoSerialize then
+	if config.fixArrays then
 		-- Coerce sparse array patches into dictionaries
 		if currentState[1] ~= nil or nextState[1] ~= nil then
 			patches = stringifySparseArray(patches)
 		end
 
-		if flags.strict and config.validatePatches then
+		if globals.strict and config.validatePatches then
 			for key, value in patches do
 				validate(value, key)
 			end

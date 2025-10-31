@@ -1,8 +1,8 @@
 local Charm = require("../packages/charm/src")
 local suite = require("./suite")
 
-Charm.flags.strict = true
-Charm.flags.frozen = true
+Charm.globals.strict = true
+Charm.globals.frozen = true
 
 suite.describe("charm", function()
 	require("../packages/charm/src/__tests__/spec")

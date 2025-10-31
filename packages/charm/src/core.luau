@@ -1,5 +1,5 @@
 local alien = require("./alien")
-local config = require("./flags")
+local globals = require("./globals")
 local utils = require("./utils")
 
 export type ReactiveFlags = alien.ReactiveFlags
@@ -74,7 +74,7 @@ end
 local function runCleanups(effect: EffectScope)
 	for _, cleanup in effect.cleanups do
 		local prevSub = setActiveSub(nil)
-		local success, result: any = (if config.strict then noYield else pcall)(cleanup)
+		local success, result: any = (if globals.strict then noYield else pcall)(cleanup)
 		activeSub = prevSub
 		if not success then
 			error(result)
@@ -87,18 +87,17 @@ local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
 	sub.flags = bit32.band(flags, bit32.bnot(PENDING))
 end
 
-local function run(e: Effect | EffectScope, flags: ReactiveFlags): ()
+local function run(e: Effect, flags: ReactiveFlags): ()
 	if
 		bit32.btest(flags, DIRTY)
 		or (bit32.btest(flags, PENDING) and (checkDirty(e.deps :: Link, e) or setNotPending(e, flags)))
 	then
 		runCleanups(e)
-		local e = e :: Effect
 		cycle += 1
 		e.depsTail = nil
 		e.flags = bit32.bor(WATCHING, RECURSED_CHECK)
 		local prevSub = setActiveSub(e)
-		local success, result: (() -> ())? = (if config.strict then noYield else pcall)(e.fn, e.stop)
+		local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(e.fn, e.stop)
 		activeSub = prevSub
 		e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
 		purgeDeps(e)
@@ -155,7 +154,7 @@ local function updateComputed(c: Computed): boolean
 	c.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 	local prevSub = setActiveSub(c)
 	local oldValue = c.value
-	local success, result: unknown = (if config.strict then noYield else pcall)(c.getter, oldValue)
+	local success, result: unknown = (if globals.strict then noYield else pcall)(c.getter, oldValue)
 	activeSub = prevSub
 	c.flags = bit32.band(c.flags, bit32.bnot(RECURSED_CHECK))
 	purgeDeps(c)
@@ -163,7 +162,7 @@ local function updateComputed(c: Computed): boolean
 		error(result)
 	end
 	if oldValue ~= result then
-		if config.frozen then
+		if globals.frozen then
 			deepFreeze(result)
 		end
 		c.value = result
@@ -205,61 +204,65 @@ local function computedOper<T>(this: Computed<T>): () -> T
 	end
 end
 
-local function signalOper<T>(this: Signal<T>, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
-	return function(...: ((T) -> T) | T): T
-		if select("#", ...) ~= 0 then
-			local update = ...
-			local value: T
-			if type(update) == "function" then
-				local prevSub = setActiveSub(nil)
-				local success, result: T = (if config.strict then noYield else pcall)(update, this.currentValue)
-				activeSub = prevSub
-				if not success then
-					error(result)
-				end
-				value = result
-			else
-				value = update
+local function signalOper<T>(
+	this: Signal<T>,
+	equals: ((current: T, incoming: T) -> boolean)?
+): (() -> T, (((T) -> T) | T) -> T)
+	local function setter(update: ((T) -> T) | T): T
+		local value: T
+		if type(update) == "function" then
+			local prevSub = setActiveSub(nil)
+			local success, result: T = (if globals.strict then noYield else pcall)(update, this.currentValue)
+			activeSub = prevSub
+			if not success then
+				error(result)
 			end
-			if if equals then not equals(this.pendingValue, value) else this.pendingValue ~= value then
-				if config.frozen then
-					deepFreeze(value)
+			value = result
+		else
+			value = update
+		end
+		if if equals then not equals(this.pendingValue, value) else this.pendingValue ~= value then
+			if globals.frozen then
+				deepFreeze(value)
+			end
+			this.pendingValue = value
+			this.flags = bit32.bor(MUTABLE, DIRTY)
+			local subs = this.subs
+			if subs then
+				propagate(subs)
+				if batchDepth == 0 then
+					flush()
 				end
-				this.pendingValue = value
-				this.flags = bit32.bor(MUTABLE, DIRTY)
+			end
+			return value
+		end
+		return this.currentValue
+	end
+
+	local function getter(): T
+		if bit32.btest(this.flags, DIRTY) then
+			if updateSignal(this) then
 				local subs = this.subs
 				if subs then
-					propagate(subs)
-					if batchDepth == 0 then
-						flush()
-					end
-				end
-				return value
-			end
-			return this.currentValue
-		else
-			if bit32.btest(this.flags, DIRTY) then
-				if updateSignal(this) then
-					local subs = this.subs
-					if subs then
-						shallowPropagate(subs)
-					end
+					shallowPropagate(subs)
 				end
 			end
-			local sub = activeSub
-			while sub do
-				if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
-					link(this, sub, cycle)
-					break
-				end
-				local subs = sub.subs
-				if subs then
-					sub = subs.sub
-				end
-			end
-			return this.currentValue
 		end
+		local sub = activeSub
+		while sub do
+			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
+				link(this, sub, cycle)
+				break
+			end
+			local subs = sub.subs
+			if subs then
+				sub = subs.sub
+			end
+		end
+		return this.currentValue
 	end
+
+	return getter, setter
 end
 
 local function effectScopeOper(this: EffectScope): () -> ()
@@ -279,15 +282,18 @@ local function effectOper(this: Effect): () -> ()
 	return effectScopeOper(this)
 end
 
---- Creates a reactive atom that acts as both a getter and setter. Calling the
---- atom with an argument sets its value, while calling it with no arguments
---- returns its current value.
+--- Creates a reactive signal that stores a value and notifies subscribers when
+--- the value changes. The signal provides both a getter and a setter.
 ---
---- @param value The initial value of the atom. If empty, the atom's value will be `undefined`.
---- @param equals A comparator function to determine if the atom's value has changed.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#atomstate-options
-local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
-	if config.frozen then
+--- @param initialValue The initial value of the signal.
+--- @param equals A comparator function to determine if the signal's value has changed.
+--- @return A tuple containing the getter and setter functions for the signal.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#signalstate-equals
+local function signal<T>(
+	initialValue: T,
+	equals: ((current: T, incoming: T) -> boolean)?
+): (() -> T, (((T) -> T) | T) -> T)
+	if globals.frozen then
 		deepFreeze(initialValue)
 	end
 	return signalOper({
@@ -295,6 +301,20 @@ local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> bo
 		pendingValue = initialValue,
 		flags = MUTABLE,
 	}, equals)
+end
+
+--- Creates a reactive atom that acts as both a getter and setter. Calling the
+--- atom with an argument sets its value, while calling it with no arguments
+--- returns its current value.
+---
+--- @param value The initial value of the atom. If empty, the atom's value will be `undefined`.
+--- @param equals A comparator function to determine if the atom's value has changed.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#atomstate-equals
+local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
+	local getter, setter = signal(initialValue, equals)
+	return function(...: ((T) -> T) | T): T
+		return if select("#", ...) == 0 then getter() else setter((...))
+	end
 end
 
 --- Creates a new atom that is computed based on the values of other atoms.
@@ -343,11 +363,11 @@ local function effect(fn: (stop: () -> ()) -> ()): () -> ()
 	}
 	e.stop = effectOper(e)
 	local prevSub = setActiveSub(e)
-	if prevSub and (config.trackInnerEffects or prevSub.flags == NONE) then
+	if prevSub and (globals.trackInnerEffects or prevSub.flags == NONE) then
 		link(e, prevSub, 0)
 	end
 	local stopped = false
-	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn, function()
+	local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(fn, function()
 		stopped = true
 	end)
 	activeSub = prevSub
@@ -379,7 +399,7 @@ local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	if prevSub and not detached then
 		link(e, prevSub, 0)
 	end
-	local success, result: (() -> ())? = (if config.strict then noYield else pcall)(fn)
+	local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(fn)
 	activeSub = prevSub
 	if not success then
 		error(result)
@@ -456,12 +476,65 @@ end
 --- @return The return value of the callback.
 local function batched<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
 	startBatch()
-	local results: { any } = { (if config.strict then noYield else pcall)(callback, ...) }
+	local results: { any } = { (if globals.strict then noYield else pcall)(callback, ...) }
 	endBatch()
 	if not results[1] then
 		error(results[2])
 	end
 	return unpack(results, 2)
+end
+
+--- Creates an effect that only runs the callback when the value returned by the
+--- getter changes. The callback receives the new value and the previous value
+--- as arguments.
+---
+--- @param getter A function that returns the value to watch.
+--- @param callback The function to run when the value changes.
+--- @return A function for disposing the effect.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
+local function subscribe<T>(getter: () -> T, callback: (state: T, lastState: T) -> ()): () -> ()
+	local tracked = computed(function()
+		return getter()
+	end)
+	local current: T
+	local mounted = true
+	return effect(function()
+		local previous = current
+		current = tracked()
+		if mounted then
+			mounted = false
+		else
+			peek(callback, current, previous)
+		end
+	end)
+end
+
+--- Creates an effect that runs the callback one immediately, and then again
+--- when the value returned by the getter changes. The callback receives the new
+--- value, the previous value, and a cleanup function as arguments.
+---
+--- @param getter A function that returns the value to watch.
+--- @param callback The function to run when the value changes.
+--- @return A function for disposing the effect.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
+local function listen<T>(getter: () -> T, callback: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
+	local tracked = computed(function()
+		return getter()
+	end)
+	local current: T
+	local disposed = false
+	local dispose = function()
+		disposed = true
+	end
+	dispose = effect(function()
+		local previous = current
+		current = tracked()
+		peek(callback, current, previous, dispose)
+	end)
+	if disposed then
+		dispose()
+	end
+	return dispose
 end
 
 local function notify(e: ReactiveNode)
@@ -513,6 +586,7 @@ return {
 	startBatch = startBatch,
 	endBatch = endBatch,
 	atom = atom,
+	signal = signal,
 	computed = computed,
 	effect = effect,
 	effectScope = effectScope,
@@ -520,4 +594,6 @@ return {
 	untracked = untracked,
 	peek = peek,
 	batched = batched,
+	subscribe = subscribe,
+	listen = listen,
 }

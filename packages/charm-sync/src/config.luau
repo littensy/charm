@@ -12,9 +12,9 @@ return {
 	--- to address remote event argument limitations. Defaults to `true`.
 	--- This option should be disabled if your network library uses a custom
 	--- serialization method (i.e. Zap, ByteNet) to prevent interference.
-	autoSerialize = true,
+	fixArrays = true,
 	--- When `true`, patches will be validated before being sent to clients to
 	--- enforce remote event limitations. Only checked in strict mode and if
-	--- `autoSerialize` is enabled. Defaults to `true`.
+	--- `fixArrays` is enabled. Defaults to `true`.
 	validatePatches = true,
 }

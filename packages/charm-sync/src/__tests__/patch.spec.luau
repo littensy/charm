@@ -24,7 +24,7 @@ local function mockArraySerdes(object: { [any]: any }): { [any]: any }
 end
 
 afterEach(function()
-	config.autoSerialize = true
+	config.fixArrays = true
 	config.validatePatches = true
 end)
 
@@ -104,13 +104,13 @@ test("cannot preserve sparse arrays", function()
 end)
 
 test("optionally fixes sparse arrays", function()
-	config.autoSerialize = true
+	config.fixArrays = true
 
 	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
 		assert(type(index) == "string", `expected {type(index)} {index} to be string`)
 	end
 
-	config.autoSerialize = false
+	config.fixArrays = false
 
 	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
 		assert(type(index) == "number", `expected {type(index)} {index} to be number`)

@@ -16,7 +16,6 @@ local function syncAtoms(atoms: { [string]: Charm.Atom })
 			warn("[Charm] Attempted to sync different atoms with the same key:", key)
 			continue
 		end
-
 		atomRegister[key] = atom
 	end
 end

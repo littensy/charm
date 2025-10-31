@@ -1,10 +1,10 @@
 local Charm = require("../packages/charm/src")
 local bench = require("./bench")
 
-local atom = Charm.atom
 local computed = Charm.computed
 local mapped = Charm.mapped
-local setCurrentSub = Charm.core.setCurrentSub
+local setActiveSub = Charm.core.setActiveSub
+local signal = Charm.signal
 
 type Entry = { number }
 
@@ -25,9 +25,9 @@ local function simpleMapped(source: () -> { Entry }, mapper: (Entry, number) -> 
 		local nextState = {}
 
 		for index, value in state do
-			local currentSub = setCurrentSub(nil)
+			local currentSub = setActiveSub(nil)
 			local success, valueOut, keyOut = pcall(mapper, value, index)
-			setCurrentSub(currentSub)
+			setActiveSub(currentSub)
 
 			if success then
 				nextState[keyOut] = valueOut
@@ -52,26 +52,26 @@ end
 
 for _, percent in { 0.1, 0.5, 1 } do
 	bench.run(`mapped {percent}`, function()
-		local src = atom(initialState)
+		local src, setSrc = signal(initialState)
 		local out = mapped(src, mapper)
 
 		bench.profilebegin("init")
 		out()
 		bench.profileend()
-		src(updatePercentage(percent))
+		setSrc(updatePercentage(percent))
 		bench.profilebegin("update")
 		out()
 		bench.profileend()
 	end)
 
 	bench.run(`control {percent}`, function()
-		local src = atom(initialState)
+		local src, setSrc = signal(initialState)
 		local out = simpleMapped(src, mapper)
 
 		bench.profilebegin("init")
 		out()
 		bench.profileend()
-		src(updatePercentage(percent))
+		setSrc(updatePercentage(percent))
 		bench.profilebegin("update")
 		out()
 		bench.profileend()

@@ -10,6 +10,7 @@ local function useAtom<State>(getter: () -> State): () -> State
 	local state = Vide.source(getter())
 
 	Vide.cleanup(Charm.effect(function()
+		-- Wrap in untracked to avoid tracking inner effect and atom calls
 		Charm.untracked(state :: (State) -> State, getter())
 	end))
 

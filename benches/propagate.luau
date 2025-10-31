@@ -1,15 +1,15 @@
 local Charm = require("../packages/charm/src")
 local bench = require("./bench")
 
-local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
 local listen = Charm.listen
+local signal = Charm.signal
 
 for _, w in { 10, 100 } do
 	for _, h in { 10, 100 } do
 		bench.run(`propagate {w}*{h}`, function()
-			local src = atom(1)
+			local src, setSrc = signal(1)
 			for _ = 1, w do
 				local last = src
 				for _ = 1, h do
@@ -22,7 +22,7 @@ for _, w in { 10, 100 } do
 					last()
 				end)
 			end
-			src(src() + 1)
+			setSrc(src() + 1)
 		end)
 	end
 end
@@ -30,7 +30,7 @@ end
 for _, w in { 10, 100 } do
 	for _, h in { 10, 100 } do
 		bench.run(`propagate (listen) {w}*{h}`, function()
-			local src = atom(1)
+			local src, setSrc = signal(1)
 			for _ = 1, w do
 				local last = src
 				for _ = 1, h do
@@ -41,7 +41,7 @@ for _, w in { 10, 100 } do
 				end
 				listen(last, function() end)
 			end
-			src(src() + 1)
+			setSrc(src() + 1)
 		end)
 	end
 end

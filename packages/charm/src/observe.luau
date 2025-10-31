@@ -1,11 +1,10 @@
 local core = require("./core")
-local flags = require("./flags")
+local globals = require("./globals")
 
+local batched = core.batched
 local effect = core.effect
 local effectScope = core.effectScope
 local onCleanup = core.onCleanup
-local startBatch = core.startBatch
-local endBatch = core.endBatch
 
 --- Calls the observer function for each unique key in the table returned by the
 --- getter. The observer is called once for each key, and again when a new key
@@ -51,13 +50,11 @@ local function observe<K, V>(getter: () -> { [K]: V }, observer: (item: V, key: 
 		local previousItems = currentItems
 		currentItems = getter()
 		if currentItems ~= previousItems then
-			startBatch()
-			updateScopes(currentItems, previousItems)
-			endBatch()
+			batched(updateScopes, currentItems, previousItems)
 		end
 	end)
 
-	if flags.trackInnerEffects then
+	if globals.trackInnerEffects then
 		onCleanup(disposeScopes, true)
 	end
 

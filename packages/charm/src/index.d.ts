@@ -7,7 +7,7 @@ type Cleanup = () => void;
  * current value.
  */
 export interface Atom<T> {
-	(value: T | ((value: T) => T)): T;
+	(newValue: T | ((currentValue: T) => T)): T;
 	(): T;
 }
 
@@ -18,7 +18,7 @@ export type Equals<T> = (current: T, incoming: T) => boolean;
 /**
  * Global flags that modify the behavior of Charm's reactive system.
  */
-export const flags: {
+export const globals: {
 	/**
 	 * Enforces synchronous, non-yielding behavior in atoms and effects.
 	 * Also enables state validation in Charm Sync to catch sync errors early.
@@ -31,12 +31,29 @@ export const flags: {
 	 */
 	frozen: boolean;
 	/**
-	 * Whether inner effects should clean up after themselves when their
-	 * parent effect re-runs. This is usually desirable, but can be disabled
-	 * to revert to the old behavior. Defaults to `true`.
+	 * Whether parent effects should track inner effects and clean them up
+	 * when the parent effect re-runs. This is usually desirable, but can be
+	 * disabled to revert to the old behavior. Defaults to `true`.
 	 */
 	trackInnerEffects: boolean;
 };
+
+/**
+ * Creates a reactive signal that stores a value and notifies subscribers when
+ * the value changes. The signal provides both a getter and a setter.
+ *
+ * @param initialValue The initial value of the signal.
+ * @param equals A comparator function to determine if the signal's value has changed.
+ * @return A tuple containing the getter and setter functions for the signal.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#signalstate-equals
+ */
+export function signal<T>(
+	value: T,
+	equals?: Equals<T>,
+): LuaTuple<[() => T, (newValue: T | ((currentValue: T) => T)) => T]>;
+export function signal<T>(): LuaTuple<
+	[() => T | undefined, (newValue: T | ((currentValue?: T) => T | undefined)) => T | undefined]
+>;
 
 /**
  * Creates a reactive atom that acts as both a getter and setter. Calling the

@@ -1,7 +1,5 @@
 import { Atom } from "@rbxts/charm";
 
-type Cleanup = () => void;
-
 type Key = string | number | symbol;
 
 /**
@@ -18,7 +16,7 @@ type SelectorMap = Record<string, () => any>;
 /**
  * Infers the type of the return values produced by a map of functions.
  */
-type StateOfMap<T> = {
+export type StateOfMap<T> = {
 	readonly [P in keyof T]: T[P] extends () => infer State ? State : never;
 };
 
@@ -88,11 +86,11 @@ export const config: {
 	 *
 	 * @server
 	 */
-	autoSerialize: boolean;
+	fixArrays: boolean;
 	/**
 	 * When `true`, patches will be validated before being sent to clients to
 	 * enforce remote event limitations. Only checked in strict mode and if
-	 * `autoSerialize` is enabled. Defaults to `true`.
+	 * `fixArrays` is enabled. Defaults to `true`.
 	 *
 	 * @server
 	 */
@@ -178,11 +176,10 @@ export namespace server {
 	 * be sent to clients whenever the atoms are updated.
 	 *
 	 * @param onSync The function to call when patches can be sent to a client.
-	 * @returns `stopSync()`
 	 */
 	export function startSync<Atoms extends { [key: string]: Atom<any> }, Serialize extends boolean = true>(
 		onSync: (client: Player, payloads: SyncPayload<Atoms, Serialize>[]) => void,
-	): Cleanup;
+	): void;
 
 	/**
 	 * Stops automatically syncing registered atoms to clients. Patches will
