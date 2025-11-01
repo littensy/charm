@@ -1,10 +1,10 @@
-local function noYieldHandler(thread: thread, ok: boolean, ...)
-	if not ok then
-		return false, debug.traceback(thread, tostring((...)))
-	elseif coroutine.status(thread) ~= "dead" then
-		return false, debug.traceback(thread, "Attempted to yield!")
-	else
+local function noYieldHandler(thread: thread, ok: boolean, ...): (boolean, ...any)
+	if ok and coroutine.status(thread) == "dead" then
 		return true, ...
+	elseif not ok then
+		return false, debug.traceback(thread, tostring((...)))
+	else
+		return false, debug.traceback(thread, "Attempted to yield!")
 	end
 end
 

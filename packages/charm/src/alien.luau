@@ -1,3 +1,30 @@
+--[[
+	Reactive system adapted from alien-signals at
+	https://github.com/stackblitz/alien-signals/blob/master/src/system.ts
+
+	MIT License
+
+	Copyright (c) 2024-present Johnson Chu
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+]]
+
 export type ReactiveNode = {
 	deps: Link?,
 	depsTail: Link?,
@@ -23,14 +50,14 @@ type Stack<T> = {
 
 export type ReactiveFlags = number
 
-local NONE = 0b00000000
-local MUTABLE = 0b00000001
-local WATCHING = 0b00000010
-local RECURSED_CHECK = 0b00000100
-local RECURSED = 0b00001000
-local DIRTY = 0b00010000
-local PENDING = 0b00100000
-local PEEKING = 0b10000000
+local NONE = 0b0000000
+local MUTABLE = 0b0000001
+local WATCHING = 0b0000010
+local RECURSED_CHECK = 0b0000100
+local RECURSED = 0b0001000
+local DIRTY = 0b0010000
+local PENDING = 0b0100000
+local PEEKING = 0b1000000
 
 local ReactiveFlags = {
 	None = NONE,

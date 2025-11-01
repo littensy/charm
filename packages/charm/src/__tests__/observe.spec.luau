@@ -1,14 +1,14 @@
 local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local atom = Charm.atom
+local signal = Charm.signal
 local computed = Charm.computed
 local effect = Charm.effect
 local observe = Charm.observe
 local test = suite.test
 
 test("should observe items", function()
-	local items = atom({ 0, 0, 0 })
+	local items, setItems = signal({ 0, 0, 0 })
 	local updates = {}
 	local cleanups = {}
 
@@ -29,18 +29,18 @@ test("should observe items", function()
 	assert(table.concat(updates) == "000", `bad mount: {table.concat(updates)}`)
 
 	table.clear(updates)
-	items({ 1, 2, 3 })
+	setItems({ 1, 2, 3 })
 	assert(table.concat(updates) == "123", `bad update: {table.concat(updates)}`)
 
 	table.clear(updates)
-	items({ 1, 2, nil :: any, 4 })
+	setItems({ 1, 2, nil :: any, 4 })
 	assert(table.concat(updates) == "4", `should add 4: {table.concat(updates)}`)
 	assert(table.concat(cleanups) == "3", `bad cleanup: {table.concat(cleanups)}`)
 end)
 
 test("should dispose scopes", function()
-	local items = atom({ 1, 2, 3 })
-	local a = atom(0)
+	local items, setItems = signal({ 1, 2, 3 })
+	local a, setA = signal(0)
 	local runs = {}
 
 	local dispose = observe(items, function(item)
@@ -51,23 +51,23 @@ test("should dispose scopes", function()
 	end)
 
 	table.clear(runs)
-	items({ 1, 2 })
-	a(1)
+	setItems({ 1, 2 })
+	setA(1)
 	assert(table.concat(runs) == "12", `bad reruns: {table.concat(runs)}`)
 
 	table.clear(runs)
 	dispose()
-	a(2)
+	setA(2)
 	assert(table.concat(runs) == "", `should not rerun: {table.concat(runs)}`)
 end)
 
 test("should queue addition", function()
-	local items = atom({ 1 })
+	local items, setItems = signal({ 1 })
 	local edits = {}
 
 	observe(items, function(item)
-		items({ 1, 2 })
-		items({ 1, 2, 3, 4 })
+		setItems({ 1, 2 })
+		setItems({ 1, 2, 3, 4 })
 		table.insert(edits, `+{item}`)
 		return function()
 			table.insert(edits, `-{item}`)
@@ -78,12 +78,12 @@ test("should queue addition", function()
 end)
 
 test("should queue removal", function()
-	local items = atom({ 1, 2, 3, 4 })
+	local items, setItems = signal({ 1, 2, 3, 4 })
 	local edits = {}
 
 	observe(items, function(item)
-		items({ 1, 2, 3 })
-		items({ 1 })
+		setItems({ 1, 2, 3 })
+		setItems({ 1 })
 		table.insert(edits, `+{item}`)
 		return function()
 			table.insert(edits, `-{item}`)

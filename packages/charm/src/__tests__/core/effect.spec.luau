@@ -5,16 +5,16 @@ local computed = core.computed
 local effect = core.effect
 local effectScope = core.effectScope
 local endBatch = core.endBatch
-local setActiveSub = core.setActiveSub
 local onCleanup = core.onCleanup
-local atom = core.atom
+local setActiveSub = core.setActiveSub
+local signal = core.signal
 local startBatch = core.startBatch
 local test = suite.test
 
 test("should clear subscriptions when untracked by all subscribers", function()
 	local bRunTimes = 0
 
-	local a = atom(1)
+	local a, setA = signal(1)
 	local b = computed(function()
 		bRunTimes += 1
 		return a() * 2
@@ -24,15 +24,15 @@ test("should clear subscriptions when untracked by all subscribers", function()
 	end)
 
 	assert(bRunTimes == 1, "should run initially")
-	a(2)
+	setA(2)
 	assert(bRunTimes == 2, "should run after change")
 	stopEffect()
-	a(3)
+	setA(3)
 	assert(bRunTimes == 2, "should not run after stop")
 end)
 
 test("should not run untracked inner effect", function()
-	local a = atom(3)
+	local a, setA = signal(3)
 	local b = computed(function()
 		return a() > 0
 	end)
@@ -47,14 +47,14 @@ test("should not run untracked inner effect", function()
 		end
 	end)
 
-	a(2)
-	a(1)
-	a(0)
+	setA(2)
+	setA(1)
+	setA(0)
 end)
 
 test("should run outer effect first", function()
-	local a = atom(1)
-	local b = atom(1)
+	local a, setA = signal(1)
+	local b, setB = signal(1)
 
 	effect(function()
 		if a() > 0 then
@@ -68,13 +68,13 @@ test("should run outer effect first", function()
 	end)
 
 	startBatch()
-	b(0)
-	a(0)
+	setB(0)
+	setA(0)
 	endBatch()
 end)
 
 test("should not trigger inner effect when resolve maybe dirty", function()
-	local a = atom(0)
+	local a, setA = signal(0)
 	local b = computed(function()
 		return a() % 2
 	end)
@@ -91,68 +91,66 @@ test("should not trigger inner effect when resolve maybe dirty", function()
 		end)
 	end)
 
-	a(2)
+	setA(2)
 end)
 
-test("should trigger inner effects in sequence", function()
-	local a = atom(0)
-	local b = atom(0)
+test("should notify inner effects in the same order as non-inner effects", function()
+	local getA, setA = signal(0)
+	local getB, setB = signal(0)
 	local c = computed(function()
-		return a() - b()
+		return getA() - getB()
 	end)
-	local order: { string } = {}
+	local order1 = {}
+	local order2 = {}
+	local order3 = {}
+
+	effect(function()
+		table.insert(order1, "effect1")
+		getA()
+	end)
+	effect(function()
+		table.insert(order1, "effect2")
+		getA()
+		getB()
+	end)
 
 	effect(function()
 		c()
-
 		effect(function()
-			table.insert(order, "first inner")
-			a()
+			table.insert(order2, "effect1")
+			getA()
 		end)
-
 		effect(function()
-			table.insert(order, "last inner")
-			a()
-			b()
+			table.insert(order2, "effect2")
+			getA()
+			getB()
 		end)
 	end)
-
-	table.clear(order)
-
-	startBatch()
-	b(1)
-	a(1)
-	endBatch()
-
-	assert(table.concat(order, ", ") == "first inner, last inner", `wrong order: {table.concat(order, ", ")}`)
-end)
-
-test("should trigger inner effects in sequence in effect scope", function()
-	local a = atom(0)
-	local b = atom(0)
-	local order: { string } = {}
 
 	effectScope(function()
 		effect(function()
-			table.insert(order, "first inner")
-			a()
+			table.insert(order3, "effect1")
+			getA()
 		end)
-
 		effect(function()
-			table.insert(order, "last inner")
-			a()
-			b()
+			table.insert(order3, "effect2")
+			getA()
+			getB()
 		end)
 	end)
 
-	table.clear(order)
+	table.clear(order1)
+	table.clear(order2)
+	table.clear(order3)
 
 	startBatch()
-	b(1)
-	a(1)
+	setB(1)
+	setA(1)
 	endBatch()
 
-	assert(table.concat(order, ", ") == "first inner, last inner", `wrong order: {table.concat(order, ", ")}`)
+	assert(table.concat(order1, ", ") == "effect2, effect1", "wrong order 1")
+	assert(table.concat(order2, ", ") == "effect2, effect1", "wrong order 2")
+	assert(table.concat(order3, ", ") == "effect2, effect1", "wrong order 3")
 end)
 
 test("should custom effect support batch", function()
@@ -168,13 +166,13 @@ test("should custom effect support batch", function()
 	end
 
 	local logs: { string } = {}
-	local a = atom(0)
-	local b = atom(0)
+	local a = signal(0)
+	local b, setB = signal(0)
 
 	local aa = computed(function()
 		table.insert(logs, "aa-0")
 		if a() == 0 then
-			b(1)
+			setB(1)
 		end
 		table.insert(logs, "aa-1")
 		return nil
@@ -196,8 +194,8 @@ test("should custom effect support batch", function()
 end)
 
 test("should duplicate subscribers do not affect the notify order", function()
-	local src1 = atom(0)
-	local src2 = atom(0)
+	local src1, setSrc1 = signal(0)
+	local src2, setSrc2 = signal(0)
 	local order: { string } = {}
 
 	effect(function()
@@ -215,17 +213,17 @@ test("should duplicate subscribers do not affect the notify order", function()
 		table.insert(order, "b")
 		src1()
 	end)
-	src2(1) -- src1.subs: a -> b -> a
+	setSrc2(1) -- src1.subs: a -> b -> a
 
 	table.clear(order)
-	src1(src1() + 1)
+	setSrc1(src1() + 1)
 
 	assert(table.concat(order) == "ab", `wrong order: {table.concat(order)}`)
 end)
 
 test("should handle side effect with inner effects", function()
-	local a = atom(0)
-	local b = atom(0)
+	local a, setA = signal(0)
+	local b, setB = signal(0)
 	local order: { string } = {}
 
 	effect(function()
@@ -240,14 +238,14 @@ test("should handle side effect with inner effects", function()
 		assert(table.concat(order) == "ab", `wrong order: {table.concat(order)}`)
 
 		table.clear(order)
-		b(1)
-		a(1)
+		setB(1)
+		setA(1)
 		assert(table.concat(order) == "ba", `wrong order: {table.concat(order)}`)
 	end)
 end)
 
 test("should handle flags are indirectly updated during checkDirty", function()
-	local a = atom(false)
+	local a, setA = signal(false)
 	local b = computed(function()
 		return a()
 	end)
@@ -267,14 +265,14 @@ test("should handle flags are indirectly updated during checkDirty", function()
 		triggers += 1
 	end)
 	assert(triggers == 1, "did not run initially")
-	a(true)
+	setA(true)
 	assert(triggers == 2, "did not update indirectly")
 end)
 
 test("should run cleanups in sequence", function()
 	local order = {}
 
-	local a = atom(false)
+	local a, setA = signal(false)
 	local stopEffect = effect(function()
 		a()
 		onCleanup(function()
@@ -287,7 +285,7 @@ test("should run cleanups in sequence", function()
 
 	assert(table.concat(order) == "", "should not cleanup immediately")
 
-	a(true)
+	setA(true)
 	assert(table.concat(order) == "ab", `bad update: {table.concat(order)}`)
 
 	table.clear(order)
@@ -295,14 +293,14 @@ test("should run cleanups in sequence", function()
 	assert(table.concat(order) == "ab", `bad dispose: {table.concat(order)}`)
 
 	table.clear(order)
-	a(false)
+	setA(false)
 	assert(table.concat(order) == "", "should not cleanup after update")
 end)
 
 test("should run inner effect cleanup", function()
 	local cleanups = 0
 
-	local src = atom(false)
+	local src, setSrc = signal(false)
 	local stopEffect = effect(function()
 		src()
 		effect(function()
@@ -318,18 +316,18 @@ test("should run inner effect cleanup", function()
 	end)
 
 	assert(cleanups == 0, "should not cleanup immediately")
-	src(true)
+	setSrc(true)
 	assert(cleanups == 2, "should cleanup after outer update")
 	stopEffect()
 	assert(cleanups == 4, "should cleanup after outer dispose")
-	src(false)
+	setSrc(false)
 	assert(cleanups == 4, "should not cleanup after update")
 end)
 
 test("should run cleanups outside any evaluation context", function()
 	local calls = 0
-	local a = atom(0)
-	local b = atom(0)
+	local a, setA = signal(0)
+	local b, setB = signal(0)
 	local c = computed(function()
 		if a() == 0 then
 			effect(function()
@@ -348,18 +346,18 @@ test("should run cleanups outside any evaluation context", function()
 	assert(calls == 1, "should run once")
 
 	calls = 0
-	a(1)
+	setA(1)
 	assert(calls == 1, "should run once after a update")
 
 	calls = 0
-	b(1)
+	setB(1)
 	assert(calls == 0, "should not run after b update")
 end)
 
 test("should allow self cleanup", function()
 	local calls = 0
 	local cleanups = 0
-	local a = atom(0)
+	local a, setA = signal(0)
 
 	effect(function(stopEffect)
 		onCleanup(function()
@@ -372,7 +370,7 @@ test("should allow self cleanup", function()
 
 	assert(calls == 1, "should call effect once")
 	assert(cleanups == 1, "should call cleanup once")
-	a(1)
+	setA(1)
 	assert(calls == 1, "should not call effect after a update")
 	assert(cleanups == 1, "should not call cleanup after a update")
 end)

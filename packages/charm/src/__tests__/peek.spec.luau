@@ -1,14 +1,14 @@
 local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local atom = Charm.atom
+local signal = Charm.signal
 local computed = Charm.computed
 local effect = Charm.effect
 local peek = Charm.peek
 local test = suite.test
 
 test("should not run detached", function()
-	local a = atom(1)
+	local a, setA = signal(1)
 	local spyCalls = 0
 
 	effect(function()
@@ -23,15 +23,15 @@ test("should not run detached", function()
 	end)
 
 	assert(spyCalls == 0, "should not be called yet")
-	a(2)
+	setA(2)
 	assert(spyCalls == 1, "should be called once")
-	a(3)
+	setA(3)
 	assert(spyCalls == 2, "should be called twice")
 end)
 
 test("should block tracking inside effects", function()
-	local a = atom(1)
-	local b = atom(2)
+	local a, setA = signal(1)
+	local b, setB = signal(2)
 	local spyCalls = 0
 
 	effect(function()
@@ -42,13 +42,13 @@ test("should block tracking inside effects", function()
 	end)
 	assert(spyCalls == 1, "should be called once")
 
-	a(10)
-	b(20)
+	setA(10)
+	setB(20)
 	assert(spyCalls == 1, "should be called once")
 end)
 
 test("should block tracking even when run inside effect run inside peek", function()
-	local s = atom(1)
+	local s, setS = signal(1)
 	local spyCalls = 0
 
 	peek(function()
@@ -61,32 +61,32 @@ test("should block tracking even when run inside effect run inside peek", functi
 	end)
 	assert(spyCalls == 1, "should be called once")
 
-	s(2)
+	setS(2)
 	assert(spyCalls == 1, "should be called once")
 end)
 
-test("should not cause atom assignments throw", function()
-	local a = atom(1)
-	local aChangedTime = atom(0)
+test("should not cause signal assignments to throw", function()
+	local a, setA = signal(1)
+	local aChangedTime, setAChangedTime = signal(0)
 
 	local dispose = effect(function()
 		a()
 		peek(function()
-			aChangedTime(aChangedTime() + 1)
+			setAChangedTime(aChangedTime() + 1)
 		end)
 	end)
 
-	a(2)
+	setA(2)
 	assert(aChangedTime() == 2, "aChangedTime should be 2")
-	a(3)
+	setA(3)
 	assert(aChangedTime() == 3, "aChangedTime should be 3")
 
 	dispose()
 end)
 
-test("should block tracking inside computed atoms", function()
-	local a = atom(1)
-	local b = atom(2)
+test("should block tracking inside computed signals", function()
+	local a, setA = signal(1)
+	local b, setB = signal(2)
 	local spyCalls = 0
 	local c = computed(function()
 		return peek(function()
@@ -97,18 +97,18 @@ test("should block tracking inside computed atoms", function()
 
 	assert(spyCalls == 0, "should not be called yet")
 	assert(c() == 3, "c should be 3")
-	a(10)
+	setA(10)
 	c()
-	b(20)
+	setB(20)
 	c()
 	assert(spyCalls == 1, "should be called once")
 	assert(c() == 3, "c should be 3")
 end)
 
 test("should track outside peek", function()
-	local a = atom(1)
-	local b = atom(2)
-	local c = atom(3)
+	local a, setA = signal(1)
+	local b, setB = signal(2)
+	local c, setC = signal(3)
 	local spyCalls = 0
 
 	effect(function()
@@ -119,16 +119,16 @@ test("should track outside peek", function()
 	end)
 
 	assert(spyCalls == 1, "should be called once")
-	a(10)
+	setA(10)
 	assert(spyCalls == 2, "should be called twice")
-	b(20)
+	setB(20)
 	assert(spyCalls == 3, "should be called three times")
-	c(30)
+	setC(30)
 	assert(spyCalls == 3, "should not run on c change")
 end)
 
 test("should stack peek", function()
-	local a = atom(1)
+	local a, setA = signal(1)
 	local spyCalls = 0
 
 	effect(function()
@@ -140,7 +140,7 @@ test("should stack peek", function()
 	end)
 
 	assert(spyCalls == 1, "should be called once")
-	a(2)
+	setA(2)
 	assert(spyCalls == 1, "should not be called twice")
 end)
 

@@ -11,14 +11,40 @@ local createReactiveSystem = alien.createReactiveSystem
 local deepFreeze = utils.deepFreeze
 local noYield = utils.noYield
 
-local NONE = 0b00000000
-local MUTABLE = 0b00000001
-local WATCHING = 0b00000010
-local RECURSED_CHECK = 0b00000100
-local DIRTY = 0b00010000
-local PENDING = 0b00100000
-local QUEUED = 0b01000000
-local PEEKING = 0b10000000
+--[[
+	Reactive system adapted from alien-signals at
+	https://github.com/stackblitz/alien-signals/blob/master/src/index.ts
+
+	MIT License
+
+	Copyright (c) 2024-present Johnson Chu
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+]]
+
+local NONE = 0b0000000
+local MUTABLE = 0b0000001
+local WATCHING = 0b0000010
+local RECURSED_CHECK = 0b0000100
+local DIRTY = 0b0010000
+local PENDING = 0b0100000
+local PEEKING = 0b1000000
 
 type EffectScope = ReactiveNode & {
 	cleanups: { () -> () },
@@ -49,8 +75,8 @@ local shallowPropagate: (link: Link) -> ()
 local cycle = 0
 local batchDepth = 0
 local notifyIndex = 0
-local queuedEffects: { Effect | EffectScope? } = {}
-local queuedEffectsLength = 0
+local queued: { Effect? } = {}
+local queuedLength = 0
 local activeSub: ReactiveNode?
 
 local function getActiveSub(): ReactiveNode?
@@ -83,15 +109,9 @@ local function runCleanups(effect: EffectScope)
 	table.clear(effect.cleanups)
 end
 
-local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
-	sub.flags = bit32.band(flags, bit32.bnot(PENDING))
-end
-
-local function run(e: Effect, flags: ReactiveFlags): ()
-	if
-		bit32.btest(flags, DIRTY)
-		or (bit32.btest(flags, PENDING) and (checkDirty(e.deps :: Link, e) or setNotPending(e, flags)))
-	then
+local function run(e: Effect): ()
+	local flags = e.flags
+	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(e.deps :: Link, e)) then
 		runCleanups(e)
 		cycle += 1
 		e.depsTail = nil
@@ -107,30 +127,19 @@ local function run(e: Effect, flags: ReactiveFlags): ()
 			table.insert(e.cleanups, result)
 		end
 	else
-		local link = e.deps
-		while link do
-			local dep = link.dep
-			local depFlags = dep.flags
-			if bit32.btest(depFlags, QUEUED) then
-				depFlags = bit32.band(depFlags, bit32.bnot(QUEUED))
-				dep.flags = depFlags
-				run(dep :: Effect, depFlags)
-			end
-			link = link.nextDep
-		end
+		e.flags = WATCHING
 	end
 end
 
 local function flush(): ()
-	while notifyIndex < queuedEffectsLength do
+	while notifyIndex < queuedLength do
+		local effect = queued[notifyIndex] :: Effect
+		queued[notifyIndex] = nil
 		notifyIndex += 1
-		local effect = queuedEffects[notifyIndex] :: Effect
-		queuedEffects[notifyIndex] = nil
-		effect.flags = bit32.band(effect.flags, bit32.bnot(QUEUED))
-		run(effect, effect.flags)
+		run(effect)
 	end
 	notifyIndex = 0
-	queuedEffectsLength = 0
+	queuedLength = 0
 end
 
 local function getBatchDepth(): number
@@ -183,6 +192,10 @@ local function updateSignal(s: Signal): boolean
 	end
 end
 
+local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
+	sub.flags = bit32.band(flags, bit32.bnot(PENDING))
+end
+
 local function computedOper<T>(this: Computed<T>): () -> T
 	return function(): T
 		local flags = this.flags
@@ -195,6 +208,16 @@ local function computedOper<T>(this: Computed<T>): () -> T
 				if subs then
 					shallowPropagate(subs)
 				end
+			end
+		elseif flags == NONE then
+			this.flags = MUTABLE
+			local prevSub = setActiveSub(this)
+			local success, result = pcall(this.getter)
+			activeSub = prevSub
+			if success then
+				this.value = result
+			else
+				error(result)
 			end
 		end
 		if activeSub then
@@ -332,7 +355,7 @@ end
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
 local function computed<T>(getter: (previousValue: T?) -> T): () -> T
 	return computedOper({
-		flags = bit32.bor(MUTABLE, DIRTY),
+		flags = NONE,
 		getter = getter,
 	})
 end
@@ -536,30 +559,40 @@ local function listen<T>(getter: () -> T, callback: (state: T, previous: T?, dis
 	return dispose
 end
 
-local function notify(e: ReactiveNode)
-	local flags = e.flags
-	if not bit32.btest(flags, QUEUED) then
-		e.flags = bit32.bor(flags, QUEUED)
-		local subs = e.subs
-		if subs then
-			notify(subs.sub)
-		else
-			queuedEffectsLength += 1
-			queuedEffects[queuedEffectsLength] = e :: Effect
-		end
-	end
-end
-
 local reactiveSystem = createReactiveSystem({
-	update = function(node: ReactiveNode): boolean
+	update = function(node)
 		if node.depsTail then
 			return updateComputed(node :: Computed)
 		else
 			return updateSignal(node :: Signal)
 		end
 	end,
-	notify = notify,
-	unwatched = function(node: ReactiveNode)
+	notify = function(effect)
+		local insertIndex = queuedLength
+		local firstInsertedIndex = insertIndex
+
+		repeat
+			effect.flags = bit32.band(effect.flags, bit32.bnot(WATCHING))
+			queued[insertIndex] = effect :: Effect
+			insertIndex += 1
+			effect = (effect.subs and effect.subs.sub) :: Effect
+			if not effect or bit32.band(effect.flags, WATCHING) == 0 then
+				break
+			end
+		until false
+
+		queuedLength = insertIndex
+
+		insertIndex -= 1
+		while firstInsertedIndex < insertIndex do
+			local left = queued[firstInsertedIndex]
+			queued[firstInsertedIndex] = queued[insertIndex]
+			queued[insertIndex] = left
+			firstInsertedIndex += 1
+			insertIndex -= 1
+		end
+	end,
+	unwatched = function(node)
 		if bit32.band(node.flags, MUTABLE) == 0 then
 			effectScopeOper(node :: EffectScope)()
 		elseif node.depsTail then

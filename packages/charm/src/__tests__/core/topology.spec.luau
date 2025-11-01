@@ -3,13 +3,13 @@ local suite = require("../../../../../test/suite")
 
 local computed = core.computed
 local effect = core.effect
-local atom = core.atom
+local signal = core.signal
 local describe = suite.describe
 local test = suite.test
 
 --[[
 	Tests adopted with thanks from preact-core implementation at
-	https://github.com/preactjs/core/blob/main/packages/core/test/atom.test.tsx
+	https://github.com/preactjs/signals/blob/main/packages/core/test/signal.test.tsx
 
 	The MIT License (MIT)
 
@@ -43,7 +43,7 @@ describe("graph updates", function()
 		--     C
 		--     |
 		--     D
-		local a = atom(2)
+		local a, setA = signal(2)
 
 		local b = computed(function()
 			return a() - 1
@@ -64,12 +64,12 @@ describe("graph updates", function()
 		assert(computeCalls == 1, "compute should be called once")
 		computeCalls = 0
 
-		a(4)
+		setA(4)
 		d()
 		assert(computeCalls == 1, "compute should drop update")
 	end)
 
-	test("should only update every atom once (diamond graph)", function()
+	test("should only update every signal once (diamond graph)", function()
 		-- In this scenario "D" should only update once when "A" receives
 		-- an update. This is sometimes referred to as the "diamond" scenario.
 		--     A
@@ -77,8 +77,7 @@ describe("graph updates", function()
 		--  B     C
 		--   \   /
 		--     D
-
-		local a = atom("a")
+		local a, setA = signal("a")
 		local b = computed(function()
 			return a()
 		end)
@@ -96,12 +95,12 @@ describe("graph updates", function()
 		assert(d() == "a a", "d should be 'a a'")
 		assert(spyCalls == 1, "compute should be called once")
 
-		a("aa")
+		setA("aa")
 		assert(d() == "aa aa", "d should be 'aa aa'")
 		assert(spyCalls == 2, "compute should be called only twice")
 	end)
 
-	test("should only update every atom once (diamond graph + tail)", function()
+	test("should only update every signal once (diamond graph + tail)", function()
 		-- "E" will be likely updated twice if our mark+sweep logic is buggy.
 		--     A
 		--   /   \
@@ -110,8 +109,7 @@ describe("graph updates", function()
 		--     D
 		--     |
 		--     E
-
-		local a = atom("a")
+		local a, setA = signal("a")
 		local b = computed(function()
 			return a()
 		end)
@@ -133,7 +131,7 @@ describe("graph updates", function()
 		assert(e() == "a a", "e should be 'a a'")
 		assert(spyCalls == 1, "compute should be called once")
 
-		a("aa")
+		setA("aa")
 		assert(e() == "aa aa", "e should be 'aa aa'")
 		assert(spyCalls == 2, "compute should be called only twice")
 	end)
@@ -141,7 +139,7 @@ describe("graph updates", function()
 	test("should bail out if result is the same", function()
 		-- Bail out if value of "B" never changes
 		-- A->B->C
-		local a = atom("a")
+		local a, setA = signal("a")
 		local b = computed(function()
 			a()
 			return "foo"
@@ -157,12 +155,12 @@ describe("graph updates", function()
 		assert(c() == "foo", "c should be 'foo'")
 		assert(spyCalls == 1, "compute should be called once")
 
-		a("aa")
+		setA("aa")
 		assert(c() == "foo", "c should be 'foo'")
 		assert(spyCalls == 1, "compute should bail out")
 	end)
 
-	test("should only update every atom once (jagged diamond graph + tails)", function()
+	test("should only update every signal once (jagged diamond graph + tails)", function()
 		-- "F" and "G" will be likely updated twice if our mark+sweep logic is buggy.
 		--     A
 		--   /   \
@@ -173,7 +171,7 @@ describe("graph updates", function()
 		--     E
 		--   /   \
 		--  F     G
-		local a = atom("a")
+		local a, setA = signal("a")
 
 		local b = computed(function()
 			return a()
@@ -222,7 +220,7 @@ describe("graph updates", function()
 		fSpyCalls, fSpyTime = 0, 0
 		gSpyCalls, gSpyTime = 0, 0
 
-		a("b")
+		setA("b")
 
 		assert(e() == "b b", "e should be 'b b'")
 		assert(eSpyCalls == 1, "e should run once after update")
@@ -237,7 +235,7 @@ describe("graph updates", function()
 		fSpyCalls, fSpyTime = 0, 0
 		gSpyCalls, gSpyTime = 0, 0
 
-		a("c")
+		setA("c")
 
 		assert(e() == "c c", "e should be 'c c'")
 		assert(eSpyCalls == 1, "e should run once after update")
@@ -258,7 +256,7 @@ describe("graph updates", function()
 		--    *A
 		--   /   \
 		-- *B     C <- we don't listen to C
-		local a = atom("a")
+		local a, setA = signal("a")
 
 		local b = computed(function()
 			return a()
@@ -273,7 +271,7 @@ describe("graph updates", function()
 		assert(b() == "a", "b should be 'a'")
 		assert(spyCalls == 0, "compute should not run")
 
-		a("aa")
+		setA("aa")
 		assert(b() == "aa", "b should be 'aa'")
 		assert(spyCalls == 0, "compute should not run")
 	end)
@@ -287,7 +285,7 @@ describe("graph updates", function()
 		-- *B     D <- we don't listen to C
 		--  |
 		-- *C
-		local a = atom("a")
+		local a, setA = signal("a")
 		local spyBCalls = 0
 		local spyB = function()
 			spyBCalls += 1
@@ -318,7 +316,7 @@ describe("graph updates", function()
 		spyCCalls = 0
 		unsub()
 
-		a("aa")
+		setA("aa")
 
 		assert(spyBCalls == 0, "b should not run")
 		assert(spyCCalls == 0, "c should not run")
@@ -335,7 +333,7 @@ describe("graph updates", function()
 		--  B     *C <- returns same value every time
 		--   \   /
 		--     D
-		local a = atom("a")
+		local a, setA = signal("a")
 		local b = computed(function()
 			return a()
 		end)
@@ -353,7 +351,7 @@ describe("graph updates", function()
 		assert(d() == "a c", "d should be 'a c'")
 		spyResult = nil
 
-		a("aa")
+		setA("aa")
 		d()
 		assert(spyResult == "aa c", "d should have returned 'aa c'")
 	end)
@@ -367,7 +365,7 @@ describe("graph updates", function()
 		--  B *C *D
 		--   \ | /
 		--     E
-		local a = atom("a")
+		local a, setA = signal("a")
 		local b = computed(function()
 			return a()
 		end)
@@ -389,13 +387,13 @@ describe("graph updates", function()
 		assert(e() == "a c d", "e should be 'a c d'")
 		spyResult = nil
 
-		a("aa")
+		setA("aa")
 		e()
 		assert(spyResult == "aa c d", "e should have returned 'aa c d'")
 	end)
 
 	test("should support lazy branches", function()
-		local a = atom(0)
+		local a, setA = signal(0)
 		local b = computed(function()
 			return a()
 		end)
@@ -404,10 +402,10 @@ describe("graph updates", function()
 		end)
 
 		assert(c() == 0, "c should be 0")
-		a(1)
+		setA(1)
 		assert(c() == 1, "c should be 1")
 
-		a(0)
+		setA(0)
 		assert(c() == 0, "c should be 0 again")
 	end)
 
@@ -419,7 +417,7 @@ describe("graph updates", function()
 		-- *B     *C
 		--   \   /
 		--     D
-		local a = atom("a")
+		local a, setA = signal("a")
 		local b = computed(function()
 			a()
 			return "b"
@@ -438,14 +436,14 @@ describe("graph updates", function()
 		assert(d() == "b c", "d should be 'b c'")
 		spyCalls = 0
 
-		a("aa")
+		setA("aa")
 		assert(spyCalls == 0, "d should not run")
 	end)
 end)
 
 describe("error handling", function()
 	test("should keep graph consistent on errors during activation", function()
-		local a = atom(0)
+		local a, setA = signal(0)
 		local b = computed(function()
 			error("fail")
 		end)
@@ -459,12 +457,12 @@ describe("error handling", function()
 		assert(not success, "should throw")
 		assert(string.match(result, "fail"), "should throw fail")
 
-		a(1)
+		setA(1)
 		assert(c() == 1, "c should recover and return 1")
 	end)
 
 	test("should keep graph consistent on errors in computeds", function()
-		local a = atom(0)
+		local a, setA = signal(0)
 		local b = computed(function()
 			if a() == 1 then
 				error("fail")
@@ -477,14 +475,14 @@ describe("error handling", function()
 
 		assert(c() == 0, "c should be 0")
 
-		a(1)
+		setA(1)
 		local success, result = pcall(function()
 			b()
 		end)
 		assert(not success, "should throw")
 		assert(string.match(result, "fail"), "should throw fail")
 
-		a(2)
+		setA(2)
 		assert(c() == 2, "c should recover and return 2")
 	end)
 end)

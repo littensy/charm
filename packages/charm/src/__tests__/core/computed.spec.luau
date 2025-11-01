@@ -1,13 +1,13 @@
 local core = require("../../core")
 local suite = require("../../../../../test/suite")
 
-local atom = core.atom
 local computed = core.computed
 local effect = core.effect
+local signal = core.signal
 local test = suite.test
 
 test("should correctly propagate changes through computed core", function()
-	local src = atom(0)
+	local src, setSrc = signal(0)
 	local c1 = computed(function()
 		return src() % 2
 	end)
@@ -19,15 +19,15 @@ test("should correctly propagate changes through computed core", function()
 	end)
 
 	c3()
-	src(1) -- c1 -> dirty, c2 -> toCheckDirty, c3 -> toCheckDirty
+	setSrc(1) -- c1 -> dirty, c2 -> toCheckDirty, c3 -> toCheckDirty
 	c2() -- c1 -> none, c2 -> none
-	src(3) -- c1 -> dirty, c2 -> toCheckDirty
+	setSrc(3) -- c1 -> dirty, c2 -> toCheckDirty
 
 	assert(c3() == 1, "bad final value")
 end)
 
 test("should propagate updated source value through chained computations", function()
-	local src = atom(0)
+	local src, setSrc = signal(0)
 	local a = computed(function()
 		return src()
 	end)
@@ -42,12 +42,12 @@ test("should propagate updated source value through chained computations", funct
 	end)
 
 	assert(d() == 0, "bad initial value")
-	src(2)
+	setSrc(2)
 	assert(d() == 2, "bad updated value")
 end)
 
 test("should handle flags are indirectly updated during checkDirty", function()
-	local a = atom(false)
+	local a, setA = signal(false)
 	local b = computed(function()
 		return a()
 	end)
@@ -61,29 +61,29 @@ test("should handle flags are indirectly updated during checkDirty", function()
 	end)
 
 	assert(d() == false, "bad initial value")
-	a(true)
+	setA(true)
 	assert(d() == true, "bad updated value")
 end)
 
-test("should not update if the atom value is reverted", function()
+test("should not update if the signal value is reverted", function()
 	local times = 0
 
-	local src = atom(0)
+	local src, setSrc = signal(0)
 	local c1 = computed(function()
 		times += 1
 		return src()
 	end)
 	c1()
 	assert(times == 1, "computed did not run")
-	src(1)
-	src(0)
+	setSrc(1)
+	setSrc(0)
 	c1()
 	assert(times == 1, "computed ran when it should not")
 end)
 
 test("should receive previous value", function()
 	local calls = {}
-	local src = atom(0)
+	local src, setSrc = signal(0)
 	local c1 = computed(function(current): number
 		local incoming = src()
 		return if current == incoming or incoming % 2 == 1 then current or incoming else incoming
@@ -93,12 +93,12 @@ test("should receive previous value", function()
 		table.insert(calls, c1())
 	end)
 
-	src(2)
-	src(3)
+	setSrc(2)
+	setSrc(3)
 	assert(c1() == 2, "should skip odd value")
 
-	src(4)
-	src(5)
+	setSrc(4)
+	setSrc(5)
 	assert(c1() == 4, "should skip odd value")
 	assert(table.concat(calls) == "024", `should only call on even updates, got {table.concat(calls)}`)
 end)

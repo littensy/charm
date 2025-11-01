@@ -3,12 +3,12 @@ local suite = require("../../../../../test/suite")
 
 local effect = core.effect
 local effectScope = core.effectScope
-local atom = core.atom
+local signal = core.signal
 local onCleanup = core.onCleanup
 local test = suite.test
 
 test("should not trigger after stop", function()
-	local count = atom(1)
+	local count, setCount = signal(1)
 
 	local triggers = 0
 
@@ -19,14 +19,14 @@ test("should not trigger after stop", function()
 		end)
 		assert(triggers == 1, "did not run initially")
 
-		count(2)
+		setCount(2)
 		assert(triggers == 2, "did not run after update")
 	end)
 
-	count(3)
+	setCount(3)
 	assert(triggers == 3, "did not run after update outside scope")
 	stopScope()
-	count(4)
+	setCount(4)
 	assert(triggers == 3, "ran after stop")
 end)
 
@@ -52,7 +52,7 @@ end)
 test("should run indirect effect cleanup", function()
 	local cleanups = 0
 
-	local a = atom(false)
+	local a, setA = signal(false)
 	local stopScope = effectScope(function()
 		effect(function()
 			a()
@@ -63,11 +63,11 @@ test("should run indirect effect cleanup", function()
 	end)
 
 	assert(cleanups == 0, "should not cleanup immediately")
-	a(true)
+	setA(true)
 	assert(cleanups == 1, "should cleanup once")
 	stopScope()
 	assert(cleanups == 2, "should cleanup after outer dispose")
-	a(false)
+	setA(false)
 	assert(cleanups == 2, "should not cleanup after update")
 end)
 
