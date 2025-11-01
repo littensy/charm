@@ -20,11 +20,11 @@ test("should replicate server state to client", function()
 	local clientA = Charm.atom({ count = -1 })
 	local clientB = Charm.atom({ count = -1 })
 
-	client.syncAtoms({ a = clientA, b = clientB })
-	server.syncAtomsToClient(target, { a = serverA, b = serverB })
-	server.startSync(function(syncTarget, payloads)
+	client.register({ a = clientA, b = clientB })
+	server.subscribeClient(target, { a = serverA, b = serverB })
+	server.connect(function(syncTarget, payloads)
 		if syncTarget == target then
-			client.applyPayloads(payloads)
+			client.hydrate(payloads)
 		end
 	end)
 
@@ -54,11 +54,11 @@ test("should replicate historical server state to client", function()
 
 	config.preserveHistory = true
 
-	client.syncAtoms({ a = clientA, b = clientB })
-	server.syncAtomsToClient(target, { a = serverA, b = serverB })
-	server.startSync(function(syncTarget, payloads)
+	client.register({ a = clientA, b = clientB })
+	server.subscribeClient(target, { a = serverA, b = serverB })
+	server.connect(function(syncTarget, payloads)
 		if syncTarget == target then
-			client.applyPayloads(payloads)
+			client.hydrate(payloads)
 		end
 	end)
 

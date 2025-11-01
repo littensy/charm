@@ -2,8 +2,6 @@ local Charm = require("../../Charm")
 local client = require("../client")
 local suite = require("../../../../test/suite")
 
-local atom = Charm.atom
-local subscribe = Charm.subscribe
 local test = suite.test
 local afterEach = suite.afterEach
 
@@ -11,29 +9,29 @@ afterEach(function()
 	client.reset()
 end)
 
-test("should sync state payload", function()
-	local a = atom(1)
+test("should hydrate atom", function()
+	local a = Charm.atom(1)
 
-	client.syncAtoms({ a = a })
-	client.applyPayloads({
+	client.register({ a = a })
+	client.hydrate({
 		{ type = "init", data = { a = 2 } },
 	})
 
 	assert(a() == 2, "should set a to the initial value")
 end)
 
-test("should sync state patch", function()
-	local a = atom({ b = 1, c = 2 })
+test("should merge patch", function()
+	local a = Charm.atom({ b = 1, c = 2 })
 	local previous = a()
 
-	client.syncAtoms({ a = a })
-	client.applyPayloads({
+	client.register({ a = a })
+	client.hydrate({
 		{ type = "init", data = { a = a() } },
 	})
 
 	assert(a() == previous, "should set a to the initial value")
 
-	client.applyPayloads({
+	client.hydrate({
 		{ type = "patch", data = { a = { b = 3 } } },
 	})
 
@@ -43,17 +41,17 @@ test("should sync state patch", function()
 end)
 
 test("should fix sparse array patches", function()
-	local a = atom({ 1 })
+	local a = Charm.atom({ 1 })
 
-	client.syncAtoms({ a = a })
-	client.applyPayloads({
+	client.register({ a = a })
+	client.hydrate({
 		{ type = "init", data = { a = a() } },
 	})
 
 	-- This patch would be the result of a diff between { 1 } and { 1, 2 } that
 	-- was JSON-serialized and deserialized. The client should be able to catch
 	-- this and convert the string key back to a number.
-	client.applyPayloads({
+	client.hydrate({
 		{ type = "patch", data = { a = { ["2"] = 2 } } },
 	})
 
@@ -61,21 +59,21 @@ test("should fix sparse array patches", function()
 	assert(a()[2] == 2, "should convert serialized arrays to use numbers")
 end)
 
-test("should apply multiple patches", function()
-	local a = atom(1)
+test("should merge multiple patches", function()
+	local a = Charm.atom(1)
 	local calls = {}
 
-	client.syncAtoms({ a = a })
+	client.register({ a = a })
 
-	subscribe(a, function(value)
+	Charm.subscribe(a, function(value)
 		table.insert(calls, value)
 	end)
 
-	client.applyPayloads({
+	client.hydrate({
 		{ type = "init", data = { a = a() } },
 	})
 
-	client.applyPayloads({
+	client.hydrate({
 		{ type = "patch", data = { a = 2 } },
 		{ type = "patch", data = { a = 3 } },
 	})
@@ -85,25 +83,25 @@ test("should apply multiple patches", function()
 end)
 
 test("should batch patches", function()
-	local a = atom(0)
-	local b = atom(0)
+	local a = Charm.atom(0)
+	local b = Charm.atom(0)
 	local states = {}
 
-	client.syncAtoms({ a = a, b = b })
+	client.register({ a = a, b = b })
 
-	subscribe(a, function()
+	Charm.subscribe(a, function()
 		states.b = b()
 	end)
 
-	subscribe(b, function()
+	Charm.subscribe(b, function()
 		states.a = a()
 	end)
 
-	client.applyPayloads({
+	client.hydrate({
 		{ type = "init", data = { a = a(), b = b() } },
 	})
 
-	client.applyPayloads({
+	client.hydrate({
 		{ type = "patch", data = { a = 1, b = 2 } },
 	})
 

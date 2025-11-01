@@ -2,46 +2,43 @@ local Charm = require("../Charm")
 local patch = require("./patch")
 local types = require("./types")
 
+type Atom<T = any> = Charm.Atom<T>
 type SyncPayload = types.SyncPayload
 
-local atomRegister: { [string]: Charm.Atom } = {}
+local trackedAtoms: { [string]: Atom } = {}
 
---- Registers atoms to be kept in sync with the server. Atoms with matching
---- keys on the server will be synced to these atoms.
+--- Registers a map of atoms to the state with the corresponding keys on the
+--- server. When the server sends updates, these atoms will be hydrated with
+--- the new values.
 ---
---- @param atoms An object mapping string keys to atoms to be synced.
-local function syncAtoms(atoms: { [string]: Charm.Atom })
+--- If syncing signals instead of atoms, you can use `signalToAtom` to sync
+--- signal getters and setters.
+---
+--- @param atoms A map of atoms to sync with the server.
+local function register(atoms: { [string]: Atom })
 	for key, atom in atoms do
-		if atomRegister[key] and atomRegister[key] ~= atom then
-			warn("[Charm] Attempted to sync different atoms with the same key:", key)
-			continue
-		end
-		atomRegister[key] = atom
+		trackedAtoms[key] = atom
 	end
 end
 
---- Unregisters one or more atoms from being kept in sync with the server.
---- The atoms will retain their current values, but will no longer receive
---- updates from the server.
----
---- @param keys The keys of the atoms to stop syncing.
-local function unsyncAtoms(...: string)
+--- Unregisters from server state updates for the given keys. The atoms
+--- will retain their current values, but will no longer receive updates
+--- from the server.
+local function unregister(...: string)
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
-		atomRegister[key] = nil
+		trackedAtoms[key] = nil
 	end
 end
 
---- Unregisters all atoms from being kept in sync with the server. The
---- atoms will retain their current values, but will no longer receive
---- updates from the server.
+--- Unsubscribes from all server state updates.
 local function reset()
-	table.clear(atomRegister)
+	table.clear(trackedAtoms)
 end
 
 local function applyInitPayload(data: { [string]: any })
 	for key, value in data do
-		local atom = atomRegister[key]
+		local atom = trackedAtoms[key]
 		if atom then
 			atom(value)
 		end
@@ -51,23 +48,22 @@ end
 local function applyPatchPayload(data: { [string | number]: any })
 	local target = {}
 
-	for key, atom in atomRegister do
+	for key, atom in trackedAtoms do
 		target[key] = atom()
 	end
 
 	target = patch.apply(target, data)
 
-	for key, atom in atomRegister do
+	for key, atom in trackedAtoms do
 		atom(target[key])
 	end
 end
 
---- Applies one or more payloads received from the server to the synced
---- atoms. Payloads are state patches or initial state updates sent by the
---- server, and are usually received via a remote event.
+--- Merges the server's state patches into the client's state, either
+--- initializing it with the full state or merging a partial patch.
 ---
---- @param payloads The payloads to apply.
-local function applyPayloads(payloads: { SyncPayload })
+--- @param payloads The state updates received from the server.
+local function hydrate(payloads: { SyncPayload })
 	for _, payload in payloads do
 		if payload.type == "init" then
 			Charm.batched(applyInitPayload, payload.data)
@@ -78,8 +74,8 @@ local function applyPayloads(payloads: { SyncPayload })
 end
 
 return {
-	syncAtoms = syncAtoms,
-	unsyncAtoms = unsyncAtoms,
+	register = register,
+	unregister = unregister,
 	reset = reset,
-	applyPayloads = applyPayloads,
+	hydrate = hydrate,
 }

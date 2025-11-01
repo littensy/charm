@@ -20,8 +20,8 @@ test("should replicate state changes", function()
 	local c = Charm.atom(0)
 	local target, payloads
 
-	server.syncAtomsToClient(client, { a = a, b = b, c = c })
-	server.startSync(function(...)
+	server.subscribeClient(client, { a = a, b = b, c = c })
+	server.connect(function(...)
 		target, payloads = ...
 	end)
 
@@ -47,8 +47,8 @@ test("should replicate partial state patches", function()
 	local b = Charm.atom(0 :: number?)
 	local target, payloads
 
-	server.syncAtomsToClient(client, { a = a, b = b })
-	server.startSync(function(...)
+	server.subscribeClient(client, { a = a, b = b })
+	server.connect(function(...)
 		target, payloads = ...
 	end)
 
@@ -75,8 +75,8 @@ test("should init new clients", function()
 	local a = Charm.atom(0)
 	local payloadsA, payloadsB
 
-	server.syncAtomsToClient(clientA, { a = a })
-	server.startSync(function(target, payloads)
+	server.subscribeClient(clientA, { a = a })
+	server.connect(function(target, payloads)
 		if target == clientA then
 			payloadsA = payloads
 		elseif target == clientB then
@@ -89,7 +89,7 @@ test("should init new clients", function()
 	assert(payloadsA[1].type == "init", "Expected first payload to be init for client A")
 	assert(payloadsA[1].data.a == a(), "Expected init payload to contain atom 'a' for client A")
 
-	server.syncAtomsToClient(clientB, { a = a })
+	server.subscribeClient(clientB, { a = a })
 	a(2)
 	server.flush()
 	assert(payloadsA[1].type == "patch", "Expected first payload to be patch for client A")
@@ -104,13 +104,13 @@ test("should init new atoms", function()
 	local b = Charm.atom(0)
 	local target, payloads
 
-	server.syncAtomsToClient(client, { a = a })
-	server.startSync(function(...)
+	server.subscribeClient(client, { a = a })
+	server.connect(function(...)
 		target, payloads = ...
 	end)
 
 	server.flush()
-	server.syncAtomsToClient(client, { b = b })
+	server.subscribeClient(client, { b = b })
 	a(1)
 	b(1)
 	server.flush()
@@ -129,9 +129,9 @@ test("should only replicate to synced clients", function()
 	local b = Charm.atom(0)
 	local payloadsA, payloadsB
 
-	server.syncAtomsToClient(clientA, { a = a })
-	server.syncAtomsToClient(clientB, { b = b })
-	server.startSync(function(target, payloads)
+	server.subscribeClient(clientA, { a = a })
+	server.subscribeClient(clientB, { b = b })
+	server.connect(function(target, payloads)
 		if target == clientA then
 			payloadsA = payloads
 		elseif target == clientB then
@@ -170,8 +170,8 @@ test("should validate state", function()
 	local client = {}
 	local a = Charm.atom({})
 
-	server.syncAtomsToClient(client, { a = a })
-	server.startSync(function() end)
+	server.subscribeClient(client, { a = a })
+	server.connect(function() end)
 
 	a({ [0.5] = true })
 	assert(not pcall(server.flush), "Expected server.flush to fail")
@@ -185,8 +185,8 @@ test("should serialize state", function()
 	local a = Charm.atom({ 1, 2, 3, 4, 5 })
 	local payloads
 
-	server.syncAtomsToClient(client, { a = a })
-	server.startSync(function(_, p)
+	server.subscribeClient(client, { a = a })
+	server.connect(function(_, p)
 		payloads = p
 	end)
 	server.flush()
@@ -213,8 +213,8 @@ describe("historical", function()
 		local c = Charm.atom(0)
 		local target, payloads
 
-		server.syncAtomsToClient(client, { a = a, b = b, c = c })
-		server.startSync(function(...)
+		server.subscribeClient(client, { a = a, b = b, c = c })
+		server.connect(function(...)
 			target, payloads = ...
 		end)
 
@@ -242,8 +242,8 @@ describe("historical", function()
 		local a = Charm.atom(0)
 		local payloadsA, payloadsB
 
-		server.syncAtomsToClient(clientA, { a = a })
-		server.startSync(function(target, payloads)
+		server.subscribeClient(clientA, { a = a })
+		server.connect(function(target, payloads)
 			if target == clientA then
 				payloadsA = payloads
 			elseif target == clientB then
@@ -259,7 +259,7 @@ describe("historical", function()
 		assert(payloadsA[2].type == "patch", "Expected second payload to be patch for client A")
 		assert(payloadsA[2].data.a == 2, "Expected second patch payload to contain atom 'a' with value 1 for client A")
 
-		server.syncAtomsToClient(clientB, { a = a })
+		server.subscribeClient(clientB, { a = a })
 		a(3)
 		a(4)
 		server.flush()
@@ -278,8 +278,8 @@ describe("historical", function()
 		local b = Charm.atom(0)
 		local payloads
 
-		server.syncAtomsToClient(client, { a = a })
-		server.startSync(function(_, ...)
+		server.subscribeClient(client, { a = a })
+		server.connect(function(_, ...)
 			payloads = ...
 		end)
 
@@ -287,7 +287,7 @@ describe("historical", function()
 		assert(payloads[1].type == "init", "Expected first payload to be init")
 		assert(payloads[1].data.a == 0, "Expected init payload to contain atom 'a'")
 
-		server.syncAtomsToClient(client, { b = b })
+		server.subscribeClient(client, { b = b })
 		a(1)
 		a(2)
 		b(1)

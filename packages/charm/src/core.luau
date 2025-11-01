@@ -312,7 +312,7 @@ end
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#atomstate-equals
 local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
 	local getter, setter = signal(initialValue, equals)
-	return function(...: ((T) -> T) | T): T
+	return function(...)
 		return if select("#", ...) == 0 then getter() else setter((...))
 	end
 end
@@ -320,9 +320,6 @@ end
 --- Creates a new atom that is computed based on the values of other atoms.
 --- The returned atom is read-only, and its value is automatically updated when
 --- any atoms accessed from within the getter function change.
----
---- If an initial value is provided, the getter will receive this value as its
---- first argument on the initial run, instead of `undefined`.
 ---
 --- @example
 --- ```ts
@@ -332,8 +329,7 @@ end
 --- ```
 ---
 --- @param getter A function that produces the next value.
---- @param value An optional initial value for the selector.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#computedcallback-options
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
 local function computed<T>(getter: (previousValue: T?) -> T): () -> T
 	return computedOper({
 		flags = bit32.bor(MUTABLE, DIRTY),
@@ -432,6 +428,7 @@ end
 --- @param callback The callback function.
 --- @param args Arguments to pass to the callback.
 --- @return The return value of the callback.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
 local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
 	local prevSub = setActiveSub(nil)
 	local results: { any } = { pcall(callback, ...) }
@@ -450,6 +447,7 @@ end
 --- @param callback The callback function.
 --- @param args Arguments to pass to the callback.
 --- @return The return value of the callback.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
 local function peek<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
 	if
 		activeSub
@@ -474,6 +472,7 @@ end
 --- @param callback A function that performs multiple atom updates.
 --- @param args Arguments to pass to the callback.
 --- @return The return value of the callback.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#batchedcallback
 local function batched<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
 	startBatch()
 	local results: { any } = { (if globals.strict then noYield else pcall)(callback, ...) }

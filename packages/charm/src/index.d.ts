@@ -83,11 +83,9 @@ export function atom<T>(): Atom<T | undefined>;
  * ```
  *
  * @param getter A function that produces the next value.
- * @param value An optional initial value for the selector.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#computedcallback-options
  */
 export function computed<T>(getter: (previousValue?: T) => T): () => T;
-export function computed<T>(getter: (previousValue: T) => T, value: T): () => T;
 
 /**
  * Creates an effect that runs a callback in response to atom state changes.

@@ -8,8 +8,8 @@ suite.describe("e2e", function()
 	require("./e2e.spec")
 end)
 
-suite.describe("flatten", function()
-	require("./flatten.spec")
+suite.describe("utils", function()
+	require("./utils.spec")
 end)
 
 suite.describe("patch", function()

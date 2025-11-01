@@ -7,85 +7,95 @@ type SyncPayload = types.SyncPayload
 
 local globals = Charm.globals
 
-type RegisteredAtom<T = any> = {
-	callback: () -> T,
+type SyncStatus = number
+
+type ClientAtoms = {
+	[string]: SyncStatus,
+}
+
+type TrackedState<T = any> = {
+	getter: () -> T,
 	currentValue: T,
 	previousValue: T,
 	dispose: () -> (),
 }
 
-type SyncStatus = number
+type StateUpdate = {
+	key: string,
+	currentValue: any,
+	previousValue: any,
+}
 
 local PENDING_INITIAL_STATE: SyncStatus = 0
 local LISTENING_FOR_CHANGES: SyncStatus = 1
 
-local atomRegister: { [string]: RegisteredAtom } = {}
-local clientRegister: { [any]: { [string]: SyncStatus } } = {}
-local globalUpdates: { { key: string, currentValue: any, previousValue: any } } = {}
+local trackedAtoms: { [string]: TrackedState } = {}
+local globalUpdates: { StateUpdate } = {}
+local clients: { [any]: ClientAtoms } = {}
 
 local connection: RBXScriptConnection?
-local onSyncCallback: (client: any, payloads: { SyncPayload }) -> ()?
+local syncCallback: (client: any, payloads: { SyncPayload }) -> ()?
 
-local function syncGlobalAtom<T>(key: string, callback: () -> T)
-	if atomRegister[key] then
-		if atomRegister[key].callback ~= callback then
-			warn("[Charm] Attempted to sync different atoms with the same key:", key)
+local function startTracking<T>(key: string, getter: () -> T)
+	if trackedAtoms[key] then
+		-- Ignore duplicates, but warn against name collisions
+		if trackedAtoms[key].getter ~= getter then
+			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
 		return
 	end
 
-	local registeredAtom: RegisteredAtom<T> = {
-		callback = callback,
-		currentValue = callback(),
-		previousValue = callback(),
-		dispose = function() end,
+	local value = getter()
+	local trackedState = {
+		getter = getter,
+		currentValue = value,
+		previousValue = value,
 	}
 
-	registeredAtom.dispose = Charm.effect(function()
-		local newValue = callback()
+	trackedState.dispose = Charm.effect(function()
+		local newValue = getter()
 
 		-- When preserving history, we need to keep track of previous values
 		-- so we can create granular patches for each change.
-		if config.preserveHistory and registeredAtom.currentValue ~= newValue then
+		if config.preserveHistory and trackedState.currentValue ~= newValue then
 			table.insert(globalUpdates, {
 				key = key,
 				currentValue = newValue,
-				previousValue = registeredAtom.currentValue,
+				previousValue = trackedState.previousValue,
 			})
 		end
 
-		registeredAtom.currentValue = newValue
+		trackedState.currentValue = newValue
 	end)
 
-	atomRegister[key] = registeredAtom
+	trackedAtoms[key] = trackedState
 end
 
-local function unsyncGlobalAtom(key: string)
-	local registeredAtom = atomRegister[key]
-
-	if registeredAtom then
-		registeredAtom.dispose()
-		atomRegister[key] = nil
+local function stopTracking(key: string)
+	local tracker = trackedAtoms[key]
+	if tracker then
+		tracker.dispose()
+		trackedAtoms[key] = nil
 	end
 end
 
-local function unsyncStaleGlobalAtoms()
+local function purgeUntracked()
 	local active: { [string]: boolean } = {}
 
-	for _, clientAtoms in clientRegister do
+	for _, clientAtoms in clients do
 		for key in clientAtoms do
 			active[key] = true
 		end
 	end
 
-	for key in atomRegister do
+	for key in trackedAtoms do
 		if not active[key] then
-			unsyncGlobalAtom(key)
+			stopTracking(key)
 		end
 	end
 end
 
-local function createGlobalPatchHistory(): { any }
+local function diffGlobalUpdateBuffer(): { any }
 	local patchCount = #globalUpdates
 	local patches = table.create(patchCount)
 
@@ -96,10 +106,10 @@ local function createGlobalPatchHistory(): { any }
 	return patches
 end
 
-local function createPayloadHistoryForClient(client: any, patches: { any }): { SyncPayload }
-	local syncedAtoms = clientRegister[client]
+local function selectFromGlobalPatchList(client: any, globalPatches: { any }): { SyncPayload }
+	local clientAtoms = clients[client]
 
-	if not syncedAtoms then
+	if not clientAtoms then
 		return {}
 	end
 
@@ -108,14 +118,14 @@ local function createPayloadHistoryForClient(client: any, patches: { any }): { S
 	-- Iterate over all global updates and see if the client is interested in
 	-- any of them. If so, we create a patch payload for the update.
 	for index, update in globalUpdates do
-		local patchData = patches[index]
+		local patchData = globalPatches[index]
 
 		if not patchData then
 			continue
 		end
 
 		local key = update.key
-		local status = syncedAtoms[key]
+		local status = clientAtoms[key]
 
 		if status == LISTENING_FOR_CHANGES then
 			table.insert(payloads, {
@@ -127,179 +137,180 @@ local function createPayloadHistoryForClient(client: any, patches: { any }): { S
 				type = "init",
 				data = { [key] = update.currentValue },
 			})
-			syncedAtoms[key] = LISTENING_FOR_CHANGES
+			clientAtoms[key] = LISTENING_FOR_CHANGES
 		end
 	end
 
 	-- If a pending atom was never updated, we still need to send its initial
 	-- state. This can happen if the atom was registered after its last change.
-	local initPayload: { [string]: any } = {}
+	local initData: { [string]: any } = {}
 
-	for key, status in syncedAtoms do
-		local registeredAtom = atomRegister[key]
+	for key, status in clientAtoms do
+		local trackedState = trackedAtoms[key]
 
-		if status == PENDING_INITIAL_STATE and registeredAtom then
-			initPayload[key] = registeredAtom.currentValue
-			syncedAtoms[key] = LISTENING_FOR_CHANGES
+		if status == PENDING_INITIAL_STATE and trackedState then
+			initData[key] = trackedState.currentValue
+			clientAtoms[key] = LISTENING_FOR_CHANGES
 		end
 	end
 
-	if next(initPayload) ~= nil then
-		table.insert(payloads, 1, { type = "init" :: "init", data = initPayload })
+	if next(initData) ~= nil then
+		table.insert(payloads, 1, { type = "init" :: "init", data = initData })
 	end
 
 	return payloads
 end
 
-local function createGlobalPatch(): any
-	local current: { [string]: any } = {}
-	local previous: { [string]: any } = {}
+local function diffGlobalState(): any
+	local currentGlobalState: { [string]: any } = {}
+	local previousGlobalState: { [string]: any } = {}
 
-	for key, registeredAtom in atomRegister do
-		current[key] = registeredAtom.currentValue
-		previous[key] = registeredAtom.previousValue
-		registeredAtom.previousValue = registeredAtom.currentValue
+	for key, tracker in trackedAtoms do
+		currentGlobalState[key] = tracker.currentValue
+		previousGlobalState[key] = tracker.previousValue
+		tracker.previousValue = tracker.currentValue
 	end
 
-	return patch.diff(previous, current)
+	return patch.diff(previousGlobalState, currentGlobalState)
 end
 
-local function createPayloadForClient(client: any, patchData: any): { SyncPayload }
-	local syncedAtoms = clientRegister[client]
-	local payloads: { SyncPayload } = {}
+local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPayload }
+	local clientAtoms = clients[client]
 
-	if not syncedAtoms then
-		return payloads
+	if not clientAtoms then
+		return {}
 	end
 
-	local initPayload: { [string]: any } = {}
-	local patchPayload: { [string]: any } = {}
+	local payloads: { SyncPayload } = {}
+	local initData: { [string]: any } = {}
+	local patchData: { [string]: any } = {}
 
 	-- Create patches for initialized atoms that changed, and add atoms that
 	-- are still pending initial state to the init payload.
-	for key, status in syncedAtoms do
-		local registeredAtom = atomRegister[key]
+	for key, status in clientAtoms do
+		local trackedState = trackedAtoms[key]
 
 		if status == LISTENING_FOR_CHANGES then
-			patchPayload[key] = patchData[key]
+			patchData[key] = globalPatch[key]
 		elseif status == PENDING_INITIAL_STATE then
-			initPayload[key] = registeredAtom.currentValue
-			syncedAtoms[key] = LISTENING_FOR_CHANGES
+			initData[key] = trackedState.currentValue
+			clientAtoms[key] = LISTENING_FOR_CHANGES
 		end
 	end
 
-	if next(initPayload) ~= nil then
-		table.insert(payloads, { type = "init", data = initPayload })
+	if next(initData) ~= nil then
+		table.insert(payloads, { type = "init", data = initData })
 	end
 
-	if next(patchPayload) ~= nil then
-		table.insert(payloads, { type = "patch", data = patchPayload })
+	if next(patchData) ~= nil then
+		table.insert(payloads, { type = "patch", data = patchData })
 	end
 
 	return payloads
 end
 
---- Registers atoms to be kept in sync with a specific client. Should be
---- called when a player joins the game to start syncing atoms to them. Call
---- `unsyncAtomsFromClient` or `unsyncClient` to stop syncing.
+--- Subscribes a client to the given atoms. When an update occurs, the client
+--- will receive a partial state patch to merge into their local state. May be
+--- called multiple times to subscribe to additional keys.
 ---
---- Each atom should be assigned a unique key, allowing the server to re-use
---- patches between multiple clients.
+--- Atoms, signals converted to atoms, and signal getter functions are allowed.
+--- Note that the client still requires some way to set the state, so
+--- registering signals on the client should be done through `signalToAtom()`.
 ---
---- @param client The player to sync atoms to.
---- @param atoms An object mapping string keys to atoms to be synced.
-local function syncAtomsToClient(client: any, atoms: { [string]: () -> any })
-	if not clientRegister[client] then
-		clientRegister[client] = {}
+--- @param client The client receiving state updates.
+--- @param atoms A map of atoms to sync with the client.
+local function subscribeClient(client: any, atoms: { [string]: () -> any })
+	if not clients[client] then
+		clients[client] = {}
 	end
 
-	local syncedAtoms = clientRegister[client]
+	local clientAtoms = clients[client]
 
-	for key, atom in atoms do
-		syncGlobalAtom(key, atom)
+	for key, state in atoms do
+		startTracking(key, if type(state) == "function" then state else state.get)
 
-		if not syncedAtoms[key] then
+		if not clientAtoms[key] then
 			-- Mark the atom as pending initial state so we send its full value
 			-- the next time we sync.
-			syncedAtoms[key] = PENDING_INITIAL_STATE
+			clientAtoms[key] = PENDING_INITIAL_STATE
 		end
 	end
 end
 
---- Unregisters all atoms from being kept in sync with a specific client.
---- Should be called when a player leaves the game.
+--- Unsubscribes a client from receiving all state updates. To only unsubscribe
+--- from specific keys, use `unsubscribeClientFrom` instead.
 ---
---- @param client The player to stop syncing atoms to.
-local function unsyncClient(client: any)
-	clientRegister[client] = nil
+--- @param client The client receiving state updates.
+local function unsubscribeClient(client: any)
+	clients[client] = nil
 end
 
---- Unregisters one or more atoms from being kept in sync with a specific
---- client.
+--- Unsubscribes a client from receiving updates for the given keys.
 ---
---- @param client The player to stop syncing atoms to.
---- @param keys The keys of the atoms to stop syncing.
-local function unsyncAtomsFromClient(client: any, ...: string)
-	local syncedAtoms = clientRegister[client]
+--- @param client The client receiving state updates.
+--- @param keys The keys of the state to unsubscribe from.
+local function unsubscribeClientFrom(client: any, ...: string)
+	local clientAtoms = clients[client]
 
-	if not syncedAtoms then
+	if not clientAtoms then
 		return
 	end
 
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
-		syncedAtoms[key] = nil
+		clientAtoms[key] = nil
 	end
 
-	if next(syncedAtoms) == nil then
-		clientRegister[client] = nil
+	if next(clientAtoms) == nil then
+		clients[client] = nil
 	end
 end
 
---- Immediately sends pending updates and initial states to all clients.
---- Normally, updates are sent at the interval specified in `config.interval`.
---- Calling this function forces all pending updates to be sent immediately.
+--- Immediately sends pending updates to all clients. Normally, updates are
+--- sent at the interval specified in `config.interval`, but this function
+--- can be used to force an immediate sync.
 local function flush()
-	if not onSyncCallback then
+	if not syncCallback then
 		return
 	end
 
-	local patches = if config.preserveHistory then createGlobalPatchHistory() else createGlobalPatch()
+	local globalPatch = if config.preserveHistory then diffGlobalUpdateBuffer() else diffGlobalState()
 
 	-- While payload objects are technically mutable as they are unique to
 	-- each client, the data inside them is not safe to mutate.
 	if globals.frozen then
-		Charm.deepFreeze(patches)
+		Charm.deepFreeze(globalPatch)
 	end
 
-	for client in clientRegister do
+	for client in clients do
 		local payloads: { SyncPayload } = if config.preserveHistory
-			then createPayloadHistoryForClient(client, patches)
-			else createPayloadForClient(client, patches)
+			then selectFromGlobalPatchList(client, globalPatch)
+			else selectFromGlobalPatch(client, globalPatch)
 
 		if payloads[1] then
 			if task then
-				task.spawn(onSyncCallback, client, payloads)
+				task.spawn(syncCallback, client, payloads)
 			else
-				onSyncCallback(client, payloads)
+				syncCallback(client, payloads)
 			end
 		end
 	end
 
-	unsyncStaleGlobalAtoms()
+	purgeUntracked()
 	table.clear(globalUpdates)
 end
 
---- Starts automatically syncing registered atoms to clients. Patches will
---- be sent to clients whenever the atoms are updated.
+--- Uses the callback to send state updates to clients that are subscribed
+--- to state changes. Starts automatically sending updates at the interval
+--- specified in `config.interval`.
 ---
---- @param onSync The function to call when patches can be sent to a client.
-local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
+--- @param onSync Called when sending patches to a client.
+local function connect(onSync: (client: any, payloads: { SyncPayload }) -> ())
 	if connection then
 		connection:Disconnect()
 	end
 
-	onSyncCallback = onSync
+	syncCallback = onSync
 
 	if not game then
 		return
@@ -323,30 +334,30 @@ local function startSync(onSync: (client: any, payloads: { SyncPayload }) -> ())
 	end)
 end
 
---- Stops automatically syncing registered atoms to clients. Patches will
---- no longer be sent to clients until `startSync` is called again.
-local function stopSync()
+--- Stops syncing state updates to clients at the automatic interval.
+--- Flushing can still be performed manually via `flush`.
+local function disconnect()
 	if connection then
 		connection:Disconnect()
 		connection = nil
 	end
 end
 
---- Unregisters all atoms from being kept in sync with all clients, and
---- stops automatic syncing.
+--- Unsubscribes all clients, stops tracking all state, and disconnects
+--- from the automatic sync interval.
 local function reset()
-	table.clear(atomRegister)
-	table.clear(clientRegister)
+	table.clear(trackedAtoms)
+	table.clear(clients)
 	table.clear(globalUpdates)
-	stopSync()
+	disconnect()
 end
 
 return {
-	syncAtomsToClient = syncAtomsToClient,
-	unsyncClient = unsyncClient,
-	unsyncAtomsFromClient = unsyncAtomsFromClient,
-	startSync = startSync,
-	stopSync = stopSync,
+	subscribeClient = subscribeClient,
+	unsubscribeClient = unsubscribeClient,
+	unsubscribeClientFrom = unsubscribeClientFrom,
+	connect = connect,
+	disconnect = disconnect,
 	flush = flush,
 	reset = reset,
 }
