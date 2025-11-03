@@ -52,6 +52,12 @@
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
+- [Client-server sync](#client-server-sync)
+    - [Installation](#installation-1)
+    - [Quick start](#quick-start)
+    - [Server API](#config)
+    - [Client API](#clientaddsignalssetters)
+    - [Sync caveats](#sync-caveats)
 - [Examples](#examples)
 
 </details>
@@ -581,9 +587,6 @@ When a player joins on the server, call `server.addSignalsToClient` with the key
 
 Then, use `server.connect` to specify how state updates should be sent to each client. Pass a callback function that fires a remote with the given target player and the state updates they subscribed to.
 
-> [!NOTE]
-> On the server, make sure each key corresponds to the same signal across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
-
 ```luau
 local function onPlayerAdded(player: Player)
 	-- Add signal getters, computed signals, or atoms
@@ -608,6 +611,9 @@ server.connect(function(player, updates)
 	syncEvent:FireClient(player, updates)
 end)
 ```
+
+> [!NOTE]
+> On the server, make sure each key corresponds to the same signal across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
 
 To sync the client with the server's state, call `client.addSignals` with a table of writable signals (setter functions or atoms) whose keys match their server counterparts.
 
@@ -727,6 +733,64 @@ server.disconnect()
 -- Flushing still sends pending updates
 server.flush()
 ```
+
+---
+
+### `client.addSignals(setters)`
+
+Subscribes the given writable signals to the states with the corresponding keys on the server. When the server sends updates, the functions associated with each key in the state will be called with the patched values.
+
+You should pass either pass signal setter functions or atoms to this function:
+
+```luau
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+})
+```
+
+---
+
+### `client.removeSignals(...keys)`
+
+Unsubscribes from each signal with the corresponding keys. The signals will retain their current values, but will no longer receive updates from the server.
+
+```luau
+client.addSignals({
+	name = nameStore.setName,
+})
+
+client.removeSignals("name")
+```
+
+---
+
+### `client.hydrate(updates)`
+
+The `hydrate` function patches the client's state with the updates sent from the server. The initial update sent by the server will be the full state, and later updates will only include the values that changed.
+
+You should call `hydrate` when receiving updates from the server from a remote event:
+
+```luau
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+})
+
+syncEvent.OnClientEvent:Connect(function(updates)
+	client.hydrate(updates)
+end)
+```
+
+---
+
+### Sync caveats
+
+Charm Sync will only send clients the differences between the current state and the previously-synced state, which is a practice called _delta compression_. In this case, tables are recursively scanned for changes, and unchanged properties are omitted by setting them to `nil`.
+
+But it's hard to differentiate between an unchanged value and a removed value, as both cases are represented by `nil`. We chose to address this by representing deleted values with a special `None` symbol denoted by `{ __none = "__none" }`.
+
+This means nilable values can be represented as `None`, and code working with update payloads (usually for remote argument serialization) should account for nilable values possibly being sent as `None` in the payload.
 
 ---
 
