@@ -6,18 +6,21 @@ local effect = core.effect
 local effectScope = core.effectScope
 local onCleanup = core.onCleanup
 
---- Calls the observer function for each unique key in the table returned by the
---- getter. The observer is called once for each key, and again when a new key
+--- Calls the callback function for each unique key in the table returned by the
+--- getter. The callback is called once for each key, and again when a new key
 --- is added.
 ---
---- The observer may return a cleanup function, which will be called when the
---- key is removed or when the entire observer is disposed.
+--- The callback may return a cleanup function, which will be called when the
+--- key is removed or when the entire callback is disposed.
+---
+--- Effects created within the callback are cleaned up when the item is removed
+--- from the table or when the callback is disposed.
 ---
 --- @param getter A function that returns the table to observe.
---- @param observer A function that is called for each key in the table.
+--- @param callback A function that is called for each key in the table.
 --- @return A function for disposing the observer.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-observer
-local function observe<K, V>(getter: () -> { [K]: V }, observer: (item: V, key: K) -> ...(() -> ())?): () -> ()
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
+local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local scopes: { [K]: () -> () } = {}
 	local currentItems: { [K]: V } = {}
 
@@ -33,7 +36,7 @@ local function observe<K, V>(getter: () -> { [K]: V }, observer: (item: V, key: 
 		for key, value in currentItems do
 			if previousItems[key] == nil and scopes[key] == nil then
 				scopes[key] = effectScope(function()
-					return observer(value, key)
+					return callback(value, key)
 				end, true)
 			end
 		end

@@ -51,9 +51,8 @@ type EffectScope = ReactiveNode & {
 }
 
 type Effect = ReactiveNode & {
-	fn: (stop: () -> ()) -> (() -> ())?,
+	fn: () -> (() -> ())?,
 	cleanups: { () -> () },
-	stop: () -> (),
 }
 
 type Computed<T = any> = ReactiveNode & {
@@ -117,7 +116,7 @@ local function run(e: Effect): ()
 		e.depsTail = nil
 		e.flags = bit32.bor(WATCHING, RECURSED_CHECK)
 		local prevSub = setActiveSub(e)
-		local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(e.fn, e.stop)
+		local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(e.fn)
 		activeSub = prevSub
 		e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
 		purgeDeps(e)
@@ -197,7 +196,7 @@ local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
 end
 
 local function computedOper<T>(this: Computed<T>): () -> T
-	return function(): T
+	local function computedGetter(): T
 		local flags = this.flags
 		if
 			bit32.btest(flags, DIRTY)
@@ -225,13 +224,14 @@ local function computedOper<T>(this: Computed<T>): () -> T
 		end
 		return this.value :: T
 	end
+	return computedGetter
 end
 
 local function signalOper<T>(
 	this: Signal<T>,
 	equals: ((current: T, incoming: T) -> boolean)?
 ): (() -> T, (((T) -> T) | T) -> T)
-	local function setter(update: ((T) -> T) | T): T
+	local function signalSetter(update: ((T) -> T) | T): T
 		local value: T
 		if type(update) == "function" then
 			local prevSub = setActiveSub(nil)
@@ -262,7 +262,7 @@ local function signalOper<T>(
 		return this.currentValue
 	end
 
-	local function getter(): T
+	local function signalGetter(): T
 		if bit32.btest(this.flags, DIRTY) then
 			if updateSignal(this) then
 				local subs = this.subs
@@ -285,7 +285,7 @@ local function signalOper<T>(
 		return this.currentValue
 	end
 
-	return getter, setter
+	return signalGetter, signalSetter
 end
 
 local function effectScopeOper(this: EffectScope): () -> ()
@@ -311,7 +311,7 @@ end
 --- @param initialValue The initial value of the signal.
 --- @param equals A comparator function to determine if the signal's value has changed.
 --- @return A tuple containing the getter and setter functions for the signal.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#signalstate-equals
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
 local function signal<T>(
 	initialValue: T,
 	equals: ((current: T, incoming: T) -> boolean)?
@@ -326,30 +326,24 @@ local function signal<T>(
 	}, equals)
 end
 
---- Creates a reactive atom that acts as both a getter and setter. Calling the
---- atom with an argument sets its value, while calling it with no arguments
---- returns its current value.
+--- Creates a reactive atom that acts as both a signal getter and setter.
+--- Calling the atom with an argument sets its value, while calling it with no
+--- arguments returns its current value.
 ---
---- @param value The initial value of the atom. If empty, the atom's value will be `undefined`.
+--- @param initialValue The initial value of the atom. If empty, the atom's value will be `nil`.
 --- @param equals A comparator function to determine if the atom's value has changed.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#atomstate-equals
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
 local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): (...((T) -> T) | T) -> T
 	local getter, setter = signal(initialValue, equals)
-	return function(...)
+	local function atomGetterSetter(...)
 		return if select("#", ...) == 0 then getter() else setter((...))
 	end
+	return atomGetterSetter
 end
 
---- Creates a new atom that is computed based on the values of other atoms.
---- The returned atom is read-only, and its value is automatically updated when
---- any atoms accessed from within the getter function change.
----
---- @example
---- ```ts
---- const count = atom(1);
---- const plusOne = computed(() => count() + 1);
---- print(plusOne()); // 2
---- ```
+--- Creates a new read-only signal that is computed based on the values of
+--- other signals. The computed signal's value is automatically updated when a
+--- change is detected in any of its dependencies.
 ---
 --- @param getter A function that produces the next value.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
@@ -360,50 +354,41 @@ local function computed<T>(getter: (previousValue: T?) -> T): () -> T
 	})
 end
 
---- Creates an effect that runs a callback in response to atom state changes.
---- An effect tracks which atoms are accessed during its execution, and re-runs
---- the callback when those atoms change.
+--- Creates an effect that runs a callback in response to signal state changes.
+--- An effect tracks which signals are accessed during its execution, and runs
+--- the callback when those signals change.
 ---
 --- The effect callback may return a cleanup function, which gets called once,
 --- either before the effect re-runs or when it is disposed.
 ---
 --- If the effect is called within another effect, it will be disposed when the
---- outer effect re-runs.
+--- parent effect re-runs.
 ---
 --- @param fn The function to run when dependencies change.
 --- @return A function for disposing the effect.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
-local function effect(fn: (stop: () -> ()) -> ()): () -> ()
+local function effect(fn: () -> ()): () -> ()
 	local e: Effect = {
 		fn = fn,
 		flags = WATCHING,
 		cleanups = {},
-		stop = nil :: any,
 	}
-	e.stop = effectOper(e)
 	local prevSub = setActiveSub(e)
 	if prevSub and (globals.trackInnerEffects or prevSub.flags == NONE) then
 		link(e, prevSub, 0)
 	end
-	local stopped = false
-	local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(fn, function()
-		stopped = true
-	end)
+	local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(fn)
 	activeSub = prevSub
 	if not success then
 		error(result)
 	elseif result then
 		table.insert(e.cleanups, result)
 	end
-	if stopped then
-		e.stop()
-	end
-	return e.stop
+	return effectOper(e)
 end
 
---- Creates an effect scope that can capture multiple reactive effects (i.e.
---- computed, effect, subscribe) created within it so that they can be disposed
---- together.
+--- Creates an effect scope that can capture reactive effects and computed
+--- signals created within it so that they can be disposed together.
 ---
 --- @param fn A function that may create reactive effects.
 --- @param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
@@ -428,12 +413,12 @@ local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	return effectScopeOper(e)
 end
 
---- Registers a cleanup function to the current active effect or effect scope.
---- If there is no active effect or scope, a warning is logged and the callback
---- is not registered, unless `failSilently` is set to true.
+--- Binds the cleanup function to the current active effect or effect scope. If
+--- there is no active effect, a warning is logged, unless `failSilently` is
+--- set to `true`.
 ---
 --- @param callback The cleanup function to register.
---- @param failSilently If true, suppresses the warning when there is no active effect or scope. Defaults to false.
+--- @param failSilently If `true`, suppresses the warning when there is no active effect or scope. Defaults to `false`.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
 local function onCleanup(cleanup: () -> (), failSilently: boolean?)
 	if activeSub and (activeSub :: Effect).cleanups then
@@ -443,7 +428,7 @@ local function onCleanup(cleanup: () -> (), failSilently: boolean?)
 	end
 end
 
---- Runs the callback without subscribing to atom updates or capturing inner
+--- Runs the callback without subscribing to signal updates or capturing inner
 --- effects in the parent effect or scope.
 ---
 --- For an alternative that still cleans up inner effects, use `peek` instead.
@@ -462,7 +447,7 @@ local function untracked<Args..., Results...>(callback: (Args...) -> Results...,
 	return unpack(results, 2)
 end
 
---- Runs the callback without subscribing to atom updates, but still captures
+--- Runs the callback without subscribing to signal updates, but still captures
 --- inner effects so that they dispose with the parent effect.
 ---
 --- To avoid capturing inner effects, use `untracked` instead.
@@ -489,10 +474,10 @@ local function peek<Args..., Results...>(callback: (Args...) -> Results..., ...:
 	end
 end
 
---- Combines multiple atom updates into a single "commit" that runs effects at
---- the end of the provided callback.
+--- Combines multiple updates into a single "commit" that runs effects and
+--- computed signals after the provided callback finishes running.
 ---
---- @param callback A function that performs multiple atom updates.
+--- @param callback A function that performs multiple updates.
 --- @param args Arguments to pass to the callback.
 --- @return The return value of the callback.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#batchedcallback
@@ -506,18 +491,56 @@ local function batched<Args..., Results...>(callback: (Args...) -> Results..., .
 	return unpack(results, 2)
 end
 
+--- Converts a non-signal into a computed signal. If the callback is already a
+--- signal, it is returned as-is. Useful for memoizing a getter function
+--- without creating unnecessary nested signals.
+---
+--- @param getter A function that returns the value to track.
+--- @return A computed signal that tracks the value returned by the getter.
+local function toComputed<T>(getter: () -> T): () -> T
+	local name = debug.info(getter, "n")
+	if name == "signalGetter" or name == "computedGetter" or name == "atomGetterSetter" then
+		return getter
+	end
+	return computed(function()
+		return getter()
+	end)
+end
+
+--- Creates an effect that runs the callback one immediately, and then again
+--- when the value returned by the getter changes. The callback receives the new
+--- value and the previous value as arguments.
+---
+--- Effects created within the callback are cleaned up when the listener runs
+--- or the listener is disposed.
+---
+--- @param getter A function that returns the value to watch.
+--- @param callback The function to run when the value changes.
+--- @return A function for disposing the effect.
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
+local function listen<T>(getter: () -> T, callback: (state: T, previous: T?) -> ()): () -> ()
+	local tracked = toComputed(getter)
+	local current: T
+	return effect(function()
+		local previous = current
+		current = tracked()
+		peek(callback, current, previous)
+	end)
+end
+
 --- Creates an effect that only runs the callback when the value returned by the
 --- getter changes. The callback receives the new value and the previous value
 --- as arguments.
+---
+--- Effects created within the callback are cleaned up when the listener runs
+--- or the listener is disposed.
 ---
 --- @param getter A function that returns the value to watch.
 --- @param callback The function to run when the value changes.
 --- @return A function for disposing the effect.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 local function subscribe<T>(getter: () -> T, callback: (state: T, lastState: T) -> ()): () -> ()
-	local tracked = computed(function()
-		return getter()
-	end)
+	local tracked = toComputed(getter)
 	local current: T
 	local mounted = true
 	return effect(function()
@@ -529,34 +552,6 @@ local function subscribe<T>(getter: () -> T, callback: (state: T, lastState: T) 
 			peek(callback, current, previous)
 		end
 	end)
-end
-
---- Creates an effect that runs the callback one immediately, and then again
---- when the value returned by the getter changes. The callback receives the new
---- value, the previous value, and a cleanup function as arguments.
----
---- @param getter A function that returns the value to watch.
---- @param callback The function to run when the value changes.
---- @return A function for disposing the effect.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
-local function listen<T>(getter: () -> T, callback: (state: T, previous: T?, dispose: () -> ()) -> ()): () -> ()
-	local tracked = computed(function()
-		return getter()
-	end)
-	local current: T
-	local disposed = false
-	local dispose = function()
-		disposed = true
-	end
-	dispose = effect(function()
-		local previous = current
-		current = tracked()
-		peek(callback, current, previous, dispose)
-	end)
-	if disposed then
-		dispose()
-	end
-	return dispose
 end
 
 local reactiveSystem = createReactiveSystem({

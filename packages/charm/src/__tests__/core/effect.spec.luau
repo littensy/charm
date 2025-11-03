@@ -354,25 +354,4 @@ test("should run cleanups outside any evaluation context", function()
 	assert(calls == 0, "should not run after b update")
 end)
 
-test("should allow self cleanup", function()
-	local calls = 0
-	local cleanups = 0
-	local a, setA = signal(0)
-
-	effect(function(stopEffect)
-		onCleanup(function()
-			cleanups += 1
-		end)
-		stopEffect()
-		a()
-		calls += 1
-	end)
-
-	assert(calls == 1, "should call effect once")
-	assert(cleanups == 1, "should call cleanup once")
-	setA(1)
-	assert(calls == 1, "should not call effect after a update")
-	assert(cleanups == 1, "should not call cleanup after a update")
-end)
-
 return {}

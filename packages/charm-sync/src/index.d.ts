@@ -141,7 +141,7 @@ export namespace client {
  */
 export namespace server {
 	/**
-	 * Subscribes a client to the given atoms. When an update occurs, the client
+	 * Subscribes a client to the given signals. When an update occurs, the client
 	 * will receive a partial state patch to merge into their local state. May be
 	 * called multiple times to subscribe to additional keys.
 	 *
@@ -150,9 +150,9 @@ export namespace server {
 	 * registering signals on the client should be done through `signalToAtom()`.
 	 *
 	 * @param client The client receiving state updates.
-	 * @param atoms A map of atoms to sync with the client.
+	 * @param signals A map of signals to sync with the client.
 	 */
-	export function subscribeClient(client: Player, atoms: { [key: string]: Atom<any> }): void;
+	export function subscribeClient(client: Player, signals: { [key: string]: () => any }): void;
 
 	/**
 	 * Unsubscribes a client from receiving all state updates. To only unsubscribe
@@ -277,3 +277,14 @@ export function flattenAtoms<Atoms extends NestedAtomMap>(atoms: Atoms): Flatten
  * @returns `true` if the value is `None`, otherwise `false`.
  */
 export function isNone(value: unknown): value is None;
+
+/**
+ * Converts a signal getter and setter into an atom. This is useful for
+ * syncing client signals with the server, as the sync system requires both
+ * the getter and setter to update state.
+ *
+ * @param getter A function that returns the current value of the signal.
+ * @param setter A function that sets the value of the signal.
+ * @returns An atom that can either get or set the signal's value.
+ */
+export function signalToAtom<T>(getter: () => T, setter: (value: ((prev: T) => T) | T) => T): Atom<T>;

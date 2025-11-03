@@ -1,7 +1,7 @@
 local suite = require("../../../../test/suite")
 
-suite.describe("useAtom", function()
-	require("./useAtom.spec")
+suite.describe("useSignalState", function()
+	require("./useSignalState.spec")
 end)
 
 return {}

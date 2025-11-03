@@ -1,8 +1,11 @@
 /**
- * Subscribes to the state of an atom or selector. Returns a source that
- * updates when the state changes.
+ * Returns a reactive source that subscribes to the current value of the given
+ * signal or getter function.
  *
- * @param callback The atom or selector to subscribe to.
- * @returns The reactive source.
+ * @param getter The getter function to subscribe to.
+ * @return The reactive source.
  */
-export function useAtom<T>(callback: () => T, dependencies?: any[]): () => T;
+export function useSignalState<T>(getter: () => T, dependencies?: any[]): () => T;
+
+// Aliases
+export { useSignalState as useAtom };

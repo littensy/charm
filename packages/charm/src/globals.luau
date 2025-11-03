@@ -6,11 +6,11 @@ local isO2 = inlineTest() ~= "inlineTest"
 local isDev = not isO2 or _G.__DEV__ == true
 
 return {
-	--- Enforces synchronous, non-yielding behavior in atoms and effects.
+	--- Enforces synchronous, non-yielding behavior in signals and effects.
 	--- Also enables state validation in Charm Sync to catch sync errors early.
 	--- Enabled if the optimization level is below 2, which is true in studio.
 	strict = isDev,
-	--- Enforces immutability of atoms by deep-freezing table values. Enabled
+	--- Enforces immutability of tables by deep-freezing table values. Enabled
 	--- if the optimization level is below 2, which is true in studio.
 	frozen = isDev,
 	--- Whether parent effects should track inner effects and clean them up

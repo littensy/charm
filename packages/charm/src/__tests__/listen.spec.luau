@@ -4,7 +4,6 @@ local suite = require("../../../../test/suite")
 local signal = Charm.signal
 local listen = Charm.listen
 local effect = Charm.effect
-local onCleanup = Charm.onCleanup
 local test = suite.test
 
 test("should listen to selector", function()
@@ -114,26 +113,6 @@ test("should skip redundant updates", function()
 	setA(4)
 	setA(6)
 	assert(table.concat(order) == "evenoddeven", `bad order: {table.concat(order)}`)
-end)
-
-test("should allow self cleanup", function()
-	local calls = 0
-	local cleanups = 0
-	local a, setA = signal(0)
-
-	listen(a, function(_, _, stopEffect)
-		onCleanup(function()
-			cleanups += 1
-		end)
-		stopEffect()
-		calls += 1
-	end)
-
-	assert(calls == 1, "should call effect once")
-	assert(cleanups == 1, "should call cleanup once")
-	setA(1)
-	assert(calls == 1, "should not call effect after a update")
-	assert(cleanups == 1, "should not call cleanup after a update")
 end)
 
 return {}

@@ -9,7 +9,7 @@ local globals = Charm.globals
 
 type SyncStatus = number
 
-type ClientAtoms = {
+type ClientKeys = {
 	[string]: SyncStatus,
 }
 
@@ -29,17 +29,17 @@ type StateUpdate = {
 local PENDING_INITIAL_STATE: SyncStatus = 0
 local LISTENING_FOR_CHANGES: SyncStatus = 1
 
-local trackedAtoms: { [string]: TrackedState } = {}
+local trackedSignals: { [string]: TrackedState } = {}
 local globalUpdates: { StateUpdate } = {}
-local clients: { [any]: ClientAtoms } = {}
+local clients: { [any]: ClientKeys } = {}
 
 local connection: RBXScriptConnection?
 local syncCallback: (client: any, payloads: { SyncPayload }) -> ()?
 
 local function startTracking<T>(key: string, getter: () -> T)
-	if trackedAtoms[key] then
+	if trackedSignals[key] then
 		-- Ignore duplicates, but warn against name collisions
-		if trackedAtoms[key].getter ~= getter then
+		if trackedSignals[key].getter ~= getter then
 			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
 		return
@@ -68,27 +68,27 @@ local function startTracking<T>(key: string, getter: () -> T)
 		trackedState.currentValue = newValue
 	end)
 
-	trackedAtoms[key] = trackedState
+	trackedSignals[key] = trackedState
 end
 
 local function stopTracking(key: string)
-	local tracker = trackedAtoms[key]
+	local tracker = trackedSignals[key]
 	if tracker then
 		tracker.dispose()
-		trackedAtoms[key] = nil
+		trackedSignals[key] = nil
 	end
 end
 
 local function purgeUntracked()
 	local active: { [string]: boolean } = {}
 
-	for _, clientAtoms in clients do
-		for key in clientAtoms do
+	for _, clientKeys in clients do
+		for key in clientKeys do
 			active[key] = true
 		end
 	end
 
-	for key in trackedAtoms do
+	for key in trackedSignals do
 		if not active[key] then
 			stopTracking(key)
 		end
@@ -107,9 +107,9 @@ local function diffGlobalUpdateBuffer(): { any }
 end
 
 local function selectFromGlobalPatchList(client: any, globalPatches: { any }): { SyncPayload }
-	local clientAtoms = clients[client]
+	local clientKeys = clients[client]
 
-	if not clientAtoms then
+	if not clientKeys then
 		return {}
 	end
 
@@ -125,7 +125,7 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 		end
 
 		local key = update.key
-		local status = clientAtoms[key]
+		local status = clientKeys[key]
 
 		if status == LISTENING_FOR_CHANGES then
 			table.insert(payloads, {
@@ -137,20 +137,20 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 				type = "init",
 				data = { [key] = update.currentValue },
 			})
-			clientAtoms[key] = LISTENING_FOR_CHANGES
+			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
 
-	-- If a pending atom was never updated, we still need to send its initial
-	-- state. This can happen if the atom was registered after its last change.
+	-- If a pending signal was never updated, we still need to send its initial
+	-- state. This can happen if a signal was registered after its last change.
 	local initData: { [string]: any } = {}
 
-	for key, status in clientAtoms do
-		local trackedState = trackedAtoms[key]
+	for key, status in clientKeys do
+		local trackedState = trackedSignals[key]
 
 		if status == PENDING_INITIAL_STATE and trackedState then
 			initData[key] = trackedState.currentValue
-			clientAtoms[key] = LISTENING_FOR_CHANGES
+			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
 
@@ -165,7 +165,7 @@ local function diffGlobalState(): any
 	local currentGlobalState: { [string]: any } = {}
 	local previousGlobalState: { [string]: any } = {}
 
-	for key, tracker in trackedAtoms do
+	for key, tracker in trackedSignals do
 		currentGlobalState[key] = tracker.currentValue
 		previousGlobalState[key] = tracker.previousValue
 		tracker.previousValue = tracker.currentValue
@@ -175,9 +175,9 @@ local function diffGlobalState(): any
 end
 
 local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPayload }
-	local clientAtoms = clients[client]
+	local clientKeys = clients[client]
 
-	if not clientAtoms then
+	if not clientKeys then
 		return {}
 	end
 
@@ -185,16 +185,16 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	local initData: { [string]: any } = {}
 	local patchData: { [string]: any } = {}
 
-	-- Create patches for initialized atoms that changed, and add atoms that
-	-- are still pending initial state to the init payload.
-	for key, status in clientAtoms do
-		local trackedState = trackedAtoms[key]
+	-- Create patches for initialized signals that changed, and add signals
+	-- that are still pending initial state to the init payload.
+	for key, status in clientKeys do
+		local trackedState = trackedSignals[key]
 
 		if status == LISTENING_FOR_CHANGES then
 			patchData[key] = globalPatch[key]
 		elseif status == PENDING_INITIAL_STATE then
 			initData[key] = trackedState.currentValue
-			clientAtoms[key] = LISTENING_FOR_CHANGES
+			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
 
@@ -209,7 +209,7 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	return payloads
 end
 
---- Subscribes a client to the given atoms. When an update occurs, the client
+--- Subscribes a client to the given signals. When an update occurs, the client
 --- will receive a partial state patch to merge into their local state. May be
 --- called multiple times to subscribe to additional keys.
 ---
@@ -218,21 +218,21 @@ end
 --- registering signals on the client should be done through `signalToAtom()`.
 ---
 --- @param client The client receiving state updates.
---- @param atoms A map of atoms to sync with the client.
-local function subscribeClient(client: any, atoms: { [string]: () -> any })
+--- @param signals A map of signals to sync with the client.
+local function subscribeClient(client: any, signals: { [string]: () -> any })
 	if not clients[client] then
 		clients[client] = {}
 	end
 
-	local clientAtoms = clients[client]
+	local clientKeys = clients[client]
 
-	for key, state in atoms do
+	for key, state in signals do
 		startTracking(key, if type(state) == "function" then state else state.get)
 
-		if not clientAtoms[key] then
-			-- Mark the atom as pending initial state so we send its full value
-			-- the next time we sync.
-			clientAtoms[key] = PENDING_INITIAL_STATE
+		if not clientKeys[key] then
+			-- Mark the signal as pending initial state so we send its full
+			-- value the next time we sync.
+			clientKeys[key] = PENDING_INITIAL_STATE
 		end
 	end
 end
@@ -250,18 +250,18 @@ end
 --- @param client The client receiving state updates.
 --- @param keys The keys of the state to unsubscribe from.
 local function unsubscribeClientFrom(client: any, ...: string)
-	local clientAtoms = clients[client]
+	local clientKeys = clients[client]
 
-	if not clientAtoms then
+	if not clientKeys then
 		return
 	end
 
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
-		clientAtoms[key] = nil
+		clientKeys[key] = nil
 	end
 
-	if next(clientAtoms) == nil then
+	if next(clientKeys) == nil then
 		clients[client] = nil
 	end
 end
@@ -346,7 +346,7 @@ end
 --- Unsubscribes all clients, stops tracking all state, and disconnects
 --- from the automatic sync interval.
 local function reset()
-	table.clear(trackedAtoms)
+	table.clear(trackedSignals)
 	table.clear(clients)
 	table.clear(globalUpdates)
 	disconnect()

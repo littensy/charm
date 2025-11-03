@@ -40,6 +40,13 @@ local function flattenState(states: NestedState): FlattenedState
 	return result
 end
 
+--- Converts a signal getter and setter into an atom. This is useful for
+--- syncing client signals with the server, as the sync system requires both
+--- the getter and setter to update state.
+---
+--- @param getter A function that returns the current value of the signal.
+--- @param setter A function that sets the value of the signal.
+--- @return An atom that can either get or set the signal's value.
 local function signalToAtom<T>(getter: () -> T, setter: (value: ((T) -> T) | T) -> T): Atom<T>
 	return function(...)
 		return if select("#", ...) == 0 then getter() else setter((...))
