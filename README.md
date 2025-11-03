@@ -52,12 +52,12 @@
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
-- [Client-server sync](#client-server-sync)
+- [Client-Server Sync](#client-server-sync)
     - [Installation](#installation-1)
-    - [Quick start](#quick-start)
+    - [Quick Start](#quick-start)
     - [Server API](#config)
     - [Client API](#clientaddsignalssetters)
-    - [Sync caveats](#sync-caveats)
+    - [Sync Caveats](#sync-caveats)
 - [Examples](#examples)
 
 </details>
@@ -551,7 +551,7 @@ Global flags that customize the behavior of Charm. The `strict` and `frozen` fla
 
 ---
 
-## Client-server sync
+## Client-Server Sync
 
 ### Installation
 
@@ -566,7 +566,7 @@ pnpm add @rbxts/charm-sync
 CharmSync = "littensy/charm-sync@VERSION"
 ```
 
-### Quick start
+### Quick Start
 
 Start by specifying the signals that the server should sync to clients. For this example, we'll use the first and last name signals:
 
@@ -784,7 +784,7 @@ end)
 
 ---
 
-### Sync caveats
+### Sync Caveats
 
 Charm Sync will only send clients the differences between the current state and the previously-synced state, which is a practice called _delta compression_. In this case, tables are recursively scanned for changes, and unchanged properties are omitted by setting them to `nil`.
 
