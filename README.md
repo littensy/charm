@@ -801,13 +801,15 @@ Check out this simple [example project →](https://github.com/littensy/charm-ex
 ### React Counter
 
 ```luau
-local counterStore = require("./stores/counterStore")
+local getCounter, setCounter = signal(0)
 
 local function Counter()
-	local count = useSignalState(counterStore.getCounter)
+	local count = useSignalState(getCounter)
 
 	return React.createElement("TextButton", {
-		[React.Event.Activated] = counterStore.incrementCounter,
+		[React.Event.Activated] = function()
+			setCounter(count + 1)
+		end,
 		Text = `Count: {count}`,
 		Size = UDim2.fromOffset(100, 50),
 	})
@@ -817,13 +819,17 @@ end
 ### Vide Counter
 
 ```luau
-local counterStore = require("./stores/counterStore")
+local getCounter, setCounter = signal(0)
 
 local function Counter()
-	local count = useSignalState(counterStore.getCounter)
+	local count = useSignalState(getCounter)
 
 	return create "TextButton" {
-		Activated = counterStore.incrementCounter,
+		Activated = function()
+			setCounter(function(count)
+				return count + 1
+			end)
+		end,
 		Text = function()
 			return `Count: {count()}`
 		end,
