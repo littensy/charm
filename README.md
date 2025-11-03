@@ -813,7 +813,8 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 
 1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
     - `batch()` was renamed to `batched()`
-    - The second arguments of `atom()` and `computed()` changed from an `options` table to an equality function
+    - The second arguments of `atom()` changed from an `options` table to an equality function
+    - Removed the second argument of `computed()` (you can do your own equality checks now)
     - Removed the cleanup argument in effect callbacks (`effect(function(cleanup) end)`)
 
 2. If you use Charm Sync, you'll have to rewrite a lot of your sync code. Fortunately, most of the changes should make your code _less_ complicated:
