@@ -8,12 +8,9 @@ type SyncPayload = types.SyncPayload
 local globals = Charm.globals
 
 type SyncStatus = number
+type ClientKeys = { [string]: SyncStatus }
 
-type ClientKeys = {
-	[string]: SyncStatus,
-}
-
-type TrackedState<T = any> = {
+type GetterState<T = any> = {
 	getter: () -> T,
 	currentValue: T,
 	previousValue: T,
@@ -29,7 +26,7 @@ type StateUpdate = {
 local PENDING_INITIAL_STATE: SyncStatus = 0
 local LISTENING_FOR_CHANGES: SyncStatus = 1
 
-local trackedSignals: { [string]: TrackedState } = {}
+local trackedGetters: { [string]: GetterState } = {}
 local globalUpdates: { StateUpdate } = {}
 local clients: { [any]: ClientKeys } = {}
 
@@ -37,9 +34,9 @@ local connection: RBXScriptConnection?
 local syncCallback: (client: any, payloads: { SyncPayload }) -> ()?
 
 local function startTracking<T>(key: string, getter: () -> T)
-	if trackedSignals[key] then
+	if trackedGetters[key] then
 		-- Ignore duplicates, but warn against name collisions
-		if trackedSignals[key].getter ~= getter then
+		if trackedGetters[key].getter ~= getter then
 			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
 		return
@@ -68,14 +65,14 @@ local function startTracking<T>(key: string, getter: () -> T)
 		trackedState.currentValue = newValue
 	end)
 
-	trackedSignals[key] = trackedState
+	trackedGetters[key] = trackedState
 end
 
 local function stopTracking(key: string)
-	local tracker = trackedSignals[key]
+	local tracker = trackedGetters[key]
 	if tracker then
 		tracker.dispose()
-		trackedSignals[key] = nil
+		trackedGetters[key] = nil
 	end
 end
 
@@ -88,7 +85,7 @@ local function purgeUntracked()
 		end
 	end
 
-	for key in trackedSignals do
+	for key in trackedGetters do
 		if not active[key] then
 			stopTracking(key)
 		end
@@ -106,11 +103,11 @@ local function diffGlobalUpdateBuffer(): { any }
 	return patches
 end
 
-local function selectFromGlobalPatchList(client: any, globalPatches: { any }): { SyncPayload }
+local function selectFromGlobalPatchList(client: any, globalPatches: { any }): { SyncPayload }?
 	local clientKeys = clients[client]
 
 	if not clientKeys then
-		return {}
+		return nil
 	end
 
 	local payloads: { SyncPayload } = {}
@@ -146,10 +143,10 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 	local initData: { [string]: any } = {}
 
 	for key, status in clientKeys do
-		local trackedState = trackedSignals[key]
+		local getterState = trackedGetters[key]
 
-		if status == PENDING_INITIAL_STATE and trackedState then
-			initData[key] = trackedState.currentValue
+		if status == PENDING_INITIAL_STATE and getterState then
+			initData[key] = getterState.currentValue
 			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
@@ -165,7 +162,7 @@ local function diffGlobalState(): any
 	local currentGlobalState: { [string]: any } = {}
 	local previousGlobalState: { [string]: any } = {}
 
-	for key, tracker in trackedSignals do
+	for key, tracker in trackedGetters do
 		currentGlobalState[key] = tracker.currentValue
 		previousGlobalState[key] = tracker.previousValue
 		tracker.previousValue = tracker.currentValue
@@ -174,11 +171,11 @@ local function diffGlobalState(): any
 	return patch.diff(previousGlobalState, currentGlobalState)
 end
 
-local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPayload }
+local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPayload }?
 	local clientKeys = clients[client]
 
 	if not clientKeys then
-		return {}
+		return nil
 	end
 
 	local payloads: { SyncPayload } = {}
@@ -188,12 +185,12 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	-- Create patches for initialized signals that changed, and add signals
 	-- that are still pending initial state to the init payload.
 	for key, status in clientKeys do
-		local trackedState = trackedSignals[key]
+		local getterState = trackedGetters[key]
 
 		if status == LISTENING_FOR_CHANGES then
 			patchData[key] = globalPatch[key]
 		elseif status == PENDING_INITIAL_STATE then
-			initData[key] = trackedState.currentValue
+			initData[key] = getterState.currentValue
 			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
@@ -214,23 +211,22 @@ end
 --- called multiple times to subscribe to additional keys.
 ---
 --- Atoms, signals converted to atoms, and signal getter functions are allowed.
---- Note that the client still requires some way to set the state, so
---- registering signals on the client should be done through `signalToAtom()`.
+--- Note that `client.addSignals` still requires some way to set the state.
 ---
 --- @param client The client receiving state updates.
---- @param signals A map of signals to sync with the client.
-local function subscribeClient(client: any, signals: { [string]: () -> any })
+--- @param getters A map of getter functions to sync with the client.
+local function addSignalsToClient(client: any, getters: { [string]: () -> any })
 	if not clients[client] then
 		clients[client] = {}
 	end
 
 	local clientKeys = clients[client]
 
-	for key, state in signals do
-		startTracking(key, if type(state) == "function" then state else state.get)
+	for key, getter in getters do
+		startTracking(key, if type(getter) == "function" then getter else getter.get)
 
 		if not clientKeys[key] then
-			-- Mark the signal as pending initial state so we send its full
+			-- Mark the getter as pending initial state so we send its full
 			-- value the next time we sync.
 			clientKeys[key] = PENDING_INITIAL_STATE
 		end
@@ -241,7 +237,7 @@ end
 --- from specific keys, use `unsubscribeClientFrom` instead.
 ---
 --- @param client The client receiving state updates.
-local function unsubscribeClient(client: any)
+local function removeClient(client: any)
 	clients[client] = nil
 end
 
@@ -249,7 +245,7 @@ end
 ---
 --- @param client The client receiving state updates.
 --- @param keys The keys of the state to unsubscribe from.
-local function unsubscribeClientFrom(client: any, ...: string)
+local function removeSignalsFromClient(client: any, ...: string)
 	local clientKeys = clients[client]
 
 	if not clientKeys then
@@ -262,7 +258,7 @@ local function unsubscribeClientFrom(client: any, ...: string)
 	end
 
 	if next(clientKeys) == nil then
-		clients[client] = nil
+		removeClient(client)
 	end
 end
 
@@ -274,7 +270,8 @@ local function flush()
 		return
 	end
 
-	local globalPatch = if config.preserveHistory then diffGlobalUpdateBuffer() else diffGlobalState()
+	local granular = config.preserveHistory
+	local globalPatch = if granular then diffGlobalUpdateBuffer() else diffGlobalState()
 
 	-- While payload objects are technically mutable as they are unique to
 	-- each client, the data inside them is not safe to mutate.
@@ -283,11 +280,11 @@ local function flush()
 	end
 
 	for client in clients do
-		local payloads: { SyncPayload } = if config.preserveHistory
+		local payloads = if granular
 			then selectFromGlobalPatchList(client, globalPatch)
 			else selectFromGlobalPatch(client, globalPatch)
 
-		if payloads[1] then
+		if payloads and payloads[1] then
 			if task then
 				task.spawn(syncCallback, client, payloads)
 			else
@@ -346,16 +343,16 @@ end
 --- Unsubscribes all clients, stops tracking all state, and disconnects
 --- from the automatic sync interval.
 local function reset()
-	table.clear(trackedSignals)
+	table.clear(trackedGetters)
 	table.clear(clients)
 	table.clear(globalUpdates)
 	disconnect()
 end
 
 return {
-	subscribeClient = subscribeClient,
-	unsubscribeClient = unsubscribeClient,
-	unsubscribeClientFrom = unsubscribeClientFrom,
+	addSignalsToClient = addSignalsToClient,
+	removeClient = removeClient,
+	removeSignalsFromClient = removeSignalsFromClient,
 	connect = connect,
 	disconnect = disconnect,
 	flush = flush,

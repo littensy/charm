@@ -14,6 +14,6 @@ return {
 	server = server,
 	patch = patch,
 	isNone = patch.isNone,
-	flattenState = utils.flattenState,
+	flatten = utils.flatten,
 	signalToAtom = utils.signalToAtom,
 }

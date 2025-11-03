@@ -9,7 +9,7 @@ local test = suite.test
 
 afterEach(function()
 	server.reset()
-	client.reset()
+	client.removeAllSignals()
 	config.preserveHistory = false
 end)
 
@@ -20,8 +20,8 @@ test("should replicate server state to client", function()
 	local clientA = Charm.atom({ count = -1 })
 	local clientB = Charm.atom({ count = -1 })
 
-	client.register({ a = clientA, b = clientB })
-	server.subscribeClient(target, { a = serverA, b = serverB })
+	client.addSignals({ a = clientA, b = clientB })
+	server.addSignalsToClient(target, { a = serverA, b = serverB })
 	server.connect(function(syncTarget, payloads)
 		if syncTarget == target then
 			client.hydrate(payloads)
@@ -54,8 +54,8 @@ test("should replicate historical server state to client", function()
 
 	config.preserveHistory = true
 
-	client.register({ a = clientA, b = clientB })
-	server.subscribeClient(target, { a = serverA, b = serverB })
+	client.addSignals({ a = clientA, b = clientB })
+	server.addSignalsToClient(target, { a = serverA, b = serverB })
 	server.connect(function(syncTarget, payloads)
 		if syncTarget == target then
 			client.hydrate(payloads)

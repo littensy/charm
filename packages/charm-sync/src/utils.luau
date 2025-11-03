@@ -2,40 +2,35 @@ local Charm = require("../Charm")
 
 type Atom<T> = Charm.Atom<T>
 
-type NestedState = {
-	[string]: NestedState | () -> any,
+type NestedTable = {
+	[any]: NestedTable | any,
 }
 
-type FlattenedState = {
-	[string]: () -> any,
+type FlattenedTable = {
+	[any]: any,
 }
 
-local function isAtomOrSignal(value: any): boolean
-	return type(value) ~= "table" or (type(value.get) == "function" and type(value.set) == "function")
-end
-
---- Flattens a nested map of atoms or signals into a single object with
---- slash-separated keys. Useful for recursively collecting atoms returned by
---- modules.
+--- Flattens a nested table into a single table with slash-separated keys.
+--- Useful for recursively collecting atoms returned by modules.
 ---
---- @param states A nested table of atoms or signals.
---- @return A flattened map of atoms or signals.
-local function flattenState(states: NestedState): FlattenedState
-	local result: FlattenedState = {}
+--- @param input A nested table.
+--- @return A flattened table with slash-separated keys.
+local function flatten(input: NestedTable): FlattenedTable
+	local result: FlattenedTable = {}
 
-	local function visit(node: NestedState, path: string)
+	local function visit(node: NestedTable, path: string)
 		for key, value in node do
 			local location = if path == "" then key else path .. "/" .. key
 
-			if isAtomOrSignal(value) then
-				result[location] = value :: () -> any
+			if type(value) == "table" then
+				visit(value :: NestedTable, location)
 			else
-				visit(value :: NestedState, location)
+				result[location] = value
 			end
 		end
 	end
 
-	visit(states, "")
+	visit(input, "")
 
 	return result
 end
@@ -54,6 +49,6 @@ local function signalToAtom<T>(getter: () -> T, setter: (value: ((T) -> T) | T) 
 end
 
 return {
-	flattenState = flattenState,
+	flatten = flatten,
 	signalToAtom = signalToAtom,
 }

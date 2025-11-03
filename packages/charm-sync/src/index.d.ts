@@ -1,4 +1,4 @@
-import { Atom } from "@rbxts/charm";
+import { Atom, Getter, Setter } from "@rbxts/charm";
 
 type Key = string | number | symbol;
 
@@ -11,7 +11,8 @@ export interface None {
 
 export type MaybeNone<T> = undefined extends T ? None : never;
 
-type SelectorMap = Record<string, () => any>;
+type GetterMap = Record<string, Getter<any>>;
+type SetterMap = Record<string, Setter<any>>;
 
 /**
  * Infers the type of the return values produced by a map of functions.
@@ -33,6 +34,7 @@ type DataType = DataTypes[keyof DataTypes];
  * If a value was removed, it is replaced with `None`. This can be checked
  * using the `isNone` function.
  */
+// TODO: Optimize type, this looks overly complex
 export type SyncPatch<State, FixArrays extends boolean = true> = MaybeNone<State> | State extends
 	| ReadonlyMap<infer K, infer V>
 	| Map<infer K, infer V>
@@ -53,9 +55,9 @@ export type SyncPatch<State, FixArrays extends boolean = true> = MaybeNone<State
  * A payload that can be sent from the server to the client to synchronize
  * state between the two.
  */
-export type SyncPayload<Selectors extends SelectorMap = SelectorMap, FixArrays extends boolean = true> =
-	| { type: "init"; data: StateOfMap<Selectors> }
-	| { type: "patch"; data: SyncPatch<StateOfMap<Selectors>, FixArrays> };
+export type SyncPayload<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true> =
+	| { type: "init"; data: StateOfMap<Getters> }
+	| { type: "patch"; data: SyncPatch<StateOfMap<Getters>, FixArrays> };
 
 /**
  * Global configuration options that affect the behavior of Charm Sync.
@@ -102,28 +104,29 @@ export const config: {
  */
 export namespace client {
 	/**
-	 * Registers a map of atoms to the state with the corresponding keys on the
-	 * server. When the server sends updates, these atoms will be hydrated with
+	 * Registers a map of setters to the state with the corresponding keys on the
+	 * server. When the server sends updates, these setters will be called with
 	 * the new values.
 	 *
-	 * If syncing signals instead of atoms, you can use `signalToAtom` to sync
-	 * signal getters and setters as atoms.
+	 * Atoms, signals converted to atoms, and signal setter functions are allowed.
+	 * Note that `server.addSignalsToClient` still requires some way to get the
+	 * state.
 	 *
-	 * @param atoms A map of atoms to sync with the server.
+	 * @param setters A map of setter functions to sync with the server.
 	 */
-	export function register(atoms: { [key: string]: Atom<any> }): void;
+	export function addSignals<Setters extends SetterMap = SetterMap>(setters: Setters): void;
 
 	/**
-	 * Unregisters from server state updates for the given keys. The atoms
+	 * Unregisters from server state updates for the given keys. The signals
 	 * will retain their current values, but will no longer receive updates
 	 * from the server.
 	 */
-	export function unregister(...keys: string[]): void;
+	export function removeSignals<Setters extends GetterMap | SetterMap = SetterMap>(...keys: (keyof Setters)[]): void;
 
 	/**
 	 * Unsubscribes from all server state updates.
 	 */
-	export function reset(): void;
+	export function removeAllSignals(): void;
 
 	/**
 	 * Merges the server's state patches into the client's state, either
@@ -131,8 +134,8 @@ export namespace client {
 	 *
 	 * @param payloads The state updates received from the server.
 	 */
-	export function hydrate<Atoms extends { [key: string]: Atom<any> }, FixArrays extends boolean = true>(
-		payloads: SyncPayload<Atoms, FixArrays>[],
+	export function hydrate<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true>(
+		payloads: SyncPayload<Getters, FixArrays>[],
 	): void;
 }
 
@@ -145,22 +148,21 @@ export namespace server {
 	 * will receive a partial state patch to merge into their local state. May be
 	 * called multiple times to subscribe to additional keys.
 	 *
-	 * Atoms, signals converted to atoms, and signal getter functions are allowed.
-	 * Note that the client still requires some way to set the state, so
-	 * registering signals on the client should be done through `signalToAtom()`.
+	 * Atoms, computed signals, and signal getter functions are allowed. Note
+	 * that `client.addSignals` still requires some way to set the state.
 	 *
 	 * @param client The client receiving state updates.
-	 * @param signals A map of signals to sync with the client.
+	 * @param getters A map of getter functions to sync with the client.
 	 */
-	export function subscribeClient(client: Player, signals: { [key: string]: () => any }): void;
+	export function addSignalsToClient<Getters extends GetterMap = GetterMap>(client: Player, getters: Getters): void;
 
 	/**
 	 * Unsubscribes a client from receiving all state updates. To only unsubscribe
-	 * from specific keys, use `unsubscribeClientFrom` instead.
+	 * from specific keys, use `removeSignalsFromClient` instead.
 	 *
 	 * @param client The client receiving state updates.
 	 */
-	export function unsubscribeClient(client: Player): void;
+	export function removeClient(client: Player): void;
 
 	/**
 	 * Unsubscribes a client from receiving updates for the given keys.
@@ -168,7 +170,10 @@ export namespace server {
 	 * @param client The client receiving state updates.
 	 * @param keys The keys of the state to unsubscribe from.
 	 */
-	export function unsubscribeClientFrom(client: Player, ...keys: string[]): void;
+	export function removeSignalsFromClient<Getters extends GetterMap = GetterMap>(
+		client: Player,
+		...keys: (keyof Getters)[]
+	): void;
 
 	/**
 	 * Uses the callback to send state updates to clients that are subscribed
@@ -177,8 +182,8 @@ export namespace server {
 	 *
 	 * @param onSync Called when sending patches to a client.
 	 */
-	export function connect<Atoms extends { [key: string]: Atom<any> }, FixArrays extends boolean = true>(
-		onSync: (client: Player, payloads: SyncPayload<Atoms, FixArrays>[]) => void,
+	export function connect<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true>(
+		onSync: (client: Player, payloads: SyncPayload<Getters, FixArrays>[]) => void,
 	): void;
 
 	/**
@@ -235,39 +240,24 @@ export namespace patch {
 	): State;
 }
 
-interface NestedAtomMap {
-	readonly [key: string]: NestedAtomMap | Atom<any>;
-}
+type DeepFlattenImpl<T, Prefix extends string = ""> = {
+	[K in keyof T]: T[K] extends DataType | Callback
+		? { [P in `${Prefix}${Exclude<K, symbol>}`]: T[K] }
+		: T[K] extends object
+			? DeepFlattenImpl<T[K], `${Prefix}${Exclude<K, symbol>}/`>
+			: { [P in `${Prefix}${Exclude<K, symbol>}`]: T[K] };
+}[keyof T];
 
-type AppendPath<Path extends Key | undefined, Name extends Key> = undefined extends Path
-	? Name
-	: Name extends string
-		? Path extends string
-			? `${Path}/${Name}`
-			: never
-		: never;
-
-type IntersectValues<T> = UnionToIntersection<{ readonly [K in keyof T]: T[K] }[keyof T]>;
-
-export type FlattenNestedAtoms<
-	Atoms extends NestedAtomMap,
-	Path extends Key | undefined = undefined,
-> = IntersectValues<{
-	readonly [Name in keyof Atoms as AppendPath<Path, Name>]: Atoms[Name] extends Atom<any>
-		? { readonly [K in AppendPath<Path, Name>]: Atoms[Name] }
-		: Atoms[Name] extends NestedAtomMap
-			? FlattenNestedAtoms<Atoms[Name], AppendPath<Path, Name>>
-			: never;
-}>;
+type DeepFlatten<T> = Reconstruct<UnionToIntersection<DeepFlattenImpl<T>>>;
 
 /**
- * Flattens a nested atom map into a single object with slash-separated keys.
+ * Flattens a nested table into a single table with slash-separated keys.
  * Useful for recursively collecting atoms returned by modules.
  *
- * @param atoms The nested atom map to flatten.
- * @returns A flattened atom map.
+ * @param input A nested table.
+ * @return A flattened table with slash-separated keys.
  */
-export function flattenAtoms<Atoms extends NestedAtomMap>(atoms: Atoms): FlattenNestedAtoms<Atoms>;
+export function flatten<T>(input: T): DeepFlatten<T>;
 
 /**
  * Checks whether a value is `None`. If `true`, the value is scheduled to be

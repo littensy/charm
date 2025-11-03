@@ -2,17 +2,15 @@ local Charm = require("../../Charm")
 local suite = require("../../../../test/suite")
 local utils = require("../utils")
 
-local atom = Charm.atom
 local test = suite.test
 
-test("should flatten atoms", function()
-	local getF, setF = Charm.signal(0)
+test("should flatten functions", function()
 	local input = {
-		a = atom(0),
-		b = { c = atom(0) },
-		d = { e = { f = utils.signalToAtom(getF, setF) } },
+		a = Charm.atom(0),
+		b = { c = Charm.atom(0) },
+		d = { e = { f = utils.signalToAtom(Charm.signal(0)) } },
 	}
-	local result = utils.flattenState(input)
+	local result = utils.flatten(input)
 
 	assert(result.a == input.a, "should flatten the first level")
 	assert(result["b/c"] == input.b.c, "should flatten the second level")

@@ -6,12 +6,10 @@ local utils = require("@self/utils")
 
 type Update<T> = ((previous: T) -> T) | T
 
---- A reactive atom that acts as both a getter and setter. Calling the atom with
---- an argument sets its value, while calling it with no arguments returns its
---- current value.
+--- A reactive signal that acts as both a getter and setter. Calling the signal
+--- with an argument sets its value, while calling it with no arguments returns
+--- its current value.
 export type Atom<T = any> = (...Update<T>) -> T
-
-export type Selector<T = any> = () -> T
 
 return {
 	core = core,

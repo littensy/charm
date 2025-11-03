@@ -2,17 +2,17 @@ type Key = string | number | symbol;
 type Cleanup = () => void;
 
 /**
- * A reactive atom that acts as both a getter and setter. Calling the atom with
- * an argument sets its value, while calling it with no arguments returns its
- * current value.
+ * A reactive signal that acts as both a getter and setter. Calling the signal
+ * with an argument sets its value, while calling it with no arguments returns
+ * its current value.
  */
 export interface Atom<T> {
 	(newValue: T | ((currentValue: T) => T)): T;
 	(): T;
 }
 
-export type Selector<T> = () => T;
-
+export type Getter<T> = () => T;
+export type Setter<T> = (newValue: T | ((currentValue: T) => T)) => T;
 export type Equals<T> = (current: T, incoming: T) => boolean;
 
 /**

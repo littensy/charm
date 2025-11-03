@@ -20,11 +20,11 @@
 
 **Charm** is a state management library that aims to bring [reactive signals](https://preactjs.com/blog/signal-boosting/) from libraries like Preact and Solid to Roblox. It's built on the [alien-signals](https://github.com/stackblitz/alien-signals) signal algorithm, expanding upon it further to handle a wide range of use cases, from rendering user interfaces to handling server game logic.
 
-**Charm has a few core principles:**
+**Charm works under a few core principles.**
 
 - Manage state with reactive signals: state containers that hold a value
 - React to state updates: reading a signal automatically subscribes to it
-- Combine multiple signals: derive a new value from existing state that stays up-to-date
+- Combine multiple signals: derive new values from existing state that stay up-to-date
 - Fine-grained reactivity: make targeted updates in response to specific changes in the state
 - Use immutable data: values are compared directly (`==`) to optimize change detection
 
@@ -33,6 +33,28 @@
 - https://preactjs.com/blog/signal-boosting
 - https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
 - https://angular.dev/guide/signals
+
+<details>
+<summary><b>Table of Contents</b></summary>
+
+- [Installation](#installation)
+- [Reference](#reference)
+    - [`signal(initialValue, equals?)`](#signalinitialvalue-equals)
+    - [`computed(getter)`](#computedgetter)
+    - [`effect(callback)`](#effectcallback)
+    - [`untracked(callback)`](#untrackedcallback)
+    - [`peek(callback)`](#peekcallback)
+    - [`batched(callback)`](#batchedcallback)
+    - [`effectScope(callback)`](#effectscopecallback)
+    - [`listen(getter, callback)`](#listengetter-callback)
+    - [`subscribe(getter, callback)`](#subscribegetter-callback)
+    - [`observe(getter, callback)`](#observegetter-callback)
+    - [`mapped(getter, mapper)`](#mappedgetter-mapper)
+    - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
+    - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
+- [Examples](#examples)
+
+</details>
 
 ## At a Glance
 
@@ -104,7 +126,6 @@ setTodos({ "Buy milk", "Buy eggs", "Play Roblox" })
 setQuery("^Buy")
 ```
 
-</summary>
 </details>
 
 ## Installation
@@ -122,7 +143,7 @@ Charm = "littensy/charm@VERSION"
 
 ---
 
-## Guide
+## Reference
 
 ### `signal(initialValue, equals?)`
 
@@ -143,12 +164,13 @@ Accessing the signal's value in an effect or computed signal will subscribe to i
 You can also pass a custom equality function to only update the signal if the new value is _not_ equal to the current value:
 
 ```luau
-local getMax, setMax = signal(0, function(incoming, current)
+local getMax, setMax = signal(0, function(current, incoming)
 	return incoming <= current
 end)
 
 setMax(1) --> 1
-setMax(-1) --> 1
+setMax(2) --> 2
+setMax(-1) --> 2
 ```
 
 > [!NOTE]
@@ -223,9 +245,6 @@ dispose() --> Cleanup 1
 
 Effects can be nested and they will clean up automatically when the parent effect re-runs or gets disposed. This means you don't have to manually clean up inner effects, and this applies to functions like `subscribe()` and `observe()`.
 
-> [!NOTE]
-> To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `globals.trackInnerEffects` flag to assist with debugging.
-
 ```luau
 local getCounter, setCounter = signal(0)
 
@@ -240,11 +259,14 @@ setCounter(1) --> Outer: 1, Inner: 1
 setCounter(2) --> Outer: 2, Inner: 2
 ```
 
+> [!NOTE]
+> To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `globals.trackInnerEffects` flag to assist with debugging.
+
 ---
 
 ### `untracked(callback)`
 
-In case you want to read signals that you don't want to subscribe to, you can use `untracked()` to essentially call a function _outside_ the current effect, preventing signals and effects in the callback from being tracked.
+In case you want to read signals but don't want to subscribe to them, you can use `untracked()` to essentially run code _outside_ the current effect, preventing signals and effects in the callback from being tracked.
 
 ```luau
 local getCounter, setCounter = signal(0)
@@ -283,10 +305,11 @@ disposeInner() --> Cleaned up inner effect
 
 ### `peek(callback)`
 
-Similar to `untracked()`, but does not prevent effects created by the callback from automatically disposing. If your callback reads a signal and creates effects, only the signals get untracked.
+Similar to `untracked()`, but does not prevent the parent effect from tracking nested effects created in the callback. If your callback reads a signal and creates effects, only the signals get untracked.
 
 ```luau
 local getCounter, setCounter = signal(0)
+
 local disposeOuter = effect(function()
 	peek(function()
 		print(`Count is {getCounter()}`)
@@ -306,7 +329,7 @@ disposeOuter() --> Cleaned up inner effect
 
 ### `batched(callback)`
 
-Combines multiple signal updates made by the callback into a single commit that gets triggered when the callback completes.
+Combines multiple signal updates made by the callback into a single commit that triggers effects once the callback completes.
 
 ```luau
 local getName, setName = signal("John")
@@ -435,7 +458,7 @@ dispose() --> Cleanup a = 1
 
 ### `mapped(getter, mapper)`
 
-The `mapped` function iterates over every key in a table and uses the mapper to generate a new key and value. The resulting table is returned in a read-only signal containing the new keys and values. When a key's value changes, or a new key is added to the table, the mapper is called for that key and its current value.
+The `mapped` function iterates over every key in a table and uses the mapper to assign them to a new key and value. The result is returned as a read-only signal containing the new keys and values. When a key's value changes, or a new key is added to the table, the mapper is called for that key and its current value.
 
 The first value returned by the mapper is used as the new value:
 
@@ -500,12 +523,209 @@ end)
 You can also pass a custom equality function to only update the signal if the new value is _not_ equal to the current value:
 
 ```luau
-local max = atom(0, function(incoming, current)
+local max = atom(0, function(current, incoming)
 	return incoming <= current
 end)
 
 max(1) --> 1
 max(-1) --> 1
+```
+
+---
+
+### `globals`
+
+Global flags that customize the behavior of Charm. The `strict` and `frozen` flags are automatically enabled when the Luau optimization level is less than `2`, which is true in Roblox Studio.
+
+| Flag              | Default          | Description                                                                                                                                       |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| strict            | `true` in Studio | Enforces synchronous, non-yielding behavior in signals, effects, and critical code.                                                               |
+| frozen            | `true` in Studio | Enforces immutability by deep-freezing tables passed to signals.                                                                                  |
+| trackInnerEffects | `true`           | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. Should only be disabled to debug issues during migration. |
+
+---
+
+## Client-server sync
+
+### Installation
+
+```sh
+npm install @rbxts/charm-sync
+yarn add @rbxts/charm-sync
+pnpm add @rbxts/charm-sync
+```
+
+```toml
+[dependencies]
+CharmSync = "littensy/charm-sync@VERSION"
+```
+
+### Quick start
+
+Start by specifying the signals that the server should sync to clients. For this example, we'll use the first and last name signals:
+
+```luau
+-- nameStore
+local getName, setName = signal("John")
+local getSurname, setSurname = signal("Doe")
+
+return {
+	getName = getName,
+	setName = setName,
+	getSurname = getSurname,
+	setSurname = setSurname,
+}
+```
+
+When a player joins on the server, call `server.addSignalsToClient` with the keyed signals that the client should receive updates for. Once they leave, call `server.removeClient` to unsubscribe them from all updates.
+
+Then, use `server.connect` to specify how state updates should be sent to each client. Pass a callback function that fires a remote with the given target player and the state updates they subscribed to.
+
+> [!NOTE]
+> On the server, make sure each key corresponds to the same signal across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
+
+```luau
+local function onPlayerAdded(player: Player)
+	-- Add signal getters, computed signals, or atoms
+	server.addSignalsToClient(player, {
+		name = nameStore.getName,
+		surname = nameStore.getSurname,
+	})
+end
+
+for _, player in Players:GetPlayers() do
+	onPlayerAdded(player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+
+Players.PlayerRemoving:Connect(function(player)
+	server.removeClient(player)
+end)
+
+server.connect(function(player, updates)
+	-- Customize how you send state updates to clients
+	syncEvent:FireClient(player, updates)
+end)
+```
+
+To sync the client with the server's state, call `client.addSignals` with a table of writable signals (setter functions or atoms) whose keys match their server counterparts.
+
+After the client receives updates from the server, call `client.hydrate` to patch the client's signals with the incoming state updates.
+
+```luau
+-- Add signal setters or atoms
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+})
+
+-- Update client signals when receiving updates from the server
+syncEvent.OnClientEvent:Connect(function(updates)
+	client.hydrate(updates)
+end)
+```
+
+---
+
+### `config`
+
+A configuration table that customizes the behavior of Charm Sync on the server.
+
+| Option          | Default | Description                                                                                                                                                                                          |
+| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| interval        | `0`     | The frequency at which the server will send patches to the client, in seconds. A value of `0` sends updates on the next frame. Set to a negative value to disable the interval.                      |
+| preserveHistory | `false` | Whether to preserve a full history of state changes since the last sync, at the cost of performance. This is useful if you need to replicate each individual change that occurs between sync events. |
+| fixArrays       | `true`  | When `true`, Charm will attempt to work around Roblox remote event limitations regarding array patches. Disable this if your networking library serializes remote arguments (Zap, ByteNet, etc.).    |
+| validatePatches | `true`  | When `true`, and both `fixArrays` and strict mode are enabled, patches will be validated to enforce remote event limitations.                                                                        |
+
+---
+
+### `server.addSignalsToClient(client, getters)`
+
+The `addSignalsToClient` function subscribes a client to updates in the given signals. When an update occurs, the client will receive a state patch of only the values that changed.
+
+You can pass signal getter functions, computed signals, and atoms in the `getters` table. This function can also be called multiple on the same client to subscribe to new signals.
+
+```luau
+Players.PlayerAdded:Connect(function(player)
+	server.addSignalsToClient(player, {
+		name = nameStore.getName,
+		surname = nameStore.getSurname,
+	})
+end)
+```
+
+You're also allowed to create new signals to sync to specific players, as long as the key is also unique to that player:
+
+```luau
+server.addSignalsToClient(player, {
+	[`data-{player.UserId}`] = computed(function()
+		return getPlayerData(player.UserId)
+	end),
+})
+```
+
+---
+
+### `server.removeSignalsFromClient(client, ...keys)`
+
+The `removeSignalsFromClient` function unsubscribes the client from a list of keys that were previously subscribed to via `addSignalsToClient`.
+
+```luau
+server.addSignalsToClient(player, {
+	surname = nameStore.getSurname,
+})
+
+server.removeSignalsFromClient(player, "surname")
+```
+
+---
+
+### `server.removeClient(client)`
+
+The `removeClient` function unsubscribes a client from receiving all state updates from the server. You should call this function when a player leaves the game.
+
+```luau
+Players.PlayerAdded:Connect(function(player)
+	server.addSignalsToClient(player, signals)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	server.removeClient(player)
+end)
+```
+
+---
+
+### `server.connect(onSync)`
+
+Binds a callback to run when sending state updates a client. Scheduled updates will be sent periodically at the interval specified in [`config.interval`](#config).
+
+When a synced signal updates, the `onSync` function is scheduled to run for each client subscribed to that signal on the next sync event.
+
+```luau
+server.connect(function(player, updates)
+	syncEvent:FireServer(player, updates)
+end)
+```
+
+---
+
+### `server.disconnect()`
+
+Stops syncing state updates to clients at the automatic interval. This doesn't unbind the last callback, so you can still manually trigger sync events after calling this function by calling `server.flush()`.
+
+```luau
+server.connect(function(player, updates)
+	syncEvent:FireServer(player, updates)
+end)
+
+-- Stops calling the function at the automatic interval
+server.disconnect()
+
+-- Flushing still sends pending updates
+server.flush()
 ```
 
 ---

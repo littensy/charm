@@ -2,60 +2,59 @@ local Charm = require("../Charm")
 local patch = require("./patch")
 local types = require("./types")
 
-type Atom<T = any> = Charm.Atom<T>
 type SyncPayload = types.SyncPayload
 
-local trackedAtoms: { [string]: Atom } = {}
+type Setter<T = any> = (update: ((T) -> T) | T) -> ()
 
---- Registers a map of atoms to the state with the corresponding keys on the
---- server. When the server sends updates, these atoms will be hydrated with
+local trackedSetters: { [string]: Setter } = {}
+
+--- Registers a map of setters to the state with the corresponding keys on the
+--- server. When the server sends updates, these setters will be called with
 --- the new values.
 ---
---- If syncing signals instead of atoms, you can use `signalToAtom` to sync
---- signal getters and setters.
+--- Atoms, signals converted to atoms, and signal setter functions are allowed.
+--- Note that `server.addSignalsToClient` still requires some way to get the
+--- state.
 ---
---- @param atoms A map of atoms to sync with the server.
-local function register(atoms: { [string]: Atom })
-	for key, atom in atoms do
-		trackedAtoms[key] = atom
+--- @param setters A map of setter functions to sync with the server.
+local function addSignals(setters: { [string]: Setter })
+	for key, setter in setters do
+		trackedSetters[key] = setter
 	end
 end
 
---- Unregisters from server state updates for the given keys. The atoms
+--- Unregisters from server state updates for the given keys. The signals
 --- will retain their current values, but will no longer receive updates
 --- from the server.
-local function unregister(...: string)
+local function removeSignals(...: string)
 	for index = 1, select("#", ...) do
 		local key = select(index, ...)
-		trackedAtoms[key] = nil
+		trackedSetters[key] = nil
 	end
 end
 
 --- Unsubscribes from all server state updates.
-local function reset()
-	table.clear(trackedAtoms)
+local function removeAllSignals()
+	table.clear(trackedSetters)
 end
 
 local function applyInitPayload(data: { [string]: any })
 	for key, value in data do
-		local atom = trackedAtoms[key]
-		if atom then
-			atom(value)
+		local setter = trackedSetters[key]
+		if setter then
+			setter(value)
 		end
 	end
 end
 
-local function applyPatchPayload(data: { [string | number]: any })
-	local target = {}
-
-	for key, atom in trackedAtoms do
-		target[key] = atom()
-	end
-
-	target = patch.apply(target, data)
-
-	for key, atom in trackedAtoms do
-		atom(target[key])
+local function applyPatchPayload(data: { [string]: any })
+	for key, value in data do
+		local setter = trackedSetters[key]
+		if setter then
+			setter(function(current)
+				return patch.apply(current, value)
+			end)
+		end
 	end
 end
 
@@ -74,8 +73,8 @@ local function hydrate(payloads: { SyncPayload })
 end
 
 return {
-	register = register,
-	unregister = unregister,
-	reset = reset,
+	addSignals = addSignals,
+	removeSignals = removeSignals,
+	removeAllSignals = removeAllSignals,
 	hydrate = hydrate,
 }

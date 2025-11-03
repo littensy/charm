@@ -6,13 +6,13 @@ local test = suite.test
 local afterEach = suite.afterEach
 
 afterEach(function()
-	client.reset()
+	client.removeAllSignals()
 end)
 
 test("should hydrate atom", function()
 	local a = Charm.atom(1)
 
-	client.register({ a = a })
+	client.addSignals({ a = a })
 	client.hydrate({
 		{ type = "init", data = { a = 2 } },
 	})
@@ -24,7 +24,7 @@ test("should merge patch", function()
 	local a = Charm.atom({ b = 1, c = 2 })
 	local previous = a()
 
-	client.register({ a = a })
+	client.addSignals({ a = a })
 	client.hydrate({
 		{ type = "init", data = { a = a() } },
 	})
@@ -43,7 +43,7 @@ end)
 test("should fix sparse array patches", function()
 	local a = Charm.atom({ 1 })
 
-	client.register({ a = a })
+	client.addSignals({ a = a })
 	client.hydrate({
 		{ type = "init", data = { a = a() } },
 	})
@@ -63,7 +63,7 @@ test("should merge multiple patches", function()
 	local a = Charm.atom(1)
 	local calls = {}
 
-	client.register({ a = a })
+	client.addSignals({ a = a })
 
 	Charm.subscribe(a, function(value)
 		table.insert(calls, value)
@@ -87,7 +87,7 @@ test("should batch patches", function()
 	local b = Charm.atom(0)
 	local states = {}
 
-	client.register({ a = a, b = b })
+	client.addSignals({ a = a, b = b })
 
 	Charm.subscribe(a, function()
 		states.b = b()
