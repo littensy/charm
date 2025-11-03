@@ -58,6 +58,7 @@
     - [Server API](#config)
     - [Client API](#clientaddsignalssetters)
     - [Sync Caveats](#sync-caveats)
+- [Migration](#migration)
 - [Examples](#examples)
 
 </details>
@@ -165,7 +166,7 @@ setCounter(function(count)
 end)
 ```
 
-Accessing the signal's value in an effect or computed signal will subscribe to it as a dependency. Changing the value will immediately update every effect and computed signal that depends signal, ensuring every part of your state is correct and up-to-date.
+Accessing the signal's value in an effect or computed signal will subscribe to it as a dependency. Changing the value will immediately notify every effect and computed signal that depends on said signal, ensuring all of your state is correct and up-to-date.
 
 You can also pass a custom equality function to only update the signal if the new value is _not_ equal to the current value:
 
@@ -180,7 +181,7 @@ setMax(-1) --> 2
 ```
 
 > [!NOTE]
-> Looking for atoms? You can still use `atom()` to create a signal with a combined getter and setter. To use signals for APIs that require atoms, use `signalToAtom()`.
+> Looking for atoms? You can still use [`atom()`](#atominitialvalue-equals) to create a signal with a combined getter and setter.
 
 ---
 
@@ -791,6 +792,59 @@ Charm Sync will only send clients the differences between the current state and 
 But it's hard to differentiate between an unchanged value and a removed value, as both cases are represented by `nil`. We chose to address this by representing deleted values with a special `None` symbol denoted by `{ __none = "__none" }`.
 
 This means nilable values can be represented as `None`, and code working with update payloads (usually for remote argument serialization) should account for nilable values possibly being sent as `None` in the payload.
+
+---
+
+## Migration
+
+Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that might help you migrate from an older version.
+
+<details>
+<summary><b>Terminology changes</b></summary>
+
+- Signal: A state container with one function to get the state, and another to update it
+- Atom: A signal with the getter and setter combined into one function
+- Effect: Main way to react to state changes
+- `subscribe(getter, callback)`: Creates an effect that only subscribes to signals accessed in the getter
+
+</details>
+
+<br/>
+
+**What to look out for:**
+
+1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
+    - `batch()` was renamed to `batched()`
+    - The second arguments of `atom()` and `computed()` changed from an `options` table to an equality function
+    - Removed the cleanup argument in effect callbacks (`effect(function(cleanup) end)`)
+
+2. If you use Charm Sync, you'll have to rewrite a lot of your sync code. Fortunately, most of the changes should make your code _less_ complicated:
+    - You can now sync signals per-client, including computed signals. You shouldn't have to modify sync payloads to filter data anymore.
+    - Instead of creating client/server syncers, these modules now act like singletons. Sync APIs are called directly through `CharmSync.client`/`server`.
+    - [Read the updated docs for syncing state →](#client-server-sync)
+
+3. The [`strict` and `frozen` flags](#globals) are automatically enabled in Roblox Studio, so unsafe Charm code will start throwing errors if you didn't use the old `__DEV__` flag. The flags have the following behavior:
+    - `strict`: Yielding in effects, signals, and other critical Charm functions will throw an error
+    - `frozen`: Tables passed to signals are deeply frozen to strictly enforce data immutability and prevent accidental mutations
+
+4. Nested effects automatically clean up when the parent effect re-runs or gets disposed. In other words, all effects created during the execution of another effect will be added as a "child" and clean up with the parent effect. This might cause issues in code that relied on the old behavior, where effects were detached from the parent.
+    - This feature applies to all reaction APIs, including the listener function in `subscribe()` and the observer function in `observe()`.
+    - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
+    - This feature can cause runtime bugs that are hard to track! If you need to narrow down a cause, you can disable this feature by setting [`globals.trackInnerEffects`](#globals) to `false`.
+    - > [!NOTE]
+      > An example of this feature causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
+      >
+      > This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
+
+5. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible with many thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
+    - Added [`signal()`](#signalinitialvalue-equals) to make reads and writes more explicit
+    - Added [`listen()`](#listengetter-callback) for running a subscription once immediately
+    - Added [`effectScope()`](#effectscopecallback) for collecting and cleaning up multiple effects at once
+    - Added [`onCleanup()`](#oncleanupcallback-failsilently) for running code when the currently-running effect, subscription, or observer cleans up
+    - The [`computed()`](#computedgetter) callback now gets called with the previous computed value
+    - Optimized `computed()` to use lazy evaluation instead of eager updates
+    - Optimized `mapped()` to only map values that changed in the original table
+    - Effect execution and ordering is more reliable
 
 ---
 
