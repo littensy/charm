@@ -809,8 +809,6 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 
 </details>
 
-<br/>
-
 **What to look out for:**
 
 1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
@@ -831,10 +829,11 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
     - This feature applies to all reaction APIs, including the listener function in `subscribe()` and the observer function in `observe()`.
     - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
     - This feature can cause runtime bugs that are hard to track! If you need to narrow down a cause, you can disable this feature by setting [`globals.trackInnerEffects`](#globals) to `false`.
-    - > [!NOTE]
-      > An example of this feature causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
-      >
-      > This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
+
+> [!NOTE]
+> An example of nested effects causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
+>
+> This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
 
 5. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible with many thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
     - Added [`signal()`](#signalinitialvalue-equals) to make reads and writes more explicit
