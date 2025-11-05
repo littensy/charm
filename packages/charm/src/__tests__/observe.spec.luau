@@ -132,4 +132,40 @@ test("should handle self removal", function()
 	assert(table.concat(edits) == "+1+2+3+4-1-2-3-4", `bad edits: {table.concat(edits)}`)
 end)
 
+test("should allow disposal during addition", function()
+	local items, setItems = signal({})
+	local edits = {}
+	local dispose
+
+	dispose = observe(items, function(item)
+		if item == 1 then
+			dispose()
+		end
+		table.insert(edits, `+{item}`)
+		return function()
+			table.insert(edits, `-{item}`)
+		end
+	end)
+
+	setItems({ 1, 2, 3, 4 })
+	assert(table.concat(edits) == "+1-1", `bad edits: {table.concat(edits)}`)
+end)
+
+test("should allow disposal during removal", function()
+	local items, setItems = signal({ 1, 2, 3, 4 })
+	local edits = {}
+	local dispose
+
+	dispose = observe(items, function(item)
+		table.insert(edits, `+{item}`)
+		return function()
+			dispose()
+			table.insert(edits, `-{item}`)
+		end
+	end)
+
+	setItems({ 1, 2, 3, nil :: any, 5 })
+	assert(table.concat(edits) == "+1+2+3+4-1-2-3-4", `bad edits: {table.concat(edits)}`)
+end)
+
 return {}

@@ -19,12 +19,16 @@ local recursive = core.recursive
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local innerScopes: { [K]: () -> () } = {}
+	local disposed = false
 
 	local function updateScopes(data: { [K]: V })
 		for key, dispose in innerScopes do
 			if data[key] == nil then
 				innerScopes[key] = nil
 				dispose()
+				if disposed then
+					return
+				end
 			end
 		end
 
@@ -32,9 +36,15 @@ local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: 
 			if innerScopes[key] == nil then
 				-- Detach the inner scope from the parent effect to prevent
 				-- disposing when the effect re-runs.
-				innerScopes[key] = effectScope(function()
+				local stopScope = effectScope(function()
 					return callback(value, key)
 				end, true)
+
+				if disposed then
+					return stopScope()
+				else
+					innerScopes[key] = stopScope
+				end
 			end
 		end
 	end
@@ -51,10 +61,13 @@ local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: 
 		end)
 
 		return function()
-			for _, dispose in innerScopes do
-				dispose()
+			if not disposed then
+				disposed = true
+				for key, dispose in innerScopes do
+					innerScopes[key] = nil
+					dispose()
+				end
 			end
-			table.clear(innerScopes)
 		end
 	end)
 end
