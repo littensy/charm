@@ -167,21 +167,17 @@ local function createReactiveSystem(props: {
 	end
 
 	local function propagate(link: Link): ()
-		local next = link.nextSub
-		local stack: Stack<Link?>?
-
 		repeat
 			local sub = link.sub
-
 			local flags = sub.flags
 
-			if not bit32.btest(flags, bit32.bor(RECURSED_CHECK, RECURSED, DIRTY, PENDING)) then
+			if bit32.band(flags, bit32.bor(RECURSED_CHECK, RECURSED, DIRTY, PENDING)) == 0 then
 				sub.flags = bit32.bor(flags, PENDING)
-			elseif not bit32.btest(flags, bit32.bor(RECURSED_CHECK, RECURSED)) then
+			elseif bit32.band(flags, bit32.bor(RECURSED_CHECK, RECURSED)) == 0 then
 				flags = NONE
-			elseif not bit32.btest(flags, RECURSED_CHECK) then
+			elseif bit32.band(flags, RECURSED_CHECK) == 0 then
 				sub.flags = bit32.bor(bit32.band(flags, bit32.bnot(RECURSED)), PENDING)
-			elseif not bit32.btest(flags, bit32.bor(DIRTY, PENDING)) and isValidLink(link, sub) then
+			elseif bit32.band(flags, bit32.bor(DIRTY, PENDING)) == 0 and isValidLink(link, sub) then
 				sub.flags = bit32.bor(flags, bit32.bor(RECURSED, PENDING))
 				flags = bit32.band(flags, MUTABLE)
 			else
@@ -196,41 +192,12 @@ local function createReactiveSystem(props: {
 			if bit32.btest(flags, MUTABLE) then
 				local subSubs = sub.subs
 				if subSubs then
-					link = subSubs
-					local nextSub = link.nextSub
-					if nextSub then
-						stack = { value = next, prev = stack }
-						next = nextSub
-					end
-					continue
+					propagate(subSubs)
 				end
 			end
 
-			link = next :: Link
-
-			if link then
-				next = link.nextSub
-				continue
-			end
-
-			local continueTop = false
-
-			while stack do
-				link = stack.value :: Link
-				stack = stack.prev
-				if link then
-					next = link.nextSub
-					continueTop = true
-					break
-				end
-			end
-
-			if continueTop then
-				continue
-			end
-
-			break
-		until false
+			link = link.nextSub :: Link
+		until not link
 	end
 
 	local function shallowPropagate(link: Link): ()
@@ -248,81 +215,38 @@ local function createReactiveSystem(props: {
 	end
 
 	local function checkDirty(link: Link, sub: ReactiveNode): boolean
-		local stack: Stack<Link>?
-		local checkDepth = 0
-		local dirty = false
-
 		repeat
 			local dep = link.dep
-			local flags = dep.flags
+			local depFlags = dep.flags
 
 			if bit32.btest(sub.flags, DIRTY) then
-				dirty = true
-			elseif bit32.band(flags, bit32.bor(MUTABLE, DIRTY)) == bit32.bor(MUTABLE, DIRTY) then
+				return true
+			elseif bit32.band(depFlags, bit32.bor(MUTABLE, DIRTY)) == bit32.bor(MUTABLE, DIRTY) then
 				if update(dep) then
 					local subs = dep.subs :: Link
 					if subs.nextSub then
 						shallowPropagate(subs)
 					end
-					dirty = true
+					return true
 				end
-			elseif bit32.band(flags, bit32.bor(MUTABLE, PENDING)) == bit32.bor(MUTABLE, PENDING) then
-				if link.nextSub or link.prevSub then
-					stack = { value = link, prev = stack }
-				end
-				link = dep.deps :: Link
-				sub = dep
-				checkDepth += 1
-				continue
-			end
-
-			if not dirty then
-				local nextDep = link.nextDep
-				if nextDep then
-					link = nextDep
-					continue
-				end
-			end
-
-			local continueTop = false
-
-			while checkDepth ~= 0 do
-				checkDepth -= 1
-				local firstSub = sub.subs :: Link
-				local hasMultipleSubs = firstSub.nextSub ~= nil
-				if hasMultipleSubs then
-					link = (stack :: Stack<Link>).value
-					stack = (stack :: Stack<Link>).prev
-				else
-					link = firstSub
-				end
-				if dirty then
-					if update(sub) then
-						if hasMultipleSubs then
-							shallowPropagate(firstSub)
+			elseif bit32.band(depFlags, bit32.bor(MUTABLE, PENDING)) == bit32.bor(MUTABLE, PENDING) then
+				if checkDirty(dep.deps :: Link, dep) then
+					if update(dep) then
+						local subs = dep.subs :: Link
+						if subs.nextSub then
+							shallowPropagate(subs)
 						end
-						sub = link.sub
-						continue
+						return true
 					end
-					dirty = false
 				else
-					sub.flags = bit32.band(sub.flags, bit32.bnot(PENDING))
-				end
-				sub = link.sub
-				local nextDep = link.nextDep
-				if nextDep then
-					link = nextDep
-					continueTop = true
-					break
+					dep.flags = bit32.band(depFlags, bit32.bnot(PENDING))
 				end
 			end
 
-			if continueTop then
-				continue
-			end
+			link = link.nextDep :: Link
+		until not link
 
-			return dirty
-		until false
+		return false
 	end
 
 	return {

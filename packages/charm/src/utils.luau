@@ -14,7 +14,7 @@ local function noYield<Args..., Results...>(callback: (Args...) -> Results..., .
 end
 
 local function deepFreeze(object: any)
-	if type(object) == "table" and not table.isfrozen(object) then
+	if type(object) == "table" and not table.isfrozen(object) and getmetatable(object) == nil then
 		table.freeze(object)
 		for _, value in object do
 			deepFreeze(value)

@@ -11,11 +11,22 @@ type Update<T> = ((previous: T) -> T) | T
 --- its current value.
 export type Atom<T = any> = (...Update<T>) -> T
 
+--- A getter-only reactive signal. Calling the signal with no arguments returns
+--- its current value. It cannot be set directly.
+export type Getter<T = any> = () -> T
+
+--- A setter-only reactive signal. Calling the signal with an argument sets its
+--- value. It cannot be read directly.
+export type Setter<T = any> = (...Update<T>) -> ()
+
+export type ReactiveNode = core.ReactiveNode
+export type Link = core.Link
+
 return {
 	core = core,
 	globals = globals,
 	atom = core.atom,
-	batched = core.batched,
+	batch = core.batch,
 	computed = core.computed,
 	effect = core.effect,
 	effectScope = core.effectScope,

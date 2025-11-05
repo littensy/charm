@@ -44,7 +44,7 @@
     - [`effect(callback)`](#effectcallback)
     - [`untracked(callback)`](#untrackedcallback)
     - [`peek(callback)`](#peekcallback)
-    - [`batched(callback)`](#batchedcallback)
+    - [`batch(callback)`](#batchcallback)
     - [`effectScope(callback)`](#effectscopecallback)
     - [`listen(getter, callback)`](#listengetter-callback)
     - [`subscribe(getter, callback)`](#subscribegetter-callback)
@@ -334,7 +334,7 @@ disposeOuter() --> Cleaned up inner effect
 
 ---
 
-### `batched(callback)`
+### `batch(callback)`
 
 Combines multiple signal updates made by the callback into a single commit that triggers effects once the callback completes.
 
@@ -348,7 +348,7 @@ end)
 
 -- Combines both writes into a single update.
 -- Once the callback completes, outputs "Full name: Foo Bar"
-batched(function()
+batch(function()
 	setName("Foo")
 	setSurname("Bar")
 end)
@@ -542,13 +542,15 @@ max(-1) --> 1
 
 ### `globals`
 
-Global flags that customize the behavior of Charm. The `strict` and `frozen` flags are automatically enabled when the Luau optimization level is less than `2`, which is true in Roblox Studio.
+Global flags that customize the behavior of Charm.
 
-| Flag              | Default          | Description                                                                                                                                       |
-| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| strict            | `true` in Studio | Enforces synchronous, non-yielding behavior in signals, effects, and critical code.                                                               |
-| frozen            | `true` in Studio | Enforces immutability by deep-freezing tables passed to signals.                                                                                  |
-| trackInnerEffects | `true`           | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. Should only be disabled to debug issues during migration. |
+The `strict` and `frozen` flags are automatically enabled when the Luau optimization level is less than `2`, which is true in Roblox Studio.
+
+| Flag              | Default        | Description                                                                                                                                       |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| strict            | `true`/`false` | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                         |
+| frozen            | `true`/`false` | Enforces data immutability by deep-freezing tables passed to signals.                                                                             |
+| trackInnerEffects | `true`         | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. Should only be disabled to debug issues during migration. |
 
 ---
 
@@ -812,7 +814,6 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 **What to look out for:**
 
 1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
-    - `batch()` was renamed to `batched()`
     - The second arguments of `atom()` changed from an `options` table to an equality function
     - Removed the second argument of `computed()` (you can do your own equality checks now)
     - Removed the cleanup argument in effect callbacks (`effect(function(cleanup) end)`)

@@ -1,5 +1,5 @@
-local core = require("../../core")
-local suite = require("../../../../../test/suite")
+local core = require("../core")
+local suite = require("../../../../test/suite")
 
 local effect = core.effect
 local effectScope = core.effectScope

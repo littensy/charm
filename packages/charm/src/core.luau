@@ -235,7 +235,7 @@ local function signalOper<T>(
 		local value: T
 		if type(update) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result: T = (if globals.strict then noYield else pcall)(update, this.currentValue)
+			local success, result: T = (if globals.strict then noYield else pcall)(update, this.pendingValue)
 			activeSub = prevSub
 			if not success then
 				error(result)
@@ -278,9 +278,7 @@ local function signalOper<T>(
 				break
 			end
 			local subs = sub.subs
-			if subs then
-				sub = subs.sub
-			end
+			sub = if subs then subs.sub else nil
 		end
 		return this.currentValue
 	end
@@ -434,17 +432,21 @@ end
 --- For an alternative that still cleans up inner effects, use `peek` instead.
 ---
 --- @param callback The callback function.
---- @param args Arguments to pass to the callback.
+--- @param ...args Arguments to pass to the callback.
 --- @return The return value of the callback.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
 local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
-	local prevSub = setActiveSub(nil)
-	local results: { any } = { pcall(callback, ...) }
-	activeSub = prevSub
-	if not results[1] then
-		error(results[2])
+	if activeSub then
+		local prevSub = setActiveSub(nil)
+		local results: { any } = { pcall(callback, ...) }
+		activeSub = prevSub
+		if not results[1] then
+			error(results[2])
+		end
+		return unpack(results, 2)
+	else
+		return callback(...)
 	end
-	return unpack(results, 2)
 end
 
 --- Runs the callback without subscribing to signal updates, but still captures
@@ -453,7 +455,7 @@ end
 --- To avoid capturing inner effects, use `untracked` instead.
 ---
 --- @param callback The callback function.
---- @param args Arguments to pass to the callback.
+--- @param ...args Arguments to pass to the callback.
 --- @return The return value of the callback.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
 local function peek<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
@@ -478,10 +480,10 @@ end
 --- computed signals after the provided callback finishes running.
 ---
 --- @param callback A function that performs multiple updates.
---- @param args Arguments to pass to the callback.
+--- @param ...args Arguments to pass to the callback.
 --- @return The return value of the callback.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#batchedcallback
-local function batched<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
+--- @see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
+local function batch<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
 	startBatch()
 	local results: { any } = { (if globals.strict then noYield else pcall)(callback, ...) }
 	endBatch()
@@ -497,7 +499,7 @@ end
 ---
 --- @param getter A function that returns the value to track.
 --- @return A computed signal that tracks the value returned by the getter.
-local function toComputed<T>(getter: () -> T): () -> T
+local function toSignal<T>(getter: () -> T): () -> T
 	local name = debug.info(getter, "n")
 	if name == "signalGetter" or name == "computedGetter" or name == "atomGetterSetter" then
 		return getter
@@ -519,7 +521,7 @@ end
 --- @return A function for disposing the effect.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 local function listen<T>(getter: () -> T, callback: (state: T, previous: T?) -> ()): () -> ()
-	local tracked = toComputed(getter)
+	local tracked = toSignal(getter)
 	local current: T
 	return effect(function()
 		local previous = current
@@ -540,15 +542,12 @@ end
 --- @return A function for disposing the effect.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 local function subscribe<T>(getter: () -> T, callback: (state: T, lastState: T) -> ()): () -> ()
-	local tracked = toComputed(getter)
-	local current: T
-	local mounted = true
+	local tracked = toSignal(getter)
+	local current = tracked()
 	return effect(function()
 		local previous = current
 		current = tracked()
-		if mounted then
-			mounted = false
-		else
+		if current ~= previous then
 			peek(callback, current, previous)
 		end
 	end)
@@ -578,12 +577,14 @@ local reactiveSystem = createReactiveSystem({
 
 		queuedLength = insertIndex
 
+		-- while (firstInsertedIndex < --insertIndex)
 		insertIndex -= 1
 		while firstInsertedIndex < insertIndex do
 			local left = queued[firstInsertedIndex]
 			queued[firstInsertedIndex] = queued[insertIndex]
 			queued[insertIndex] = left
 			firstInsertedIndex += 1
+			-- Decrement before next iteration to simulate --insertIndex
 			insertIndex -= 1
 		end
 	end,
@@ -620,7 +621,7 @@ return {
 	onCleanup = onCleanup,
 	untracked = untracked,
 	peek = peek,
-	batched = batched,
+	batch = batch,
 	subscribe = subscribe,
 	listen = listen,
 }

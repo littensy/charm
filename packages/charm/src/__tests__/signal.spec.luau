@@ -1,5 +1,5 @@
-local core = require("../../core")
-local suite = require("../../../../../test/suite")
+local core = require("../core")
+local suite = require("../../../../test/suite")
 
 local signal = core.signal
 local effect = core.effect
@@ -35,6 +35,16 @@ test("should enforce immutability", function()
 	assert(not pcall(function()
 		src().nested.a = 2
 	end), "should not allow mutation of new value")
+end)
+
+test("should not freeze values with metatables", function()
+	local src = signal({ object = setmetatable({}, {}) })
+	assert(
+		pcall(function()
+			src().object.a = 2
+		end),
+		"should allow mutation of values with metatables"
+	)
 end)
 
 return {}

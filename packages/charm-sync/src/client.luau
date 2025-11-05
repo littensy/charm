@@ -65,9 +65,9 @@ end
 local function hydrate(payloads: { SyncPayload })
 	for _, payload in payloads do
 		if payload.type == "init" then
-			Charm.batched(applyInitPayload, payload.data)
+			Charm.batch(applyInitPayload, payload.data)
 		elseif payload.type == "patch" then
-			Charm.batched(applyPatchPayload, payload.data)
+			Charm.batch(applyPatchPayload, payload.data)
 		end
 	end
 end

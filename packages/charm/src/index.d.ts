@@ -149,9 +149,9 @@ export function peek<Args extends any[], Result>(callback: (...args: Args) => Re
  * @param callback A function that performs multiple updates.
  * @param args Arguments to pass to the callback.
  * @returns The return value of the callback.
- * @see https://github.com/littensy/charm?tab=readme-ov-file#batchedcallback
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
  */
-export function batched<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+export function batch<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
 
 /**
  * Creates an effect that runs the callback one immediately, and then again

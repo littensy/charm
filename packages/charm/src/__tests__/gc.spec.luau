@@ -1,5 +1,5 @@
-local core = require("../../core")
-local suite = require("../../../../../test/suite")
+local core = require("../core")
+local suite = require("../../../../test/suite")
 
 local atom = core.atom
 local computed = core.computed
