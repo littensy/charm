@@ -51,7 +51,7 @@ type EffectScope = ReactiveNode & {
 }
 
 type Effect = ReactiveNode & {
-	fn: () -> (() -> ())?,
+	fn: () -> ...(() -> ())?,
 	cleanups: { () -> () },
 }
 
@@ -116,7 +116,7 @@ local function run(e: Effect): ()
 		e.depsTail = nil
 		e.flags = bit32.bor(WATCHING, RECURSED_CHECK)
 		local prevSub = setActiveSub(e)
-		local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(e.fn)
+		local success, result = (if globals.strict then noYield else pcall)(e.fn)
 		activeSub = prevSub
 		e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
 		purgeDeps(e)
@@ -162,7 +162,7 @@ local function updateComputed(c: Computed): boolean
 	c.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 	local prevSub = setActiveSub(c)
 	local oldValue = c.value
-	local success, result: unknown = (if globals.strict then noYield else pcall)(c.getter, oldValue)
+	local success, result = (if globals.strict then noYield else pcall)(c.getter, oldValue)
 	activeSub = prevSub
 	c.flags = bit32.band(c.flags, bit32.bnot(RECURSED_CHECK))
 	purgeDeps(c)
@@ -209,10 +209,11 @@ local function computedOper<T>(this: Computed<T>): () -> T
 				end
 			end
 		elseif flags == NONE then
-			this.flags = MUTABLE
+			this.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 			local prevSub = setActiveSub(this)
 			local success, result = pcall(this.getter)
 			activeSub = prevSub
+			this.flags = bit32.band(this.flags, bit32.bnot(RECURSED_CHECK))
 			if success then
 				this.value = result
 			else
@@ -235,7 +236,7 @@ local function signalOper<T>(
 		local value: T
 		if type(update) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result: T = (if globals.strict then noYield else pcall)(update, this.pendingValue)
+			local success, result = (if globals.strict then noYield else pcall)(update, this.pendingValue)
 			activeSub = prevSub
 			if not success then
 				error(result)
@@ -365,18 +366,19 @@ end
 --- @param fn The function to run when dependencies change.
 --- @return A function for disposing the effect.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
-local function effect(fn: () -> ()): () -> ()
+local function effect(fn: () -> ...(() -> ())?): () -> ()
 	local e: Effect = {
 		fn = fn,
-		flags = WATCHING,
+		flags = bit32.bor(WATCHING, RECURSED_CHECK),
 		cleanups = {},
 	}
 	local prevSub = setActiveSub(e)
 	if prevSub and (globals.trackInnerEffects or prevSub.flags == NONE) then
 		link(e, prevSub, 0)
 	end
-	local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(fn)
+	local success, result = (if globals.strict then noYield else pcall)(fn)
 	activeSub = prevSub
+	e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
 	if not success then
 		error(result)
 	elseif result then
@@ -392,7 +394,7 @@ end
 --- @param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
 --- @return A function for disposing all effects created within the scope.
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
-local function effectScope(fn: () -> (), detached: boolean?): () -> ()
+local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
 	local e: EffectScope = {
 		flags = NONE,
 		cleanups = {},
@@ -401,7 +403,7 @@ local function effectScope(fn: () -> (), detached: boolean?): () -> ()
 	if prevSub and not detached then
 		link(e, prevSub, 0)
 	end
-	local success, result: (() -> ())? = (if globals.strict then noYield else pcall)(fn)
+	local success, result = (if globals.strict then noYield else pcall)(fn)
 	activeSub = prevSub
 	if not success then
 		error(result)

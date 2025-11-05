@@ -1,3 +1,4 @@
+local globals = require("./globals")
 --[[
 	Reactive system adapted from alien-signals at
 	https://github.com/stackblitz/alien-signals/blob/master/src/system.ts
@@ -167,9 +168,16 @@ local function createReactiveSystem(props: {
 	end
 
 	local function propagate(link: Link): ()
+		local allowRecursion = globals.allowRecursion
+
 		repeat
 			local sub = link.sub
 			local flags = sub.flags
+
+			if allowRecursion then
+				flags = bit32.band(flags, bit32.bnot(bit32.bor(RECURSED, RECURSED_CHECK)))
+				sub.flags = flags
+			end
 
 			if bit32.band(flags, bit32.bor(RECURSED_CHECK, RECURSED, DIRTY, PENDING)) == 0 then
 				sub.flags = bit32.bor(flags, PENDING)
@@ -185,7 +193,7 @@ local function createReactiveSystem(props: {
 				flags = NONE
 			end
 
-			if bit32.btest(flags, WATCHING) then
+			if bit32.band(flags, bit32.bor(WATCHING, RECURSED_CHECK)) == WATCHING then
 				notify(sub)
 			end
 

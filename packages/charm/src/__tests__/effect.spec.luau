@@ -269,6 +269,27 @@ test("should handle flags are indirectly updated during checkDirty", function()
 	assert(triggers == 2, "did not update indirectly")
 end)
 
+test("should handle effect recursion for the first execution", function()
+	local src1, setSrc1 = signal(0)
+	local src2, setSrc2 = signal(0)
+
+	local triggers1 = 0
+	local triggers2 = 0
+
+	effect(function()
+		triggers1 += 1
+		setSrc1(math.min(src1() + 1, 5))
+	end)
+	effect(function()
+		triggers2 += 1
+		setSrc2(math.min(src2() + 1, 5))
+		src2()
+	end)
+
+	assert(triggers1 == 1, `bad triggers1: {triggers1}`)
+	assert(triggers2 == 1, `bad triggers2: {triggers2}`)
+end)
+
 test("should run cleanups in sequence", function()
 	local order = {}
 

@@ -42,16 +42,19 @@ local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: 
 
 	return effectScope(function()
 		effect(function()
-			-- Batch so that side effects run after all scopes are created. This
-			-- ensures that a scope creating or removing items doesn't interfere
-			-- with the current update cycle.
-			batch(updateScopes, getter())
+			local data = getter()
 
-			-- Effects can't trigger themselves more than once, so if a scope
-			-- creates or removes items, we need to check for updates again. The
-			-- way we do this abuses a weird property of signal accesses that
-			-- causes the effect to re-run.
-			getter()
+			-- Batch so that side effects run after all scopes are created.
+			-- This ensures that a scope creating or removing items doesn't
+			-- interfere with the current update cycle.
+			batch(updateScopes, data)
+
+			-- Effects can't trigger themselves, so if a scope creates or
+			-- removes items, we need to check for updates again.
+			local newData = getter()
+			if newData ~= data then
+				batch(updateScopes, newData)
+			end
 		end)
 
 		return function()

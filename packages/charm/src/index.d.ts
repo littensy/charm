@@ -36,6 +36,12 @@ export const globals: {
 	 * disabled to revert to the old behavior. Defaults to `true`.
 	 */
 	trackInnerEffects: boolean;
+	/**
+	 * Whether to allow recursive updates in effects and computed signals.
+	 * Disabling this can help catch certain classes of bugs, but may also
+	 * cause valid code to error. Defaults to `false`.
+	 */
+	allowRecursion: boolean;
 };
 
 /**

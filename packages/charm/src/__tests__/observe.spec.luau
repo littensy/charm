@@ -90,6 +90,29 @@ test("should queue addition and removal", function()
 	assert(table.concat(edits) == "+1+2+3+4-2-3-4", `bad edits: {table.concat(edits)}`)
 end)
 
+test("should handle recursive additions and removals", function()
+	local items, setItems = signal({ 1 })
+	local edits = {}
+
+	observe(items, function(item)
+		if item < 5 then
+			setItems(function(state)
+				state = table.clone(state)
+				table.insert(state, item + 1)
+				return state
+			end)
+		else
+			setItems({})
+		end
+		table.insert(edits, `+{item}`)
+		return function()
+			table.insert(edits, `-{item}`)
+		end
+	end)
+
+	assert(table.concat(edits) == "+1+2+3+4+5-1-2-3-4-5", `bad edits: {table.concat(edits)}`)
+end)
+
 test("should handle self removal", function()
 	local items, setItems = signal({ 1, 2, 3, 4 })
 	local edits = {}
