@@ -1,10 +1,9 @@
 local core = require("./core")
 
-type ReactiveNode = core.ReactiveNode
-
 local batch = core.batch
 local effect = core.effect
 local effectScope = core.effectScope
+local recursive = core.recursive
 
 --- Calls the callback function for each unique key in the table returned by the
 --- getter. The callback is called once for each key, and again when a new key
@@ -42,19 +41,13 @@ local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: 
 
 	return effectScope(function()
 		effect(function()
-			local data = getter()
-
+			-- Allow recursive updates in case the callback creates or removes
+			-- items in the observed table.
+			recursive()
 			-- Batch so that side effects run after all scopes are created.
 			-- This ensures that a scope creating or removing items doesn't
 			-- interfere with the current update cycle.
-			batch(updateScopes, data)
-
-			-- Effects can't trigger themselves, so if a scope creates or
-			-- removes items, we need to check for updates again.
-			local newData = getter()
-			if newData ~= data then
-				batch(updateScopes, newData)
-			end
+			batch(updateScopes, getter())
 		end)
 
 		return function()

@@ -6,6 +6,7 @@ local effect = core.effect
 local effectScope = core.effectScope
 local endBatch = core.endBatch
 local onCleanup = core.onCleanup
+local recursive = core.recursive
 local setActiveSub = core.setActiveSub
 local signal = core.signal
 local startBatch = core.startBatch
@@ -288,6 +289,18 @@ test("should handle effect recursion for the first execution", function()
 
 	assert(triggers1 == 1, `bad triggers1: {triggers1}`)
 	assert(triggers2 == 1, `bad triggers2: {triggers2}`)
+end)
+
+test("should opt in to recursion", function()
+	local src, setSrc = signal(0)
+	local order = {}
+
+	effect(function()
+		recursive()
+		table.insert(order, src())
+		setSrc(math.min(src() + 1, 5))
+	end)
+	assert(table.concat(order) == "012345", `bad order: {table.concat(order)}`)
 end)
 
 test("should run cleanups in sequence", function()

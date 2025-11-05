@@ -555,6 +555,24 @@ local function subscribe<T>(getter: () -> T, callback: (state: T, lastState: T) 
 	end)
 end
 
+--- Disables recursive checks for the current effect or computed signal. Useful
+--- for effects that intentionally update signals they depend on.
+---
+--- @example
+--- ```luau
+--- effect(function()
+---     recursive()
+---     setCount(getCount() + 1)
+--- end)
+--- ```
+local function recursive()
+	if activeSub then
+		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(RECURSED_CHECK))
+	else
+		warn(debug.traceback("recursive() can only be called inside an effect or computed signal.", 2))
+	end
+end
+
 local reactiveSystem = createReactiveSystem({
 	update = function(node)
 		if node.depsTail then
@@ -626,4 +644,5 @@ return {
 	batch = batch,
 	subscribe = subscribe,
 	listen = listen,
+	recursive = recursive,
 }

@@ -33,6 +33,7 @@ return {
 	listen = core.listen,
 	onCleanup = core.onCleanup,
 	peek = core.peek,
+	recursive = core.recursive,
 	signal = core.signal,
 	subscribe = core.subscribe,
 	untracked = core.untracked,

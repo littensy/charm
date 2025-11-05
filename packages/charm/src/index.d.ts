@@ -36,12 +36,6 @@ export const globals: {
 	 * disabled to revert to the old behavior. Defaults to `true`.
 	 */
 	trackInnerEffects: boolean;
-	/**
-	 * Whether to allow recursive updates in effects and computed signals.
-	 * Disabling this can help catch certain classes of bugs, but may also
-	 * cause valid code to error. Defaults to `false`.
-	 */
-	allowRecursion: boolean;
 };
 
 /**
@@ -238,3 +232,60 @@ export function observe<V, K extends Key>(
 	getter: () => { readonly [K in Key]: V },
 	callback: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
+
+export namespace core {
+	export { signal, effect, effectScope, atom, computed, onCleanup, untracked, peek, batch, listen };
+
+	export enum ReactiveFlags {
+		None = 0b0000000,
+		Mutable = 0b0000001,
+		Watching = 0b0000010,
+		RecursedCheck = 0b0000100,
+		Recursed = 0b0001000,
+		Dirty = 0b0010000,
+		Pending = 0b0100000,
+		Peeking = 0b1000000,
+	}
+
+	export interface ReactiveNode {
+		deps?: Link;
+		depsTail?: Link;
+		subs?: Link;
+		subsTail?: Link;
+		flags: ReactiveFlags;
+	}
+
+	export interface Link {
+		version: number;
+		dep: ReactiveNode;
+		sub: ReactiveNode;
+		prevSub?: Link;
+		nextSub?: Link;
+		prevDep?: Link;
+		nextDep?: Link;
+	}
+
+	/**
+	 * Disables recursive checks for the current effect or computed signal.
+	 * Useful for effects that intentionally update signals they depend on.
+	 *
+	 * @example
+	 * ```ts
+	 * effect(() => {
+	 * 	recursive();
+	 * 	setCount(getCount() + 1);
+	 * })
+	 * ```
+	 */
+	export function recursive(): void;
+
+	export function getActiveSub(): ReactiveNode | undefined;
+
+	export function setActiveSub(sub?: ReactiveNode): ReactiveNode | undefined;
+
+	export function getBatchDepth(): number;
+
+	export function startBatch(): void;
+
+	export function endBatch(): void;
+}

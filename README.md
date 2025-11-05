@@ -540,16 +540,33 @@ max(-1) --> 1
 
 ---
 
+### `recursive()`
+
+By design, Charm's reactive system [does not allow recursion](https://github.com/stackblitz/alien-signals/issues/90#issuecomment-3489711800) in effects or computed signals. In case you need to opt out of recursion checks for an effect, you can call `recursive()` at the top of the effect callback:
+
+```luau
+local getCounter, setCounter = signal(0)
+
+effect(function()
+	recursive()
+	print(getCounter())
+	setCounter(function(count)
+		return math.min(count + 1, 3)
+	end)
+end) --> 0, 1, 2, 3
+```
+
+---
+
 ### `globals`
 
 You can customize the behavior of Charm through the `globals` table:
 
-| Flag              | Default        | Description                                                                                                                                                              |
-| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| strict            | `true`/`false` | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                                                |
-| frozen            | `true`/`false` | Enforces data immutability by deep-freezing tables passed to signals.                                                                                                    |
-| trackInnerEffects | `true`         | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration.                   |
-| allowRecursion    | `false`        | Allows recursion in effects and computed signals, which is intentionally disallowed in the [alien-signals](https://github.com/stackblitz/alien-signals) reactive system. |
+| Flag              | Default        | Description                                                                                                                                            |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| strict            | `true`/`false` | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                              |
+| frozen            | `true`/`false` | Enforces data immutability by deep-freezing tables passed to signals.                                                                                  |
+| trackInnerEffects | `true`         | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
 
 The `strict` and `frozen` flags are automatically enabled when the Luau optimization level is less than `2`, which is true in Roblox Studio.
 
@@ -831,7 +848,7 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 4. Nested effects automatically clean up when the parent effect re-runs or gets disposed. In other words, all effects created during the execution of another effect will be added as a "child" and clean up with the parent effect. This might cause issues in code that relied on the old behavior, where effects were detached from the parent.
     - This feature applies to all reaction APIs, including the listener function in `subscribe()` and the observer function in `observe()`.
     - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
-    - This feature can introduce runtime bugs in legacy code. If you need to narrow down a cause, you can disable this feature by setting [`globals.trackInnerEffects`](#globals) to `false`.
+    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can disable this feature by setting [`globals.trackInnerEffects`](#globals) to `false`.
 
 > [!NOTE]
 > An example of nested effects causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
@@ -839,7 +856,7 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 > This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
 
 5. Recursion is disallowed in effects and computed signals now that Charm uses the [alien-signals algorithm](https://github.com/stackblitz/alien-signals). This change may introduce bugs in code relying on the old behavior.
-    - You can disable recursion checks by setting [`globals.allowRecursion`](#globals) to `true`, but try to consider other options first, as recursion isn't fully supported and is not well optimized.
+    - Recursive checks are opt-out. You can allow recursion for a specific effect by calling [`recursive()`](#recursive) at the top of the effect callback.
 
 6. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
     - Added [`signal()`](#signalinitialvalue-equals) to make reads and writes more explicit
