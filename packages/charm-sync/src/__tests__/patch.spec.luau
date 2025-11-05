@@ -81,16 +81,18 @@ test("preserves array density after serdes", function()
 	local patches = mockArraySerdes(patch.diff(prevState, nextState))
 	local applied = patch.apply(prevState, patches)
 
-	for index in next, prevState do
+	for index in prevState do
 		assert(applied[index] == nextState[index], `expected {applied[index]} to be {nextState[index]}`)
 	end
 
-	for index in next, applied do
+	for index in applied do
 		assert(applied[index] == nextState[index], `expected {applied[index]} to be {nextState[index]}`)
 	end
 end)
 
 test("cannot preserve sparse arrays", function()
+	config.validatePatches = false
+
 	local prevState = {}
 	local nextState = { [2] = "foo" }
 
@@ -106,13 +108,13 @@ end)
 test("optionally fixes sparse arrays", function()
 	config.fixArrays = true
 
-	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
+	for index in patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
 		assert(type(index) == "string", `expected {type(index)} {index} to be string`)
 	end
 
 	config.fixArrays = false
 
-	for index in next, patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
+	for index in patch.diff({ 1, 1, 1, 1, 1 }, { 2, 1, 1, 2 }) do
 		assert(type(index) == "number", `expected {type(index)} {index} to be number`)
 	end
 end)
@@ -120,14 +122,14 @@ end)
 test("optionally validates state", function()
 	local success = pcall(function()
 		config.validatePatches = true
-		patch.diff({}, { [0.1] = true })
+		patch.diff({}, { [1] = 1, a = true })
 	end)
 
-	assert(not success, "should not allow non-integer keys")
+	assert(not success, "should not allow mixed tables")
 
 	success = pcall(function()
 		config.validatePatches = false
-		patch.diff({}, { [0.1] = true })
+		patch.diff({}, { [1] = 1, a = true })
 	end)
 
 	assert(success, "should skip validation if not requested")

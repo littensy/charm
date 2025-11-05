@@ -641,12 +641,12 @@ end)
 
 A configuration table that customizes the behavior of Charm Sync on the server.
 
-| Option          | Default | Description                                                                                                                                                                                          |
-| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| interval        | `0`     | The frequency at which the server will send patches to the client, in seconds. A value of `0` sends updates on the next frame. Set to a negative value to disable the interval.                      |
-| preserveHistory | `false` | Whether to preserve a full history of state changes since the last sync, at the cost of performance. This is useful if you need to replicate each individual change that occurs between sync events. |
-| fixArrays       | `true`  | When `true`, Charm will attempt to work around Roblox remote event limitations regarding array patches. Disable this if your networking library serializes remote arguments (Zap, ByteNet, etc.).    |
-| validatePatches | `true`  | When `true`, and both `fixArrays` and strict mode are enabled, patches will be validated to enforce remote event limitations.                                                                        |
+| Option          | Default | Description                                                                                                                                                                                                                                                           |
+| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| interval        | `0`     | The frequency at which the server will send patches to the client, in seconds. A value of `0` sends updates on the next frame. Set to a negative value to disable the interval.                                                                                       |
+| preserveHistory | `false` | Whether to preserve a full history of state changes since the last sync, at the cost of performance. This is useful if you need to replicate each individual change that occurs between sync events.                                                                  |
+| fixArrays       | `true`  | When `true`, Charm will attempt to work around Roblox remote event limitations regarding array patches. Disable this if your networking library serializes remote arguments (Zap, ByteNet, etc.).                                                                     |
+| validatePatches | `true`  | When `true`, and both `fixArrays` and strict mode are enabled, synced values containing unsafe sparse arrays or mixed tables will throw an error. See the [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations). |
 
 ---
 

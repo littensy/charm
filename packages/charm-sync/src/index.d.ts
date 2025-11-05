@@ -90,8 +90,8 @@ export const config: {
 	 */
 	fixArrays: boolean;
 	/**
-	 * When `true`, patches will be validated before being sent to clients to
-	 * enforce remote event limitations. Only checked in strict mode and if
+	 * When `true`, synced state containing unsafe sparse arrays or mixed
+	 * tables will throw an error. Only checked in strict mode and if
 	 * `fixArrays` is enabled. Defaults to `true`.
 	 *
 	 * @server

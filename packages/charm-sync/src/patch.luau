@@ -74,15 +74,13 @@ local function diff(currentState: any, nextState: any): any
 	end
 
 	if config.fixArrays then
-		-- Coerce sparse array patches into dictionaries
+		-- Convert sparse array patches that could be misserialized
 		if currentState[1] ~= nil or nextState[1] ~= nil then
 			patches = stringifySparseArray(patches)
 		end
 
 		if globals.strict and config.validatePatches then
-			for key, value in patches do
-				validate(value, key)
-			end
+			validate(patches)
 		end
 	end
 
