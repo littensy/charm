@@ -18,7 +18,7 @@
 
 </div>
 
-**Charm** is a state management library that aims to bring [reactive signals](https://preactjs.com/blog/signal-boosting/) from libraries like Preact and Solid to Roblox. It's built on the [alien-signals](https://github.com/stackblitz/alien-signals) signal algorithm, expanding upon it further to handle a wide range of use cases, from rendering user interfaces to handling server game logic.
+**Charm** is a Roblox state management library inspired by the [reactive signals](https://preactjs.com/blog/introducing-signals/) from libraries like Preact and Solid. It's built on [alien-signals](https://github.com/stackblitz/alien-signals), modified for a wide range of use cases: from rendering user interfaces to handling game logic.
 
 **Charm works under a few core principles.**
 
@@ -26,11 +26,11 @@
 - React to state updates: reading a signal automatically subscribes to it
 - Combine multiple signals: derive new values from existing state that stay up-to-date
 - Fine-grained reactivity: make targeted updates in response to specific changes in the state
-- Use immutable data: values are compared directly (`==`) to optimize change detection
+- Data should be immutable: values are compared directly (`==`) to optimize change detection
 
 **Want to learn more about signals?**
 
-- https://preactjs.com/blog/signal-boosting
+- https://preactjs.com/blog/introducing-signals
 - https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
 - https://angular.dev/guide/signals
 
@@ -52,6 +52,8 @@
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
+    - [`trigger(callback)`](#triggercallback)
+    - [`flags`](#flags)
 - [Client-Server Sync](#client-server-sync)
     - [Installation](#installation-1)
     - [Quick Start](#quick-start)
@@ -159,25 +161,25 @@ Signals are the core of reactivity in Charm. The `signal` function creates a rea
 ```luau
 local getCounter, setCounter = signal(0)
 
-print(getCounter()) --> 0
+print(getCounter()) -- 0
 setCounter(1)
 setCounter(function(count)
 	return count + 1
 end)
 ```
 
-Accessing the signal's value in an effect or computed signal will subscribe to it as a dependency. Changing the value will immediately notify every effect and computed signal that depends on said signal, ensuring all of your state is correct and up-to-date.
+Accessing the signal's value in an effect or computed signal will subscribe to it as a dependency. Changing the value will immediately notify every effect and computed signal that depends on the signal, ensuring all of your state is correct and up-to-date.
 
-You can also pass a custom equality function to only update the signal if the new value is _not_ equal to the current value:
+You can also pass a custom equality function to only update the signal if the equality function returns `false`:
 
 ```luau
 local getMax, setMax = signal(0, function(current, incoming)
 	return incoming <= current
 end)
 
-setMax(1) --> 1
-setMax(2) --> 2
-setMax(-1) --> 2
+setMax(1) -- 1
+setMax(2) -- 2
+setMax(-1) -- 2
 ```
 
 > [!NOTE]
@@ -198,9 +200,9 @@ local getFullName = computed(function()
 	return `{getName()} {getSurname()}`
 end)
 
-print(getFullName()) --> "John Doe"
+print(getFullName()) -- "John Doe"
 setName("Jane")
-print(getFullName()) --> "Jane Doe"
+print(getFullName()) -- "Jane Doe"
 ```
 
 The getter function also receives the previous state (or `nil` if running for the first time). You can use this for more complex state:
@@ -211,9 +213,9 @@ local getMax = computed(function(prevMax)
 	return math.max(getCounter(), prevMax or 0)
 end)
 
-print(getMax()) --> 10
+print(getMax()) -- 10
 setCounter(5)
-print(getMax()) --> 10
+print(getMax()) -- 10
 ```
 
 Computed signals are updated lazily, meaning the getter will only re-execute once the computed signal is called _and_ if a dependency updated since the last call.
@@ -229,9 +231,9 @@ local getCounter, setCounter = signal(0)
 
 effect(function()
 	print(`Count is {getCounter()}`)
-end) --> Count is 0
+end) -- Count is 0
 
-setCounter(1) --> Count is 1
+setCounter(1) -- Count is 1
 ```
 
 You can also return a cleanup function that will run once, either before the effect re-runs or when the effect is disposed:
@@ -246,8 +248,8 @@ local dispose = effect(function()
 	end
 end)
 
-setCounter(1) --> Cleanup 0
-dispose() --> Cleanup 1
+setCounter(1) -- Cleanup 0
+dispose() -- Cleanup 1
 ```
 
 Effects can be nested and they will clean up automatically when the parent effect re-runs or gets disposed. This means you don't have to manually clean up inner effects, and this applies to functions like `subscribe()` and `observe()`.
@@ -262,8 +264,8 @@ effect(function()
 	end)
 end)
 
-setCounter(1) --> Outer: 1, Inner: 1
-setCounter(2) --> Outer: 2, Inner: 2
+setCounter(1) -- Outer: 1, Inner: 1
+setCounter(2) -- Outer: 2, Inner: 2
 ```
 
 > [!NOTE]
@@ -283,29 +285,29 @@ effect(function()
 	local runs = untracked(getRuns) + 1
 	setRuns(runs)
 	print(`Count is {getCounter()}, ran {runs} times`)
-end) --> Count is 0, ran 1 times
+end) -- Count is 0, ran 1 time
 
-setCounter(10) --> Count is 10, ran 2 times
+setCounter(10) -- Count is 10, ran 2 times
 setRuns(10) -- No output
-setCounter(20) --> Count is 20, ran 11 times
+setCounter(20) -- Count is 20, ran 11 times
 ```
 
 Because `untracked()` executes the callback outside the current effect, nested effects created in the callback do not get tracked by the parent effect:
 
 ```luau
-local disposeInner
-local disposeOuter = effect(function()
+local stopEffect
+local stopScope = effectScope(function()
 	untracked(function()
-		disposeInner = effect(function()
+		stopEffect = effect(function()
 			return function()
-				print("Cleaned up inner effect")
+				print("Cleaned up untracked effect")
 			end
 		end)
 	end)
 end)
 
-disposeOuter() -- No output; outer effect did not track inner effect
-disposeInner() --> Cleaned up inner effect
+stopScope() -- No output, the scope did not track the effect
+stopEffect() -- Cleaned up untracked effect
 ```
 
 ---
@@ -318,18 +320,10 @@ Similar to `untracked()`, but does not prevent the parent effect from tracking n
 local getCounter, setCounter = signal(0)
 
 local disposeOuter = effect(function()
-	peek(function()
-		print(`Count is {getCounter()}`)
-		effect(function()
-			return function()
-				print("Cleaned up inner effect")
-			end
-		end)
-	end)
-end) --> Count is 0
+	print(`Count is {peek(getCounter)}`)
+end) -- Count is 0
 
 setCounter(1) -- No output; count was accessed in peek()
-disposeOuter() --> Cleaned up inner effect
 ```
 
 ---
@@ -372,7 +366,7 @@ local dispose = effectScope(function()
 	end)
 end)
 
-setCounter(1) --> Count 1 is 1, Count 2 is 1
+setCounter(1) -- Count 1 is 1, Count 2 is 1
 dispose()
 setCounter(2) -- No output; effects got disposed
 ```
@@ -392,9 +386,9 @@ local getCounter, setCounter = signal(0)
 
 listen(getCounter, function(count, prevCount)
 	print(`Count is {count} (was {prevCount})`)
-end) --> Count is 0 (was nil)
+end) -- Count is 0 (was nil)
 
-setCounter(1) --> Count is 1 (was 0)
+setCounter(1) -- Count is 1 (was 0)
 ```
 
 Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
@@ -413,7 +407,7 @@ subscribe(getCounter, function(count, prevCount)
 	print(`Count is {count} (was {prevCount})`)
 end)
 
-setCounter(1) --> Count is 1 (was 0)
+setCounter(1) -- Count is 1 (was 0)
 ```
 
 Note that nested effects can be created inside `subscribe`, and they will clean up automatically when the subscription re-runs or gets disposed.
@@ -432,9 +426,9 @@ observe(getItems, function(value, key)
 	return function()
 		print(`Removed {key}`)
 	end
-end) --> Added a, Added b
+end) -- Added a, Added b
 
-setItems({ a = 0, c = 0 }) --> Removed b, Added c
+setItems({ a = 0, c = 0 }) -- Removed b, Added c
 ```
 
 The callback runs in an effect scope, so effects created in the callback will be disposed when the key is removed:
@@ -456,9 +450,9 @@ local dispose = observe(getItems, function(value, key)
 	end)
 end)
 
-setItems({ a = 1, b = 0 }) --> Cleanup a = 0, a = 1
-setItems({ a = 1 }) --> Cleanup b = 0
-dispose() --> Cleanup a = 1
+setItems({ a = 1, b = 0 }) -- Cleanup a = 0, a = 1
+setItems({ a = 1 }) -- Cleanup b = 0
+dispose() -- Cleanup a = 1
 ```
 
 ---
@@ -476,7 +470,7 @@ local getUppercase = mapped(getList, function(value)
 	return string.upper(value)
 end)
 
-print(getUppercase()) --> { "A", "B", "C" }
+print(getUppercase()) -- { "A", "B", "C" }
 ```
 
 If the mapper returns two values, the second value is used as the new key:
@@ -488,7 +482,7 @@ local getSwapped = mapped(getList, function(value, key)
 	return key, value
 end)
 
-print(getSwapped()) --> { a = 1, b = 2, c = 3 }
+print(getSwapped()) -- { a = 1, b = 2, c = 3 }
 ```
 
 ---
@@ -506,7 +500,7 @@ local dispose = effectScope(function()
 	end)
 end)
 
-dispose() --> Cleaned up
+dispose() -- Cleaned up
 ```
 
 ---
@@ -520,7 +514,7 @@ If the atom is called with 0 arguments, the atom returns the current value and s
 ```luau
 local counter = atom(0)
 
-print(counter()) --> 0
+print(counter()) -- 0
 counter(1)
 counter(function(count)
 	return count + 1
@@ -534,8 +528,8 @@ local max = atom(0, function(current, incoming)
 	return incoming <= current
 end)
 
-max(1) --> 1
-max(-1) --> 1
+max(1) -- 1
+max(-1) -- 1
 ```
 
 ---
@@ -553,7 +547,7 @@ effect(function()
 	setCounter(function(count)
 		return math.min(count + 1, 3)
 	end)
-end) --> 0, 1, 2, 3
+end) -- 0, 1, 2, 3
 ```
 
 ---
@@ -568,15 +562,15 @@ local length = computed(function()
 	return #array()
 end)
 
-print(length()) --> 0
+print(length()) -- 0
 
 -- Direct mutation doesn't automatically trigger updates
 table.insert(array(), 1)
-print(length()) --> Still 0
+print(length()) -- Still 0
 
 -- Manually trigger updates
 trigger(array)
-print(length()) --> 1
+print(length()) -- 1
 ```
 
 You can also trigger multiple signals at once:
@@ -596,7 +590,7 @@ trigger(function()
   src2()
 end)
 
-print(total()) --> 2
+print(total()) -- 2
 ```
 
 ---
@@ -884,14 +878,14 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
     - Instead of creating client/server syncers, these modules now act like singletons. Sync APIs are called directly through `CharmSync.client`/`server`.
     - [Read the updated docs for syncing state →](#client-server-sync)
 
-3. The [`strict` and `frozen` flags](#globals) are automatically enabled in Roblox Studio, so unsafe Charm code will start throwing errors if you didn't use the old `__DEV__` flag. The flags have the following behavior:
+3. The [`strict` and `frozen` flags](#flags) are automatically enabled in Roblox Studio, so unsafe Charm code will start throwing errors if you didn't use the old `__DEV__` flag. The flags have the following behavior:
     - `strict`: Yielding in effects, signals, and other critical Charm functions will throw an error
     - `frozen`: Tables passed to signals are deeply frozen to strictly enforce data immutability and prevent accidental mutations
 
 4. Nested effects automatically clean up when the parent effect re-runs or gets disposed. In other words, all effects created during the execution of another effect will be added as a "child" and clean up with the parent effect. This might cause issues in code that relied on the old behavior, where effects were detached from the parent.
     - This feature applies to all reaction APIs, including the listener function in `subscribe()` and the observer function in `observe()`.
     - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
-    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can disable this feature by setting [`globals.trackInnerEffects`](#globals) to `false`.
+    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can disable this feature by setting [`globals.trackInnerEffects`](#flags) to `false`.
 
 > [!NOTE]
 > An example of nested effects causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
