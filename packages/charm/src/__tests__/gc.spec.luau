@@ -1,10 +1,10 @@
-local core = require("../core")
+local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local atom = core.atom
-local computed = core.computed
-local effect = core.effect
-local effectScope = core.effectScope
+local atom = Charm.atom
+local computed = Charm.computed
+local effect = Charm.effect
+local effectScope = Charm.effectScope
 local test = suite.test
 
 --- Creates a weak reference to a value.

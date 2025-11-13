@@ -1,9 +1,9 @@
-local core = require("../core")
+local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local computed = core.computed
-local effect = core.effect
-local signal = core.signal
+local computed = Charm.computed
+local effect = Charm.effect
+local signal = Charm.signal
 local test = suite.test
 
 test("should correctly propagate changes through computed core", function()

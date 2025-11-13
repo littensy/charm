@@ -90,7 +90,7 @@ local function createReactiveSystem(props: {
 	end
 
 	local function link(dep: ReactiveNode, sub: ReactiveNode, version: number): ()
-		-- DEVIATION: Do not link signals to sub while peeking
+		-- DEVIATION: Do not link signals to peeking subscribers
 		if bit32.btest(sub.flags, PEEKING) and bit32.btest(dep.flags, MUTABLE) then
 			return
 		end

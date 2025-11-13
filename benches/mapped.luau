@@ -3,7 +3,7 @@ local bench = require("./bench")
 
 local computed = Charm.computed
 local mapped = Charm.mapped
-local setActiveSub = Charm.core.setActiveSub
+local setActiveSub = Charm.setActiveSub
 local signal = Charm.signal
 
 type Entry = { number }

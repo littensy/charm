@@ -1,15 +1,15 @@
-local core = require("../core")
+local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local computed = core.computed
-local effect = core.effect
-local effectScope = core.effectScope
-local endBatch = core.endBatch
-local onCleanup = core.onCleanup
-local recursive = core.recursive
-local setActiveSub = core.setActiveSub
-local signal = core.signal
-local startBatch = core.startBatch
+local computed = Charm.computed
+local effect = Charm.effect
+local effectScope = Charm.effectScope
+local endBatch = Charm.endBatch
+local onCleanup = Charm.onCleanup
+local recursive = Charm.recursive
+local setActiveSub = Charm.setActiveSub
+local signal = Charm.signal
+local startBatch = Charm.startBatch
 local test = suite.test
 
 test("should clear subscriptions when untracked by all subscribers", function()

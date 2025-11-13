@@ -1,10 +1,10 @@
-local core = require("../core")
+local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local effect = core.effect
-local effectScope = core.effectScope
-local signal = core.signal
-local onCleanup = core.onCleanup
+local effect = Charm.effect
+local effectScope = Charm.effectScope
+local signal = Charm.signal
+local onCleanup = Charm.onCleanup
 local test = suite.test
 
 test("should not trigger after stop", function()
@@ -69,6 +69,15 @@ test("should run indirect effect cleanup", function()
 	assert(cleanups == 2, "should cleanup after outer dispose")
 	setA(false)
 	assert(cleanups == 2, "should not cleanup after update")
+end)
+
+test("should disallow yielding", function()
+	local success = pcall(function()
+		effectScope(function()
+			(if task then task.wait else coroutine.yield :: never)()
+		end)
+	end)
+	assert(not success, "should error on yield")
 end)
 
 return {}

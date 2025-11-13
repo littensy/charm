@@ -1,9 +1,9 @@
-local core = require("../core")
+local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local atom = core.atom
-local computed = core.computed
-local effect = core.effect
+local atom = Charm.atom
+local computed = Charm.computed
+local effect = Charm.effect
 local describe = suite.describe
 local test = suite.test
 

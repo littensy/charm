@@ -558,9 +558,52 @@ end) --> 0, 1, 2, 3
 
 ---
 
-### `globals`
+### `trigger(callback)`
 
-You can customize the behavior of Charm through the `globals` table:
+The `trigger()` function allows you to manually trigger updates for downstream dependencies when you've directly mutated a signal's value without using the signal setter:
+
+```luau
+local array = signal({} :: { number })
+local length = computed(function()
+	return #array()
+end)
+
+print(length()) --> 0
+
+-- Direct mutation doesn't automatically trigger updates
+table.insert(array(), 1)
+print(length()) --> Still 0
+
+-- Manually trigger updates
+trigger(array)
+print(length()) --> 1
+```
+
+You can also trigger multiple signals at once:
+
+```luau
+local src1 = signal({} :: { number })
+local src2 = signal({} :: { number })
+local total = computed(function()
+	return #src1() + #src2()
+end)
+
+table.insert(src1(), 1)
+table.insert(src2(), 2)
+
+trigger(function()
+  src1()
+  src2()
+end)
+
+print(total()) --> 2
+```
+
+---
+
+### `flags`
+
+Charm exposes the following global flags to customize behavior:
 
 | Flag              | Default        | Description                                                                                                                                            |
 | ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -568,7 +611,7 @@ You can customize the behavior of Charm through the `globals` table:
 | frozen            | `true`/`false` | Enforces data immutability by deep-freezing tables passed to signals.                                                                                  |
 | trackInnerEffects | `true`         | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
 
-The `strict` and `frozen` flags are automatically enabled when the Luau optimization level is less than `2`, which is true in Roblox Studio.
+The `strict` and `frozen` flags are automatically enabled in Roblox Studio. More accurately, they are enabled for the Luau optimization levels `O1` and lower.
 
 ---
 
@@ -863,6 +906,7 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
     - Added [`listen()`](#listengetter-callback) for running a subscription once immediately
     - Added [`effectScope()`](#effectscopecallback) for collecting and cleaning up multiple effects at once
     - Added [`onCleanup()`](#oncleanupcallback-failsilently) for running code when the currently-running effect, subscription, or observer cleans up
+    - Added [`trigger()`](#triggercallback) for triggering updates for table mutations
     - The [`computed()`](#computedgetter) callback now gets called with the previous computed value
     - Optimized `computed()` to use lazy evaluation instead of eager updates
     - Optimized `mapped()` to only map values that changed in the original table

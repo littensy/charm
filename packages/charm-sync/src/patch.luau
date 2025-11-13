@@ -3,7 +3,7 @@ local config = require("./config")
 local types = require("./types")
 local validate = require("./validate")
 
-local globals = Charm.globals
+local flags = Charm.flags
 
 export type None = types.None
 
@@ -79,7 +79,7 @@ local function diff(currentState: any, nextState: any): any
 			patches = stringifySparseArray(patches)
 		end
 
-		if globals.strict and config.validatePatches then
+		if flags.strict and config.validatePatches then
 			validate(patches)
 		end
 	end

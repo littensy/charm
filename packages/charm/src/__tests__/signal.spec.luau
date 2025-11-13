@@ -1,8 +1,8 @@
-local core = require("../core")
+local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local signal = core.signal
-local effect = core.effect
+local signal = Charm.signal
+local effect = Charm.effect
 local test = suite.test
 
 test("should accept equality function", function()

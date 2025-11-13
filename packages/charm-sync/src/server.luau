@@ -5,22 +5,21 @@ local types = require("./types")
 
 type SyncPayload = types.SyncPayload
 
-local globals = Charm.globals
-
 type SyncStatus = number
+
 type ClientKeys = { [string]: SyncStatus }
 
 type GetterState<T = any> = {
 	getter: () -> T,
 	currentValue: T,
-	previousValue: T,
+	lastSyncedValue: T,
 	dispose: () -> (),
 }
 
 type StateUpdate = {
 	key: string,
-	currentValue: any,
-	previousValue: any,
+	newValue: any,
+	oldValue: any,
 }
 
 local PENDING_INITIAL_STATE: SyncStatus = 0
@@ -46,22 +45,19 @@ local function startTracking<T>(key: string, getter: () -> T)
 	local trackedState = {
 		getter = getter,
 		currentValue = value,
-		previousValue = value,
+		lastSyncedValue = value,
 	}
 
-	trackedState.dispose = Charm.effect(function()
-		local newValue = getter()
-
+	trackedState.dispose = Charm.subscribe(getter, function(newValue, oldValue)
 		-- When preserving history, we need to keep track of previous values
 		-- so we can create granular patches for each change.
-		if config.preserveHistory and trackedState.currentValue ~= newValue then
+		if config.preserveHistory then
 			table.insert(globalUpdates, {
 				key = key,
-				currentValue = newValue,
-				previousValue = trackedState.previousValue,
+				newValue = newValue,
+				oldValue = oldValue,
 			})
 		end
-
 		trackedState.currentValue = newValue
 	end)
 
@@ -69,9 +65,9 @@ local function startTracking<T>(key: string, getter: () -> T)
 end
 
 local function stopTracking(key: string)
-	local tracker = trackedGetters[key]
-	if tracker then
-		tracker.dispose()
+	local trackedState = trackedGetters[key]
+	if trackedState then
+		trackedState.dispose()
 		trackedGetters[key] = nil
 	end
 end
@@ -97,7 +93,7 @@ local function diffGlobalUpdateBuffer(): { any }
 	local patches = table.create(patchCount)
 
 	for index, update in globalUpdates do
-		patches[index] = patch.diff(update.previousValue, update.currentValue)
+		patches[index] = patch.diff(update.oldValue, update.newValue)
 	end
 
 	return patches
@@ -132,7 +128,7 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 		elseif status == PENDING_INITIAL_STATE then
 			table.insert(payloads, {
 				type = "init",
-				data = { [key] = update.currentValue },
+				data = { [key] = update.newValue },
 			})
 			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
@@ -143,10 +139,10 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 	local initData: { [string]: any } = {}
 
 	for key, status in clientKeys do
-		local getterState = trackedGetters[key]
+		local trackedState = trackedGetters[key]
 
-		if status == PENDING_INITIAL_STATE and getterState then
-			initData[key] = getterState.currentValue
+		if status == PENDING_INITIAL_STATE and trackedState then
+			initData[key] = trackedState.currentValue
 			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
@@ -162,10 +158,10 @@ local function diffGlobalState(): any
 	local currentGlobalState: { [string]: any } = {}
 	local previousGlobalState: { [string]: any } = {}
 
-	for key, tracker in trackedGetters do
-		currentGlobalState[key] = tracker.currentValue
-		previousGlobalState[key] = tracker.previousValue
-		tracker.previousValue = tracker.currentValue
+	for key, trackedState in trackedGetters do
+		currentGlobalState[key] = trackedState.currentValue
+		previousGlobalState[key] = trackedState.lastSyncedValue
+		trackedState.lastSyncedValue = trackedState.currentValue
 	end
 
 	return patch.diff(previousGlobalState, currentGlobalState)
@@ -185,12 +181,12 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	-- Create patches for initialized signals that changed, and add signals
 	-- that are still pending initial state to the init payload.
 	for key, status in clientKeys do
-		local getterState = trackedGetters[key]
+		local trackedState = trackedGetters[key]
 
 		if status == LISTENING_FOR_CHANGES then
 			patchData[key] = globalPatch[key]
 		elseif status == PENDING_INITIAL_STATE then
-			initData[key] = getterState.currentValue
+			initData[key] = trackedState.currentValue
 			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
@@ -272,12 +268,6 @@ local function flush()
 
 	local granular = config.preserveHistory
 	local globalPatch = if granular then diffGlobalUpdateBuffer() else diffGlobalState()
-
-	-- While payload objects are technically mutable as they are unique to
-	-- each client, the data inside them is not safe to mutate.
-	if globals.frozen then
-		Charm.deepFreeze(globalPatch)
-	end
 
 	for client in clients do
 		local payloads = if granular

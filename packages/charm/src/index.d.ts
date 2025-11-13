@@ -1,24 +1,48 @@
 type Key = string | number | symbol;
 type Cleanup = () => void;
 
-/**
- * A reactive signal that acts as both a getter and setter. Calling the signal
- * with an argument sets its value, while calling it with no arguments returns
- * its current value.
- */
+export enum ReactiveFlags {
+	None = 0b0000000,
+	Mutable = 0b0000001,
+	Watching = 0b0000010,
+	RecursedCheck = 0b0000100,
+	Recursed = 0b0001000,
+	Dirty = 0b0010000,
+	Pending = 0b0100000,
+	Peeking = 0b1000000,
+}
+
+export interface ReactiveNode {
+	deps?: Link;
+	depsTail?: Link;
+	subs?: Link;
+	subsTail?: Link;
+	flags: ReactiveFlags;
+}
+
+export interface Link {
+	version: number;
+	dep: ReactiveNode;
+	sub: ReactiveNode;
+	prevSub?: Link;
+	nextSub?: Link;
+	prevDep?: Link;
+	nextDep?: Link;
+}
+
 export interface Atom<T> {
 	(newValue: T | ((currentValue: T) => T)): T;
 	(): T;
 }
 
-export type Getter<T> = () => T;
 export type Setter<T> = (newValue: T | ((currentValue: T) => T)) => T;
+
 export type Equals<T> = (current: T, incoming: T) => boolean;
 
 /**
  * Global flags that modify the behavior of Charm's reactive system.
  */
-export const globals: {
+export const flags: {
 	/**
 	 * Enforces synchronous, non-yielding behavior in signals and effects.
 	 * Also enables state validation in Charm Sync to catch sync errors early.
@@ -92,7 +116,7 @@ export function computed<T>(getter: (previousValue?: T) => T): () => T;
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
  */
-export function effect(callback: () => Cleanup | void): Cleanup;
+export function effect(fn: () => Cleanup | void): Cleanup;
 
 /**
  * Creates an effect scope that can capture reactive effects and computed
@@ -103,55 +127,64 @@ export function effect(callback: () => Cleanup | void): Cleanup;
  * @returns A function for disposing all effects created within the scope.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
  */
-export function effectScope(callback: () => Cleanup | void, detached?: boolean): Cleanup;
+export function effectScope(fn: () => Cleanup | void, detached?: boolean): Cleanup;
+
+/**
+ * Allows you to manually trigger updates for downstream dependencies when
+ * you've directly mutated a signal's value without using the signal setter.
+ *
+ * @param fn The dependency or a function that calls multiple dependencies.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
+ */
+export function trigger(fn: () => void): void;
 
 /**
  * Binds the cleanup function to the current active effect or effect scope. If
  * there is no active effect, a warning is logged, unless `failSilently` is
  * set to `true`.
  *
- * @param callback The cleanup function to register.
+ * @param fn The cleanup function to register.
  * @param failSilently If `true`, suppresses the warning when there is no active effect or scope. Defaults to `false`.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
  */
-export function onCleanup(callback: Cleanup, failSilently?: boolean): void;
+export function onCleanup(fn: Cleanup, failSilently?: boolean): void;
 
 /**
- * Runs the callback without subscribing to signal updates or capturing inner
+ * Runs the function without subscribing to signal updates or capturing inner
  * effects in the parent effect or scope.
  *
  * For an alternative that still cleans up inner effects, use `peek` instead.
  *
- * @param callback The callback function.
- * @param args Arguments to pass to the callback.
- * @returns The return value of the callback.
+ * @param fn A function that may read signals or create effects.
+ * @param args Arguments to pass to the function.
+ * @returns The return value of the function.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
  */
-export function untracked<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+export function untracked<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
 
 /**
- * Runs the callback without subscribing to signal updates, but still captures
+ * Runs the function without subscribing to signal updates, but still captures
  * inner effects so that they dispose with the parent effect.
  *
  * To avoid capturing inner effects, use `untracked` instead.
  *
- * @param callback The callback function.
- * @param args Arguments to pass to the callback.
- * @returns The return value of the callback.
+ * @param fn A function that may read signals.
+ * @param args Arguments to pass to the function.
+ * @returns The return value of the function.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
  */
-export function peek<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+export function peek<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
 
 /**
  * Combines multiple updates into a single "commit" that runs effects and
- * computed signals after the provided callback finishes running.
+ * computed signals after the provided function finishes running.
  *
- * @param callback A function that performs multiple updates.
- * @param args Arguments to pass to the callback.
- * @returns The return value of the callback.
+ * @param fn A function that performs multiple updates.
+ * @param args Arguments to pass to the function.
+ * @returns The return value of the function.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
  */
-export function batch<Args extends any[], Result>(callback: (...args: Args) => Result, ...args: Args): Result;
+export function batch<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
 
 /**
  * Creates an effect that runs the callback one immediately, and then again
@@ -162,11 +195,11 @@ export function batch<Args extends any[], Result>(callback: (...args: Args) => R
  * or the listener is disposed.
  *
  * @param getter A function that returns the value to watch.
- * @param callback The function to run when the value changes.
+ * @param fn The function to run when the value changes.
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
  */
-export function listen<T>(getter: () => T, callback: (value: T, previousValue: T | undefined) => void): Cleanup;
+export function listen<T>(getter: () => T, fn: (value: T, previousValue: T | undefined) => void): Cleanup;
 
 /**
  * Creates an effect that only runs the callback when the value returned by the
@@ -177,11 +210,11 @@ export function listen<T>(getter: () => T, callback: (value: T, previousValue: T
  * or the listener is disposed.
  *
  * @param getter A function that returns the value to watch.
- * @param callback The function to run when the value changes.
+ * @param fn The function to run when the value changes.
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
  */
-export function subscribe<T>(getter: () => T, callback: (value: T, previousValue: T) => void): Cleanup;
+export function subscribe<T>(getter: () => T, fn: (value: T, previousValue: T) => void): Cleanup;
 
 /**
  * Creates a new read-only signal that is computed by mapping over the entries
@@ -219,73 +252,38 @@ export function mapped<VI, KI extends Key, VO, KO extends Key = KI>(
  * from the table or when the callback is disposed.
  *
  * @param getter A function that returns the table to observe.
- * @param callback A function that is called for each key in the table.
+ * @param fn A function that is called for each key in the table.
  * @returns A function for disposing the observer.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
  */
 export function observe<V, K = number>(
 	getter: () => Map<K, V> | ReadonlyMap<K, V> | readonly V[],
-	callback: (value: V, key: K) => Cleanup | void,
+	fn: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 // Overload for objects
 export function observe<V, K extends Key>(
 	getter: () => { readonly [K in Key]: V },
-	callback: (value: V, key: K) => Cleanup | void,
+	fn: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 
-export namespace core {
-	export { signal, effect, effectScope, atom, computed, onCleanup, untracked, peek, batch, listen };
+/**
+ * Disables recursive checks for the current effect or computed signal.
+ * Useful for effects that intentionally update signals they depend on.
+ *
+ * @example
+ * ```ts
+ * effect(() => {
+ * 	recursive();
+ * 	setCount(getCount() + 1);
+ * })
+ * ```
+ */
+export function recursive(): void;
 
-	export enum ReactiveFlags {
-		None = 0b0000000,
-		Mutable = 0b0000001,
-		Watching = 0b0000010,
-		RecursedCheck = 0b0000100,
-		Recursed = 0b0001000,
-		Dirty = 0b0010000,
-		Pending = 0b0100000,
-		Peeking = 0b1000000,
-	}
+export function getActiveSub(): ReactiveNode | undefined;
 
-	export interface ReactiveNode {
-		deps?: Link;
-		depsTail?: Link;
-		subs?: Link;
-		subsTail?: Link;
-		flags: ReactiveFlags;
-	}
+export function setActiveSub(sub?: ReactiveNode): ReactiveNode | undefined;
 
-	export interface Link {
-		version: number;
-		dep: ReactiveNode;
-		sub: ReactiveNode;
-		prevSub?: Link;
-		nextSub?: Link;
-		prevDep?: Link;
-		nextDep?: Link;
-	}
+export function startBatch(): void;
 
-	/**
-	 * Disables recursive checks for the current effect or computed signal.
-	 * Useful for effects that intentionally update signals they depend on.
-	 *
-	 * @example
-	 * ```ts
-	 * effect(() => {
-	 * 	recursive();
-	 * 	setCount(getCount() + 1);
-	 * })
-	 * ```
-	 */
-	export function recursive(): void;
-
-	export function getActiveSub(): ReactiveNode | undefined;
-
-	export function setActiveSub(sub?: ReactiveNode): ReactiveNode | undefined;
-
-	export function getBatchDepth(): number;
-
-	export function startBatch(): void;
-
-	export function endBatch(): void;
-}
+export function endBatch(): void;
