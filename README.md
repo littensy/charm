@@ -715,7 +715,7 @@ A configuration table that customizes the behavior of Charm Sync on the server.
 
 The `addSignalsToClient` function subscribes a client to updates in the given signals. When an update occurs, the client will receive a state patch of only the values that changed.
 
-You can pass signal getter functions, computed signals, and atoms in the `getters` table. This function can also be called multiple on the same client to subscribe to new signals.
+You can pass signal getter functions, computed signals, and atoms in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
 
 ```luau
 Players.PlayerAdded:Connect(function(player)
