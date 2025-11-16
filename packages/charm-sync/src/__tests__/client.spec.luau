@@ -13,7 +13,7 @@ test("should hydrate atom", function()
 	local a = Charm.atom(1)
 
 	client.addSignals({ a = a })
-	client.hydrate({
+	client.patch({
 		{ type = "init", data = { a = 2 } },
 	})
 
@@ -25,13 +25,13 @@ test("should merge patch", function()
 	local previous = a()
 
 	client.addSignals({ a = a })
-	client.hydrate({
+	client.patch({
 		{ type = "init", data = { a = a() } },
 	})
 
 	assert(a() == previous, "should set a to the initial value")
 
-	client.hydrate({
+	client.patch({
 		{ type = "patch", data = { a = { b = 3 } } },
 	})
 
@@ -44,14 +44,14 @@ test("should fix sparse array patches", function()
 	local a = Charm.atom({ 1 })
 
 	client.addSignals({ a = a })
-	client.hydrate({
+	client.patch({
 		{ type = "init", data = { a = a() } },
 	})
 
 	-- This patch would be the result of a diff between { 1 } and { 1, 2 } that
 	-- was JSON-serialized and deserialized. The client should be able to catch
 	-- this and convert the string key back to a number.
-	client.hydrate({
+	client.patch({
 		{ type = "patch", data = { a = { ["2"] = 2 } } },
 	})
 
@@ -69,11 +69,11 @@ test("should merge multiple patches", function()
 		table.insert(calls, value)
 	end)
 
-	client.hydrate({
+	client.patch({
 		{ type = "init", data = { a = a() } },
 	})
 
-	client.hydrate({
+	client.patch({
 		{ type = "patch", data = { a = 2 } },
 		{ type = "patch", data = { a = 3 } },
 	})
@@ -97,11 +97,11 @@ test("should batch patches", function()
 		states.a = a()
 	end)
 
-	client.hydrate({
+	client.patch({
 		{ type = "init", data = { a = a(), b = b() } },
 	})
 
-	client.hydrate({
+	client.patch({
 		{ type = "patch", data = { a = 1, b = 2 } },
 	})
 

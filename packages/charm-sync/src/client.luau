@@ -62,7 +62,8 @@ end
 --- initializing it with the full state or merging a partial patch.
 ---
 --- @param payloads The state updates received from the server.
-local function hydrate(payloads: { SyncPayload })
+local function patch(payloads: { SyncPayload })
+	debug.profilebegin("CharmSync")
 	for _, payload in payloads do
 		if payload.type == "init" then
 			Charm.batch(applyInitPayload, payload.data)
@@ -70,11 +71,12 @@ local function hydrate(payloads: { SyncPayload })
 			Charm.batch(applyPatchPayload, payload.data)
 		end
 	end
+	debug.profileend()
 end
 
 return {
 	addSignals = addSignals,
 	removeSignals = removeSignals,
 	removeAllSignals = removeAllSignals,
-	hydrate = hydrate,
+	patch = patch,
 }

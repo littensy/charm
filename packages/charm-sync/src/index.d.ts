@@ -1,4 +1,4 @@
-import { Atom, Getter, Setter } from "@rbxts/charm";
+import { Atom, Setter } from "@rbxts/charm";
 
 type Key = string | number | symbol;
 
@@ -11,7 +11,7 @@ export interface None {
 
 export type MaybeNone<T> = undefined extends T ? None : never;
 
-type GetterMap = Record<string, Getter<any>>;
+type GetterMap = Record<string, () => any>;
 type SetterMap = Record<string, Setter<any>>;
 
 /**
@@ -134,7 +134,7 @@ export namespace client {
 	 *
 	 * @param payloads The state updates received from the server.
 	 */
-	export function hydrate<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true>(
+	export function patch<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true>(
 		payloads: SyncPayload<Getters, FixArrays>[],
 	): void;
 }

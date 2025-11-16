@@ -24,7 +24,7 @@ test("should replicate server state to client", function()
 	server.addSignalsToClient(target, { a = serverA, b = serverB })
 	server.connect(function(syncTarget, payloads)
 		if syncTarget == target then
-			client.hydrate(payloads)
+			client.patch(payloads)
 		end
 	end)
 
@@ -58,7 +58,7 @@ test("should replicate historical server state to client", function()
 	server.addSignalsToClient(target, { a = serverA, b = serverB })
 	server.connect(function(syncTarget, payloads)
 		if syncTarget == target then
-			client.hydrate(payloads)
+			client.patch(payloads)
 		end
 	end)
 

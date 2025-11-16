@@ -52,8 +52,9 @@
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
-    - [`trigger(callback)`](#triggercallback)
-    - [`flags`](#flags)
+    - [`recursive()`](#recursive)
+        - [`trigger(callback)`](#triggercallback)
+        - [`flags`](#flags)
 - [Client-Server Sync](#client-server-sync)
     - [Installation](#installation-1)
     - [Quick Start](#quick-start)
@@ -229,9 +230,10 @@ Effects are fundamental to reactivity, allowing you to react to signal updates. 
 ```luau
 local getCounter, setCounter = signal(0)
 
+-- Count is 0
 effect(function()
 	print(`Count is {getCounter()}`)
-end) -- Count is 0
+end)
 
 setCounter(1) -- Count is 1
 ```
@@ -269,7 +271,7 @@ setCounter(2) -- Outer: 2, Inner: 2
 ```
 
 > [!NOTE]
-> To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `globals.trackInnerEffects` flag to assist with debugging.
+> To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `flags.trackInnerEffects` flag to assist with debugging.
 
 ---
 
@@ -278,18 +280,17 @@ setCounter(2) -- Outer: 2, Inner: 2
 In case you want to read signals but don't want to subscribe to them, you can use `untracked()` to essentially run code _outside_ the current effect, preventing signals and effects in the callback from being tracked.
 
 ```luau
-local getCounter, setCounter = signal(0)
-local getRuns, setRuns = signal(0)
+local getTracked, setTracked = signal(0)
+local getUntracked, setUntracked = signal(0)
 
+-- Tracked: 0, Untracked: 0
 effect(function()
-	local runs = untracked(getRuns) + 1
-	setRuns(runs)
-	print(`Count is {getCounter()}, ran {runs} times`)
-end) -- Count is 0, ran 1 time
+	print(`Tracked: {getTracked()}, Untracked: {untracked(getUntracked)}`)
+end)
 
-setCounter(10) -- Count is 10, ran 2 times
-setRuns(10) -- No output
-setCounter(20) -- Count is 20, ran 11 times
+setTracked(1) -- Tracked: 1, Untracked: 0
+setUntracked(1) -- No output
+setTracked(2) -- Tracked: 2, Untracked: 1
 ```
 
 Because `untracked()` executes the callback outside the current effect, nested effects created in the callback do not get tracked by the parent effect:
@@ -319,9 +320,10 @@ Similar to `untracked()`, but does not prevent the parent effect from tracking n
 ```luau
 local getCounter, setCounter = signal(0)
 
+-- Count is 0
 local disposeOuter = effect(function()
 	print(`Count is {peek(getCounter)}`)
-end) -- Count is 0
+end)
 
 setCounter(1) -- No output; count was accessed in peek()
 ```
@@ -384,9 +386,10 @@ The callback also receives the previous value, or `nil` when running for the fir
 ```luau
 local getCounter, setCounter = signal(0)
 
+-- Count is 0 (was nil)
 listen(getCounter, function(count, prevCount)
 	print(`Count is {count} (was {prevCount})`)
-end) -- Count is 0 (was nil)
+end)
 
 setCounter(1) -- Count is 1 (was 0)
 ```
@@ -421,12 +424,13 @@ Note that nested effects can be created inside `subscribe`, and they will clean 
 ```luau
 local getItems, setItems = signal({ a = 0, b = 0 })
 
+-- Added a, Added b
 observe(getItems, function(value, key)
 	print(`Added {key}`)
 	return function()
 		print(`Removed {key}`)
 	end
-end) -- Added a, Added b
+end)
 
 setItems({ a = 0, c = 0 }) -- Removed b, Added c
 ```
@@ -547,7 +551,9 @@ effect(function()
 	setCounter(function(count)
 		return math.min(count + 1, 3)
 	end)
-end) -- 0, 1, 2, 3
+end)
+
+-- Output: 0, 1, 2, 3
 ```
 
 ---
@@ -675,7 +681,7 @@ end)
 
 To sync the client with the server's state, call `client.addSignals` with a table of writable signals (setter functions or atoms) whose keys match their server counterparts.
 
-After the client receives updates from the server, call `client.hydrate` to patch the client's signals with the incoming state updates.
+After the client receives updates from the server, call `client.patch` to patch the client's signals with the incoming state updates.
 
 ```luau
 -- Add signal setters or atoms
@@ -686,7 +692,7 @@ client.addSignals({
 
 -- Update client signals when receiving updates from the server
 syncEvent.OnClientEvent:Connect(function(updates)
-	client.hydrate(updates)
+	client.patch(updates)
 end)
 ```
 
@@ -798,7 +804,7 @@ server.flush()
 
 Subscribes the given writable signals to the states with the corresponding keys on the server. When the server sends updates, the functions associated with each key in the state will be called with the patched values.
 
-You should pass either pass signal setter functions or atoms to this function:
+You can pass either writable signals or atoms to this function:
 
 ```luau
 client.addSignals({
@@ -823,11 +829,11 @@ client.removeSignals("name")
 
 ---
 
-### `client.hydrate(updates)`
+### `client.patch(updates)`
 
-The `hydrate` function patches the client's state with the updates sent from the server. The initial update sent by the server will be the full state, and later updates will only include the values that changed.
+The `patch` function patches the client's state with the updates sent from the server. The initial update sent by the server will be the full state, and later updates will only include the values that changed.
 
-You should call `hydrate` when receiving updates from the server from a remote event:
+You should call `patch` when receiving updates from the server from a remote event:
 
 ```luau
 client.addSignals({
@@ -836,7 +842,7 @@ client.addSignals({
 })
 
 syncEvent.OnClientEvent:Connect(function(updates)
-	client.hydrate(updates)
+	client.patch(updates)
 end)
 ```
 
@@ -885,22 +891,22 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 4. Nested effects automatically clean up when the parent effect re-runs or gets disposed. In other words, all effects created during the execution of another effect will be added as a "child" and clean up with the parent effect. This might cause issues in code that relied on the old behavior, where effects were detached from the parent.
     - This feature applies to all reaction APIs, including the listener function in `subscribe()` and the observer function in `observe()`.
     - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
-    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can disable this feature by setting [`globals.trackInnerEffects`](#flags) to `false`.
+    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can disable this feature by setting [`flags.trackInnerEffects`](#flags) to `false`.
 
 > [!NOTE]
 > An example of nested effects causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
 >
 > This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
 
-5. Recursion is disallowed in effects and computed signals now that Charm uses the [alien-signals algorithm](https://github.com/stackblitz/alien-signals). This change may introduce bugs in code relying on the old behavior.
+5. Recursion is now disallowed in effects and computed signals by default. This change may introduce bugs in code relying on the old behavior.
     - Recursive checks are opt-out. You can allow recursion for a specific effect by calling [`recursive()`](#recursive) at the top of the effect callback.
 
 6. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
     - Added [`signal()`](#signalinitialvalue-equals) to make reads and writes more explicit
-    - Added [`listen()`](#listengetter-callback) for running a subscription once immediately
+    - Added [`listen()`](#listengetter-callback) to create a subscription that runs once immediately
     - Added [`effectScope()`](#effectscopecallback) for collecting and cleaning up multiple effects at once
-    - Added [`onCleanup()`](#oncleanupcallback-failsilently) for running code when the currently-running effect, subscription, or observer cleans up
-    - Added [`trigger()`](#triggercallback) for triggering updates for table mutations
+    - Added [`onCleanup()`](#oncleanupcallback-failsilently) to bind a cleanup function to the active effect
+    - Added [`trigger()`](#triggercallback) to trigger updates for table mutations
     - The [`computed()`](#computedgetter) callback now gets called with the previous computed value
     - Optimized `computed()` to use lazy evaluation instead of eager updates
     - Optimized `mapped()` to only map values that changed in the original table

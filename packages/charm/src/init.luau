@@ -367,10 +367,10 @@ end
 --- @see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
 local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): Atom<T>
 	local getter, setter = signal(initialValue, equals)
-	local function atomGetterSetter(...)
+	local function atomOper(...)
 		return if select("#", ...) == 0 then getter() else setter((...))
 	end
-	return atomGetterSetter
+	return atomOper
 end
 
 --- Creates a new read-only signal that is computed based on the values of
@@ -565,7 +565,7 @@ end
 --- @return A computed signal that tracks the value returned by the getter.
 local function toSignal<T>(fn: () -> T): () -> T
 	local name = debug.info(fn, "n")
-	return if name == "signalGetter" or name == "computedGetter" or name == "atomGetterSetter" then fn else computed(fn)
+	return if name == "signalGetter" or name == "computedGetter" or name == "atomOper" then fn else computed(fn)
 end
 
 --- Creates an effect that runs the callback one immediately, and then again
