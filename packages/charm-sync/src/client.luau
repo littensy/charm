@@ -63,7 +63,6 @@ end
 ---
 --- @param payloads The state updates received from the server.
 local function patch(payloads: { SyncPayload })
-	debug.profilebegin("CharmSync")
 	for _, payload in payloads do
 		if payload.type == "init" then
 			Charm.batch(applyInitPayload, payload.data)
@@ -71,7 +70,6 @@ local function patch(payloads: { SyncPayload })
 			Charm.batch(applyPatchPayload, payload.data)
 		end
 	end
-	debug.profileend()
 end
 
 return {

@@ -14,7 +14,7 @@ end
 
 --- Triggers garbage collection by creating a large number of tables.
 local function gc()
-	for _ = 1, 1000 do
+	for _ = 1, 2000 do
 		local _ = table.create(100, 0)
 	end
 end
