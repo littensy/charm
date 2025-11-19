@@ -2,6 +2,7 @@ local Charm = require("../Charm")
 local config = require("./config")
 local patch = require("./patch")
 local types = require("./types")
+local utils = require("./utils")
 
 type SyncPayload = types.SyncPayload
 
@@ -9,11 +10,14 @@ type SyncStatus = number
 
 type ClientKeys = { [string]: SyncStatus }
 
-type GetterState<T = any> = {
-	getter: () -> T,
+type Reactive<T> = typeof(setmetatable({}, {} :: { initialValue: T, track: () -> () }))
+
+type TrackedState<T = any> = {
+	target: any,
 	currentValue: T,
 	lastSyncedValue: T,
 	dispose: () -> (),
+	isReactive: boolean?,
 }
 
 type StateUpdate = {
@@ -25,17 +29,17 @@ type StateUpdate = {
 local PENDING_INITIAL_STATE: SyncStatus = 0
 local LISTENING_FOR_CHANGES: SyncStatus = 1
 
-local trackedGetters: { [string]: GetterState } = {}
+local trackedStates: { [string]: TrackedState } = {}
 local globalUpdates: { StateUpdate } = {}
 local clients: { [any]: ClientKeys } = {}
 
 local connection: RBXScriptConnection?
 local syncCallback: (client: any, payloads: { SyncPayload }) -> ()?
 
-local function startTracking<T>(key: string, getter: () -> T)
-	if trackedGetters[key] then
+local function trackSignal<T>(key: string, getter: () -> T)
+	if trackedStates[key] then
 		-- Ignore duplicates, but warn against name collisions
-		if trackedGetters[key].getter ~= getter then
+		if trackedStates[key].target ~= getter then
 			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
 		return
@@ -43,7 +47,7 @@ local function startTracking<T>(key: string, getter: () -> T)
 
 	local value = getter()
 	local trackedState = {
-		getter = getter,
+		target = getter,
 		currentValue = value,
 		lastSyncedValue = value,
 	}
@@ -61,14 +65,51 @@ local function startTracking<T>(key: string, getter: () -> T)
 		trackedState.currentValue = newValue
 	end)
 
-	trackedGetters[key] = trackedState
+	trackedStates[key] = trackedState
+end
+
+local function trackReactive<T>(key: string, reactive: Reactive<T>)
+	if trackedStates[key] then
+		if trackedStates[key].target ~= reactive then
+			warn("[Charm] Attempted to sync different states with the same key:", key)
+		end
+		return
+	end
+
+	local meta = getmetatable(reactive)
+	local snapshot = utils.deepCopy(meta.initialValue)
+	local firstRun = true
+
+	local trackedState = {
+		target = reactive,
+		currentValue = meta.initialValue,
+		lastSyncedValue = snapshot,
+		isReactive = true,
+	}
+
+	trackedState.dispose = Charm.effect(function()
+		meta.track()
+		if not config.preserveHistory or firstRun then
+			firstRun = false
+		else
+			local oldSnapshot = snapshot
+			snapshot = utils.deepCopy(meta.initialValue)
+			table.insert(globalUpdates, {
+				key = key,
+				newValue = snapshot,
+				oldValue = oldSnapshot,
+			})
+		end
+	end)
+
+	trackedStates[key] = trackedState
 end
 
 local function stopTracking(key: string)
-	local trackedState = trackedGetters[key]
+	local trackedState = trackedStates[key]
 	if trackedState then
 		trackedState.dispose()
-		trackedGetters[key] = nil
+		trackedStates[key] = nil
 	end
 end
 
@@ -81,7 +122,7 @@ local function purgeUntracked()
 		end
 	end
 
-	for key in trackedGetters do
+	for key in trackedStates do
 		if not active[key] then
 			stopTracking(key)
 		end
@@ -139,7 +180,7 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 	local initData: { [string]: any } = {}
 
 	for key, status in clientKeys do
-		local trackedState = trackedGetters[key]
+		local trackedState = trackedStates[key]
 
 		if status == PENDING_INITIAL_STATE and trackedState then
 			initData[key] = trackedState.currentValue
@@ -158,10 +199,14 @@ local function diffGlobalState(): any
 	local currentGlobalState: { [string]: any } = {}
 	local previousGlobalState: { [string]: any } = {}
 
-	for key, trackedState in trackedGetters do
-		currentGlobalState[key] = trackedState.currentValue
+	for key, trackedState in trackedStates do
+		local currentValue = if trackedState.isReactive
+			then utils.deepCopy(trackedState.currentValue)
+			else trackedState.currentValue
+
+		currentGlobalState[key] = currentValue
 		previousGlobalState[key] = trackedState.lastSyncedValue
-		trackedState.lastSyncedValue = trackedState.currentValue
+		trackedState.lastSyncedValue = currentValue
 	end
 
 	return patch.diff(previousGlobalState, currentGlobalState)
@@ -181,7 +226,7 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	-- Create patches for initialized signals that changed, and add signals
 	-- that are still pending initial state to the init payload.
 	for key, status in clientKeys do
-		local trackedState = trackedGetters[key]
+		local trackedState = trackedStates[key]
 
 		if status == LISTENING_FOR_CHANGES then
 			patchData[key] = globalPatch[key]
@@ -202,45 +247,55 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	return payloads
 end
 
---- Subscribes a client to the given signals. When an update occurs, the client
---- will receive a partial state patch to merge into their local state. May be
---- called multiple times to subscribe to additional keys.
----
---- Atoms, signals converted to atoms, and signal getter functions are allowed.
---- Note that `client.addSignals` still requires some way to set the state.
----
---- @param client The client receiving state updates.
---- @param getters A map of getter functions to sync with the client.
-local function addSignalsToClient(client: any, getters: { [string]: () -> any })
+--[[
+	Subscribes a client to the given signals. When an update occurs, the client
+	will receive a partial state patch to merge into their local state. May be
+	called multiple times to subscribe to additional keys.
+
+	Atoms, signals converted to atoms, and signal getter functions are allowed.
+	Note that `client.addSignals` still requires some way to set the state.
+
+	@param client The client receiving state updates.
+	@param signals A map of getter functions to sync with the client.
+]]
+local function addSignalsToClient(client: any, signals: { [string]: { [any]: any } | () -> any })
 	if not clients[client] then
 		clients[client] = {}
 	end
 
 	local clientKeys = clients[client]
 
-	for key, getter in getters do
-		startTracking(key, if type(getter) == "function" then getter else getter.get)
+	for key, signal in signals do
+		if type(signal) == "function" then
+			trackSignal(key, signal)
+		else
+			trackReactive(key, signal :: any)
+		end
 
 		if not clientKeys[key] then
-			-- Mark the getter as pending initial state so we send its full
+			-- Mark the signal as pending initial state so we send its full
 			-- value the next time we sync.
 			clientKeys[key] = PENDING_INITIAL_STATE
 		end
 	end
 end
 
---- Unsubscribes a client from receiving all state updates. To only unsubscribe
---- from specific keys, use `unsubscribeClientFrom` instead.
----
---- @param client The client receiving state updates.
+--[[
+	Unsubscribes a client from receiving all state updates. To only unsubscribe
+	from specific keys, use `unsubscribeClientFrom` instead.
+
+	@param client The client receiving state updates.
+]]
 local function removeClient(client: any)
 	clients[client] = nil
 end
 
---- Unsubscribes a client from receiving updates for the given keys.
----
---- @param client The client receiving state updates.
---- @param keys The keys of the state to unsubscribe from.
+--[[
+	Unsubscribes a client from receiving updates for the given keys.
+
+	@param client The client receiving state updates.
+	@param keys The keys of the state to unsubscribe from.
+]]
 local function removeSignalsFromClient(client: any, ...: string)
 	local clientKeys = clients[client]
 
@@ -258,9 +313,11 @@ local function removeSignalsFromClient(client: any, ...: string)
 	end
 end
 
---- Immediately sends pending updates to all clients. Normally, updates are
---- sent at the interval specified in `config.interval`, but this function
---- can be used to force an immediate sync.
+--[[
+	Immediately sends pending updates to all clients. Normally, updates are
+	sent at the interval specified in `config.interval`, but this function
+	can be used to force an immediate sync.
+]]
 local function flush()
 	if not syncCallback then
 		return
@@ -287,11 +344,13 @@ local function flush()
 	table.clear(globalUpdates)
 end
 
---- Uses the callback to send state updates to clients that are subscribed
---- to state changes. Starts automatically sending updates at the interval
---- specified in `config.interval`.
----
---- @param onSync Called when sending patches to a client.
+--[[
+	Uses the callback to send state updates to clients that are subscribed
+	to state changes. Starts automatically sending updates at the interval
+	specified in `config.interval`.
+
+	@param onSync Called when sending patches to a client.
+]]
 local function connect(onSync: (client: any, payloads: { SyncPayload }) -> ())
 	if connection then
 		connection:Disconnect()
@@ -321,8 +380,10 @@ local function connect(onSync: (client: any, payloads: { SyncPayload }) -> ())
 	end)
 end
 
---- Stops syncing state updates to clients at the automatic interval.
---- Flushing can still be performed manually via `flush`.
+--[[
+	Stops syncing state updates to clients at the automatic interval.
+	Flushing can still be performed manually via `flush`.
+]]
 local function disconnect()
 	if connection then
 		connection:Disconnect()
@@ -330,10 +391,12 @@ local function disconnect()
 	end
 end
 
---- Unsubscribes all clients, stops tracking all state, and disconnects
---- from the automatic sync interval.
+--[[
+	Unsubscribes all clients, stops tracking all state, and disconnects
+	from the automatic sync interval.
+]]
 local function reset()
-	table.clear(trackedGetters)
+	table.clear(trackedStates)
 	table.clear(clients)
 	table.clear(globalUpdates)
 	disconnect()

@@ -280,6 +280,36 @@ export function observe<V, K extends Key>(
  */
 export function recursive(): void;
 
+/**
+ * Creates a deep reactive value that tracks properties when they're accessed.
+ * Returns a proxy object that subscribes to changes on any nested property
+ * you read, and a function for mutating the original table.
+ *
+ * @example
+ * ```luau
+ * local users, setUsers = reactive({
+ * 	user = { name = "John", surname = "Doe" },
+ * })
+ *
+ * effect(function()
+ * 	print(users.user and `{users.user.name} {users.user.surname}`)
+ * end)
+ *
+ * setUsers(function(state)
+ * 	state.user.name = "Jane"
+ * 	state.user.surname = "Smith"
+ * end)
+ * ```
+ *
+ * @param initialValue The value to make deeply reactive.
+ * @return A proxy table that tracks reads to nested properties.
+ * @return A function for updating the original table.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+ */
+export function reactive<T extends object>(
+	initialValue: T,
+): LuaTuple<[value: T, setter: (update: T | ((initialValue: T) => void)) => T]>;
+
 export function getActiveSub(): ReactiveNode | undefined;
 
 export function setActiveSub(sub?: ReactiveNode): ReactiveNode | undefined;

@@ -11,8 +11,11 @@ export interface None {
 
 export type MaybeNone<T> = undefined extends T ? None : never;
 
-type GetterMap = Record<string, () => any>;
-type SetterMap = Record<string, Setter<any>>;
+type ReactiveObject = { [key: Key]: any };
+
+type ServerSignalMap = Record<string, (() => any) | ReactiveObject>;
+
+type ClientSignalMap = Record<string, Setter<any> | ReactiveObject>;
 
 /**
  * Infers the type of the return values produced by a map of functions.
@@ -55,7 +58,7 @@ export type SyncPatch<State, FixArrays extends boolean = true> = MaybeNone<State
  * A payload that can be sent from the server to the client to synchronize
  * state between the two.
  */
-export type SyncPayload<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true> =
+export type SyncPayload<Getters extends ServerSignalMap = ServerSignalMap, FixArrays extends boolean = true> =
 	| { type: "init"; data: StateOfMap<Getters> }
 	| { type: "patch"; data: SyncPatch<StateOfMap<Getters>, FixArrays> };
 
@@ -112,16 +115,18 @@ export namespace client {
 	 * Note that `server.addSignalsToClient` still requires some way to get the
 	 * state.
 	 *
-	 * @param setters A map of setter functions to sync with the server.
+	 * @param signals A map of setter functions to sync with the server.
 	 */
-	export function addSignals<Setters extends SetterMap = SetterMap>(setters: Setters): void;
+	export function addSignals<Signals extends ClientSignalMap = ClientSignalMap>(signals: Signals): void;
 
 	/**
 	 * Unregisters from server state updates for the given keys. The signals
 	 * will retain their current values, but will no longer receive updates
 	 * from the server.
 	 */
-	export function removeSignals<Setters extends GetterMap | SetterMap = SetterMap>(...keys: (keyof Setters)[]): void;
+	export function removeSignals<Signals extends ServerSignalMap | ClientSignalMap = ClientSignalMap>(
+		...keys: (keyof Signals)[]
+	): void;
 
 	/**
 	 * Unsubscribes from all server state updates.
@@ -134,7 +139,7 @@ export namespace client {
 	 *
 	 * @param payloads The state updates received from the server.
 	 */
-	export function patch<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true>(
+	export function patch<Getters extends ServerSignalMap = ServerSignalMap, FixArrays extends boolean = true>(
 		payloads: SyncPayload<Getters, FixArrays>[],
 	): void;
 }
@@ -152,9 +157,12 @@ export namespace server {
 	 * that `client.addSignals` still requires some way to set the state.
 	 *
 	 * @param client The client receiving state updates.
-	 * @param getters A map of getter functions to sync with the client.
+	 * @param signals A map of getter functions to sync with the client.
 	 */
-	export function addSignalsToClient<Getters extends GetterMap = GetterMap>(client: Player, getters: Getters): void;
+	export function addSignalsToClient<Signals extends ServerSignalMap = ServerSignalMap>(
+		client: Player,
+		signals: Signals,
+	): void;
 
 	/**
 	 * Unsubscribes a client from receiving all state updates. To only unsubscribe
@@ -170,9 +178,9 @@ export namespace server {
 	 * @param client The client receiving state updates.
 	 * @param keys The keys of the state to unsubscribe from.
 	 */
-	export function removeSignalsFromClient<Getters extends GetterMap = GetterMap>(
+	export function removeSignalsFromClient<Signals extends ServerSignalMap = ServerSignalMap>(
 		client: Player,
-		...keys: (keyof Getters)[]
+		...keys: (keyof Signals)[]
 	): void;
 
 	/**
@@ -182,7 +190,7 @@ export namespace server {
 	 *
 	 * @param onSync Called when sending patches to a client.
 	 */
-	export function connect<Getters extends GetterMap = GetterMap, FixArrays extends boolean = true>(
+	export function connect<Getters extends ServerSignalMap = ServerSignalMap, FixArrays extends boolean = true>(
 		onSync: (client: Player, payloads: SyncPayload<Getters, FixArrays>[]) => void,
 	): void;
 
@@ -276,5 +284,6 @@ export function isNone(value: unknown): value is None;
  * @param getter A function that returns the current value of the signal.
  * @param setter A function that sets the value of the signal.
  * @returns An atom that can either get or set the signal's value.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#signaltoatomgetter-setter
  */
 export function signalToAtom<T>(getter: () => T, setter: (value: ((prev: T) => T) | T) => T): Atom<T>;

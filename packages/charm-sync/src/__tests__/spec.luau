@@ -20,8 +20,4 @@ suite.describe("server", function()
 	require("./server.spec")
 end)
 
-suite.describe("validate", function()
-	require("./validate.spec")
-end)
-
 return {}

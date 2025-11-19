@@ -53,8 +53,9 @@
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
     - [`recursive()`](#recursive)
-        - [`trigger(callback)`](#triggercallback)
-        - [`flags`](#flags)
+    - [`trigger(callback)`](#triggercallback)
+    - [`reactive(initialValue)`](#reactiveinitialvalue)
+    - [`flags`](#flags)
 - [Client-Server Sync](#client-server-sync)
     - [Installation](#installation-1)
     - [Quick Start](#quick-start)
@@ -601,6 +602,44 @@ print(total()) -- 2
 
 ---
 
+### `reactive(initialValue)`
+
+The `reactive()` function creates a deeply reactive value that tracks properties when they're accessed. It returns a setter function where you can make changes by mutating the original table.
+
+```luau
+local users, setUsers = reactive({
+	user = { name = "John", surname = "Doe" },
+})
+
+-- Output: John Doe
+effect(function()
+	print(`{users.user.name} {users.user.surname}`)
+end)
+
+-- Output: Jane Smith
+setUsers(function(state)
+	state.user.name = "Jane"
+	state.user.surname = "Smith"
+end)
+```
+
+You can also set properties on the reactive value directly:
+
+```luau
+local id = reactive({ name = "John", surname = "Doe" })
+
+effect(function()
+	print(`{id.name} {id.surname}`)
+end)
+
+id.name = "Jane" -- Jane Doe
+id.surname = "Smith" -- Jane Smith
+```
+
+Be careful when mutating the reactive value: because it's a proxy table, functions like `table.insert` will not work. Table functions should be called on the original table provided by the setter function.
+
+---
+
 ### `flags`
 
 Charm exposes the following global flags to customize behavior:
@@ -638,12 +677,14 @@ Start by specifying the signals that the server should sync to clients. For this
 -- nameStore
 local getName, setName = signal("John")
 local getSurname, setSurname = signal("Doe")
+local ageAtom = atom(20)
 
 return {
 	getName = getName,
 	setName = setName,
 	getSurname = getSurname,
 	setSurname = setSurname,
+	ageAtom = ageAtom,
 }
 ```
 
@@ -653,10 +694,11 @@ Then, use `server.connect` to specify how state updates should be sent to each c
 
 ```luau
 local function onPlayerAdded(player: Player)
-	-- Add signal getters, computed signals, or atoms
+	-- Add signal getters, computed signals, atoms, or reactive objects
 	server.addSignalsToClient(player, {
 		name = nameStore.getName,
 		surname = nameStore.getSurname,
+		age = nameStore.ageAtom,
 	})
 end
 
@@ -684,10 +726,11 @@ To sync the client with the server's state, call `client.addSignals` with a tabl
 After the client receives updates from the server, call `client.patch` to patch the client's signals with the incoming state updates.
 
 ```luau
--- Add signal setters or atoms
+-- Add signal setters, atoms, or reactive objects
 client.addSignals({
 	name = nameStore.setName,
 	surname = nameStore.setSurname,
+	age = nameStore.ageAtom,
 })
 
 -- Update client signals when receiving updates from the server
@@ -715,13 +758,14 @@ A configuration table that customizes the behavior of Charm Sync on the server.
 
 The `addSignalsToClient` function subscribes a client to updates in the given signals. When an update occurs, the client will receive a state patch of only the values that changed.
 
-You can pass signal getter functions, computed signals, and atoms in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
+You can pass signal getter functions, computed signals, atoms, and [reactive objects](#reactiveinitialvalue) in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
 
 ```luau
 Players.PlayerAdded:Connect(function(player)
 	server.addSignalsToClient(player, {
 		name = nameStore.getName,
 		surname = nameStore.getSurname,
+		age = nameStore.ageAtom,
 	})
 end)
 ```
@@ -744,6 +788,7 @@ The `removeSignalsFromClient` function unsubscribes the client from a list of ke
 
 ```luau
 server.addSignalsToClient(player, {
+	name = nameStore.getName,
 	surname = nameStore.getSurname,
 })
 
@@ -804,12 +849,13 @@ server.flush()
 
 Subscribes the given writable signals to the states with the corresponding keys on the server. When the server sends updates, the functions associated with each key in the state will be called with the patched values.
 
-You can pass either writable signals or atoms to this function:
+You can pass either writable signals, atoms, or [reactive objects](#reactiveinitialvalue) to this function:
 
 ```luau
 client.addSignals({
 	name = nameStore.setName,
 	surname = nameStore.setSurname,
+	age = nameStore.ageAtom,
 })
 ```
 
@@ -822,6 +868,7 @@ Unsubscribes from each signal with the corresponding keys. The signals will reta
 ```luau
 client.addSignals({
 	name = nameStore.setName,
+	surname = nameStore.setSurname,
 })
 
 client.removeSignals("name")
@@ -848,13 +895,29 @@ end)
 
 ---
 
+### `signalToAtom(getter, setter)`
+
+If you have a lot of signals to sync between the server and clients, it might become difficult to keep track of many getters and setters. The `signalToAtom()` function unifies a signal's `get()` and `set()` functions, allowing you to reuse the same values for `client.addSignals` and `server.addSignalsToClient`.
+
+```luau
+local sharedState = {
+	name = signalToAtom(nameStore.getName, nameStore.setName),
+	surname = signalToAtom(nameStore.getSurname, nameStore.setSurname),
+}
+
+client.addSignals(sharedState)
+server.addSignalsToClient(client, sharedState)
+```
+
+---
+
 ### Sync Caveats
 
-Charm Sync will only send clients the differences between the current state and the previously-synced state, which is a practice called _delta compression_. In this case, tables are recursively scanned for changes, and unchanged properties are omitted by setting them to `nil`.
+Charm Sync will only send clients the differences between the current state and the last-synced state through a process called _delta compression_. In this case, tables are recursively scanned for changes, and unchanged properties are omitted by setting them to `nil`.
 
 But it's hard to differentiate between an unchanged value and a removed value, as both cases are represented by `nil`. We chose to address this by representing deleted values with a special `None` symbol denoted by `{ __none = "__none" }`.
 
-This means nilable values can be represented as `None`, and code working with update payloads (usually for remote argument serialization) should account for nilable values possibly being sent as `None` in the payload.
+This means nilable values may be replaced with `None` in patches, and code working with update payloads (usually for remote argument serialization) should account for nilable values possibly being sent as `None` in the payload.
 
 ---
 

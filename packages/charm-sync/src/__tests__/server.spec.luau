@@ -69,6 +69,33 @@ test("should replicate partial state patches", function()
 	assert(patch.isNone(payloads[1].data.b), "Expected patch payload to contain atom 'b' as None")
 end)
 
+test("should replicate partial state patches (reactive)", function()
+	local client = {}
+	local a: { [string]: number? } = Charm.reactive({ x = 0, y = 0, z = 0 })
+	local target, payloads
+
+	server.addSignalsToClient(client, { a = a })
+	server.connect(function(...)
+		target, payloads = ...
+	end)
+
+	server.flush()
+	assert(target == client, "Expected target to be the client")
+	assert(payloads[1].type == "init", "Expected first payload to be init")
+	assert(payloads[1].data.a.x == a.x, "Expected init payload to contain value 'a.x'")
+	assert(payloads[1].data.a.y == a.y, "Expected init payload to contain value 'a.y'")
+	assert(payloads[1].data.a.z == a.z, "Expected init payload to contain value 'a.z'")
+
+	a.x = 1
+	a.z = nil
+	server.flush()
+	assert(target == client, "Expected target to be the client")
+	assert(payloads[1].type == "patch", "Expected first payload to be patch")
+	assert(payloads[1].data.a.x == 1, "Expected patch payload to contain value 'a.x'")
+	assert(payloads[1].data.a.y == nil, "Expected patch payload to not contain value 'a.y'")
+	assert(patch.isNone(payloads[1].data.a.z), "Expected patch payload to contain value 'a.z' as None")
+end)
+
 test("should init new clients", function()
 	local clientA = {}
 	local clientB = {}
@@ -89,8 +116,8 @@ test("should init new clients", function()
 	assert(payloadsA[1].type == "init", "Expected first payload to be init for client A")
 	assert(payloadsA[1].data.a == a(), "Expected init payload to contain atom 'a' for client A")
 
-	server.addSignalsToClient(clientB, { a = a })
 	a(2)
+	server.addSignalsToClient(clientB, { a = a })
 	server.flush()
 	assert(payloadsA[1].type == "patch", "Expected first payload to be patch for client A")
 	assert(payloadsA[1].data.a == a(), "Expected patch payload to contain atom 'a' for client A")
@@ -166,20 +193,6 @@ test("should only replicate to synced clients", function()
 	assert(payloadsB[1].data.a == nil, "Expected patch payload to not contain atom 'a' for client B")
 end)
 
-test("should validate state", function()
-	local client = {}
-	local a = Charm.atom({})
-
-	server.addSignalsToClient(client, { a = a })
-	server.connect(function() end)
-
-	a({ [0.5] = true })
-	assert(not pcall(server.flush), "Expected server.flush to fail")
-
-	a({ [0.5] = true, valid = true })
-	server.flush()
-end)
-
 test("should serialize state", function()
 	local client = {}
 	local a = Charm.atom({ 1, 2, 3, 4, 5 })
@@ -234,6 +247,36 @@ describe("historical", function()
 		assert(payloads[1].data.a == 1, "Expected patch payload to contain atom 'a'")
 		assert(payloads[2].data.a == 2, "Expected patch payload to contain atom 'a'")
 		assert(payloads[3].data.b == 2, "Expected patch payload to contain atom 'b'")
+	end)
+
+	test("should replicate granular state changes (reactive)", function()
+		local client = {}
+		local a = Charm.reactive({ value = 0 })
+		local b = Charm.reactive({ value = 0 })
+		local c = Charm.reactive({ value = 0 })
+		local target, payloads
+
+		server.addSignalsToClient(client, { a = a, b = b, c = c })
+		server.connect(function(...)
+			target, payloads = ...
+		end)
+
+		server.flush()
+		assert(target == client, "Expected target to be the client")
+		assert(payloads[1].type == "init", "Expected first payload to be init")
+		assert(payloads[1].data.a.value == 0, "Expected init payload to contain atom 'a'")
+		assert(payloads[1].data.b.value == 0, "Expected init payload to contain atom 'b'")
+		assert(payloads[1].data.c.value == 0, "Expected init payload to contain atom 'c'")
+
+		a.value = 1
+		a.value = 2
+		b.value = 2
+		server.flush()
+		assert(target == client, "Expected target to be the client")
+		assert(payloads[1].type == "patch", "Expected first payload to be patch")
+		assert(payloads[1].data.a.value == 1, "Expected patch payload to contain atom 'a'")
+		assert(payloads[2].data.a.value == 2, "Expected patch payload to contain atom 'a'")
+		assert(payloads[3].data.b.value == 2, "Expected patch payload to contain atom 'b'")
 	end)
 
 	test("should init new clients", function()

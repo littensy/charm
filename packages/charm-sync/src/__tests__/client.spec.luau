@@ -40,6 +40,31 @@ test("should merge patch", function()
 	assert(a().c == 2, "should not change c")
 end)
 
+test("should merge patch (reactive)", function()
+	local a = Charm.reactive({ b = 1, c = 2 })
+	local runs = 0
+
+	Charm.effect(function()
+		local _ = a.b + a.c
+		runs += 1
+	end)
+
+	client.addSignals({ a = a })
+	client.patch({
+		{ type = "init", data = { a = { b = a.b, c = a.c } } },
+	})
+
+	assert(runs == 1, "should not trigger effect for redundant init")
+
+	client.patch({
+		{ type = "patch", data = { a = { b = 3 } } },
+	})
+
+	assert(a.b == 3, "should set b to the new value")
+	assert(a.c == 2, "should not change c")
+	assert(runs == 2, "should trigger effect for patch")
+end)
+
 test("should fix sparse array patches", function()
 	local a = Charm.atom({ 1 })
 

@@ -7,26 +7,32 @@ local effect = Charm.effect
 local effectScope = Charm.effectScope
 local test = suite.test
 
---- Creates a weak reference to a value.
+--[[
+	Creates a weak reference to a value.
+]]
 local function weakRef<T>(value: T): { value: T? }
 	return setmetatable({ value = value }, { __mode = "v" }) :: any
 end
 
---- Triggers garbage collection by creating a large number of tables.
+--[[
+	Triggers garbage collection by creating a large number of tables.
+]]
 local function gc()
 	for _ = 1, 2000 do
 		local _ = table.create(100, 0)
 	end
 end
 
---- In alien-signals, a computed value unlinks from dependencies when its last
---- parent scope is disposed. However, calling a computed value outside of a
---- scope still links it to dependencies, which act as strong references.
---- Computed values called in this way won't GC until unlinked from a scope.
----
---- This function releases a computed value by linking it to a scope and then
---- immediately closing it, causing alien-signals to unlink the computed value
---- from its dependencies and allow it to be garbage collected.
+--[[
+	In alien-signals, a computed value unlinks from dependencies when its last
+	parent scope is disposed. However, calling a computed value outside of a
+	scope still links it to dependencies, which act as strong references.
+	Computed values called in this way won't GC until unlinked from a scope.
+
+	This function releases a computed value by linking it to a scope and then
+	immediately closing it, causing alien-signals to unlink the computed value
+	from its dependencies and allow it to be garbage collected.
+]]
 local function unlink(getter: () -> ())
 	effectScope(function()
 		getter()

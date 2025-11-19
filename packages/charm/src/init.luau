@@ -1,30 +1,3 @@
---[[
-	Reactive system adapted from alien-signals at
-	https://github.com/stackblitz/alien-signals/blob/master/src/index.ts
-
-	MIT License
-
-	Copyright (c) 2024-present Johnson Chu
-
-	Permission is hereby granted, free of charge, to any person obtaining a copy
-	of this software and associated documentation files (the "Software"), to deal
-	in the Software without restriction, including without limitation the rights
-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-	copies of the Software, and to permit persons to whom the Software is
-	furnished to do so, subject to the following conditions:
-
-	The above copyright notice and this permission notice shall be included in all
-	copies or substantial portions of the Software.
-
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-	SOFTWARE.
-]]
-
 local system = require("@self/system")
 
 export type ReactiveFlags = system.ReactiveFlags
@@ -32,6 +5,13 @@ export type ReactiveNode = system.ReactiveNode
 export type Link = system.Link
 
 export type Atom<T = any> = (...((T) -> T) | T) -> T
+
+type Target = { [any]: any }
+
+type Proxy = {
+	__target: Target,
+	__signals: { [any]: () -> any },
+}
 
 type EffectScopeNode = ReactiveNode & {
 	cleanups: { () -> () },
@@ -65,16 +45,22 @@ local function inlineTest(): string
 end
 
 local flags = {
-	--- Enforces synchronous, non-yielding behavior in signals and effects.
-	--- Also enables state validation in Charm Sync to catch sync errors early.
-	--- Enabled if the optimization level is below 2, which is true in studio.
+	--[[
+		Enforces synchronous, non-yielding behavior in signals and effects.
+		Also enables state validation in Charm Sync to catch sync errors early.
+		Enabled if the optimization level is below 2, which is true in studio.
+	]]
 	strict = inlineTest() == "inlineTest",
-	--- Enforces immutability of tables by deep-freezing table values. Enabled
-	--- if the optimization level is below 2, which is true in studio.
+	--[[
+		Enforces immutability of tables by deep-freezing table values. Enabled
+		if the optimization level is below 2, which is true in studio.
+	]]
 	frozen = inlineTest() == "inlineTest",
-	--- Whether parent effects should track inner effects and clean them up
-	--- when the parent effect re-runs. This is usually desirable, but can be
-	--- disabled to revert to the old behavior. Defaults to `true`.
+	--[[
+		Whether parent effects should track inner effects and clean them up
+		when the parent effect re-runs. This is usually desirable, but can be
+		disabled to revert to the old behavior. Defaults to `true`.
+	]]
 	trackInnerEffects = true,
 }
 
@@ -142,10 +128,10 @@ local function runCleanups(effect: EffectScopeNode)
 		local prevSub = setActiveSub(nil)
 		local success, result: any = pcall(cleanup)
 		activeSub = prevSub
+		cleanups[key] = nil
 		if not success then
 			warn("An error occurred during effect cleanup:", result)
 		end
-		cleanups[key] = nil
 	end
 end
 
@@ -164,7 +150,7 @@ local function run(e: EffectNode): ()
 		if not success then
 			error(result)
 		elseif result then
-			table.insert(e.cleanups, result)
+			table.insert(e.cleanups, noYield(result))
 		end
 	else
 		e.flags = WATCHING
@@ -207,9 +193,6 @@ local function updateComputed(c: ComputedNode): boolean
 		error(result)
 	end
 	if oldValue ~= result then
-		if flags.frozen then
-			deepFreeze(result)
-		end
 		c.value = result
 		return true
 	else
@@ -337,13 +320,16 @@ local function effectOper(this: EffectScopeNode): () -> ()
 	end
 end
 
---- Creates a reactive signal that stores a value and notifies subscribers when
---- the value changes. The signal provides both a getter and a setter.
----
---- @param initialValue The initial value of the signal.
---- @param equals A comparator function to determine if the signal's value has changed.
---- @return A tuple containing the getter and setter functions for the signal.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
+--[[
+	Creates a reactive signal that stores a value and notifies subscribers when
+	the value changes. The signal provides both a getter and a setter.
+
+	@param initialValue The initial value of the signal.
+	@param equals A comparator function to determine if the signal's value has changed.
+	@return A function to get the current value of the signal.
+	@return A function to set a new value and notify subscribers.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
+]]
 local function signal<T>(
 	initialValue: T,
 	equals: ((current: T, incoming: T) -> boolean)?
@@ -355,16 +341,18 @@ local function signal<T>(
 		currentValue = initialValue,
 		pendingValue = initialValue,
 		flags = MUTABLE,
-	}, equals and noYield(equals))
+	}, equals)
 end
 
---- Creates a reactive atom that acts as both a signal getter and setter.
---- Calling the atom with an argument sets its value, while calling it with no
---- arguments returns its current value.
----
---- @param initialValue The initial value of the atom. If empty, the atom's value will be `nil`.
---- @param equals A comparator function to determine if the atom's value has changed.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
+--[[
+	Creates a reactive atom that acts as both a signal getter and setter.
+	Calling the atom with an argument sets its value, while calling it with no
+	arguments returns its current value.
+
+	@param initialValue The initial value of the atom. If empty, the atom's value will be `nil`.
+	@param equals A comparator function to determine if the atom's value has changed.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
+]]
 local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): Atom<T>
 	local getter, setter = signal(initialValue, equals)
 	local function atomOper(...)
@@ -373,12 +361,14 @@ local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> bo
 	return atomOper
 end
 
---- Creates a new read-only signal that is computed based on the values of
---- other signals. The computed signal's value is automatically updated when a
---- change is detected in any of its dependencies.
----
---- @param getter A function that produces the next value.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
+--[[
+	Creates a new read-only signal that is computed based on the values of
+	other signals. The computed signal's value is automatically updated when a
+	change is detected in any of its dependencies.
+
+	@param getter A function that produces the next value.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
+]]
 local function computed<T>(getter: (previousValue: T?) -> T): () -> T
 	return computedOper({
 		flags = NONE,
@@ -386,19 +376,21 @@ local function computed<T>(getter: (previousValue: T?) -> T): () -> T
 	})
 end
 
---- Creates an effect that runs a callback in response to signal state changes.
---- An effect tracks which signals are accessed during its execution, and runs
---- the callback when those signals change.
----
---- The effect callback may return a cleanup function, which gets called once,
---- either before the effect re-runs or when it is disposed.
----
---- If the effect is called within another effect, it will be disposed when the
---- parent effect re-runs.
----
---- @param fn The function to run when dependencies change.
---- @return A function for disposing the effect.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
+--[[
+	Creates an effect that runs a callback in response to signal state changes.
+	An effect tracks which signals are accessed during its execution, and runs
+	the callback when those signals change.
+
+	The effect callback may return a cleanup function, which gets called once,
+	either before the effect re-runs or when it is disposed.
+
+	If the effect is called within another effect, it will be disposed when the
+	parent effect re-runs.
+
+	@param fn The function to run when dependencies change.
+	@return A function for disposing the effect.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
+]]
 local function effect(fn: () -> ...(() -> ())?): () -> ()
 	local e: EffectNode = {
 		fn = noYield(fn),
@@ -420,13 +412,15 @@ local function effect(fn: () -> ...(() -> ())?): () -> ()
 	return effectOper(e)
 end
 
---- Creates an effect scope that can capture reactive effects and computed
---- signals created within it so that they can be disposed together.
----
---- @param fn A function that may create reactive effects.
---- @param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
---- @return A function for disposing all effects created within the scope.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
+--[[
+	Creates an effect scope that can capture reactive effects and computed
+	signals created within it so that they can be disposed together.
+
+	@param fn A function that may create reactive effects.
+	@param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
+	@return A function for disposing all effects created within the scope.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
+]]
 local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
 	local e: EffectScopeNode = {
 		flags = NONE,
@@ -446,11 +440,13 @@ local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> 
 	return effectOper(e)
 end
 
---- Allows you to manually trigger updates for downstream dependencies when
---- you've directly mutated a signal's value without using the signal setter.
----
---- @param fn The dependency or a function that calls multiple dependencies.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
+--[[
+	Allows you to manually trigger updates for downstream dependencies when
+	you've directly mutated a signal's value without using the signal setter.
+
+	@param fn The dependency or a function that calls multiple dependencies.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
+]]
 local function trigger(fn: () -> ())
 	local sub: ReactiveNode = {
 		flags = WATCHING,
@@ -475,13 +471,15 @@ local function trigger(fn: () -> ())
 	end
 end
 
---- Binds the cleanup function to the current active effect or effect scope. If
---- there is no active effect, a warning is logged, unless `failSilently` is
---- set to `true`.
----
---- @param fn The cleanup function to register.
---- @param failSilently If `true`, suppresses the warning when there is no active effect or scope. Defaults to `false`.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
+--[[
+	Binds the cleanup function to the current active effect or effect scope. If
+	there is no active effect, a warning is logged, unless `failSilently` is
+	set to `true`.
+
+	@param fn The cleanup function to register.
+	@param failSilently If `true`, suppresses the warning when there is no active effect or scope. Defaults to `false`.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
+]]
 local function onCleanup(fn: () -> (), failSilently: boolean?)
 	if activeSub and (activeSub :: EffectNode).cleanups then
 		table.insert((activeSub :: EffectNode).cleanups, noYield(fn))
@@ -490,15 +488,17 @@ local function onCleanup(fn: () -> (), failSilently: boolean?)
 	end
 end
 
---- Runs the function without subscribing to signal updates or capturing inner
---- effects in the parent effect or scope.
----
---- For an alternative that still cleans up inner effects, use `peek` instead.
----
---- @param fn A function that may read signals or create effects.
---- @param ...args Arguments to pass to the function.
---- @return The return value of the function.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
+--[[
+	Runs the function without subscribing to signal updates or capturing inner
+	effects in the parent effect or scope.
+
+	For an alternative that still cleans up inner effects, use `peek` instead.
+
+	@param fn A function that may read signals or create effects.
+	@param ...args Arguments to pass to the function.
+	@return The return value of the function.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
+]]
 local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	if activeSub then
 		local prevSub = setActiveSub(nil)
@@ -513,15 +513,17 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 	end
 end
 
---- Runs the function without subscribing to signal updates, but still captures
---- inner effects so that they dispose with the parent effect.
----
---- To avoid capturing inner effects, use `untracked` instead.
----
---- @param fn A function that may read signals.
---- @param ...args Arguments to pass to the function.
---- @return The return value of the function.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
+--[[
+	Runs the function without subscribing to signal updates, but still captures
+	inner effects so that they dispose with the parent effect.
+
+	To avoid capturing inner effects, use `untracked` instead.
+
+	@param fn A function that may read signals.
+	@param ...args Arguments to pass to the function.
+	@return The return value of the function.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
+]]
 local function peek<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	if
 		activeSub
@@ -540,13 +542,15 @@ local function peek<Args..., Results...>(fn: (Args...) -> Results..., ...: Args.
 	end
 end
 
---- Combines multiple updates into a single "commit" that runs effects and
---- computed signals after the provided callback finishes running.
----
---- @param fn A function that performs multiple updates.
---- @param ...args Arguments to pass to the function.
---- @return The return value of the function.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
+--[[
+	Combines multiple updates into a single "commit" that runs effects and
+	computed signals after the provided callback finishes running.
+
+	@param fn A function that performs multiple updates.
+	@param ...args Arguments to pass to the function.
+	@return The return value of the function.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
+]]
 local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	startBatch()
 	local results: { any } = { pcall(noYield(fn), ...) }
@@ -557,28 +561,32 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 	return unpack(results, 2)
 end
 
---- Converts a non-signal into a computed signal. If the function is already a
---- signal, it is returned as-is. Useful for memoizing a getter function
---- without creating unnecessary nested signals.
----
---- @param fn A function that returns the value to track.
---- @return A computed signal that tracks the value returned by the getter.
+--[[
+	Converts a non-signal into a computed signal. If the function is already a
+	signal, it is returned as-is. Useful for memoizing a getter function
+	without creating unnecessary nested signals.
+
+	@param fn A function that returns the value to track.
+	@return A computed signal that tracks the value returned by the getter.
+]]
 local function toSignal<T>(fn: () -> T): () -> T
 	local name = debug.info(fn, "n")
 	return if name == "signalGetter" or name == "computedGetter" or name == "atomOper" then fn else computed(fn)
 end
 
---- Creates an effect that runs the callback one immediately, and then again
---- when the value returned by the getter changes. The callback receives the new
---- value and the previous value as arguments.
----
---- Effects created within the callback are cleaned up when the listener runs
---- or the listener is disposed.
----
---- @param getter A function that returns the value to watch.
---- @param fn The function to run when the value changes.
---- @return A function for disposing the effect.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
+--[[
+	Creates an effect that runs the callback one immediately, and then again
+	when the value returned by the getter changes. The callback receives the new
+	value and the previous value as arguments.
+
+	Effects created within the callback are cleaned up when the listener runs
+	or the listener is disposed.
+
+	@param getter A function that returns the value to watch.
+	@param fn The function to run when the value changes.
+	@return A function for disposing the effect.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
+]]
 local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): () -> ()
 	local tracked = toSignal(getter)
 	local current: T
@@ -589,17 +597,19 @@ local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): (
 	end)
 end
 
---- Creates an effect that only runs the callback when the value returned by the
---- getter changes. The callback receives the new value and the previous value
---- as arguments.
----
---- Effects created within the callback are cleaned up when the listener runs
---- or the listener is disposed.
----
---- @param getter A function that returns the value to watch.
---- @param fn The function to run when the value changes.
---- @return A function for disposing the effect.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
+--[[
+	Creates an effect that only runs the callback when the value returned by the
+	getter changes. The callback receives the new value and the previous value
+	as arguments.
+
+	Effects created within the callback are cleaned up when the listener runs
+	or the listener is disposed.
+
+	@param getter A function that returns the value to watch.
+	@param fn The function to run when the value changes.
+	@return A function for disposing the effect.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
+]]
 local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ()): () -> ()
 	local tracked = toSignal(getter)
 	local current: T
@@ -615,16 +625,18 @@ local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ())
 	end)
 end
 
---- Disables recursive checks for the current effect or computed signal. Useful
---- for effects that intentionally update signals they depend on.
----
---- @example
---- ```luau
---- effect(function()
----     recursive()
----     setCount(getCount() + 1)
---- end)
---- ```
+--[[
+	Disables recursive checks for the current effect or computed signal. Useful
+	for effects that intentionally update signals they depend on.
+
+	@example
+	```luau
+	effect(function()
+	    recursive()
+	    setCount(getCount() + 1)
+	end)
+	```
+]]
 local function recursive()
 	if activeSub then
 		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(RECURSED_CHECK))
@@ -633,18 +645,20 @@ local function recursive()
 	end
 end
 
---- Calls the callback function for each unique key in the table returned by the
---- getter. The callback is called once for each key, and again when a new key
---- is added.
----
---- The callback may return a cleanup function, which will be called when the
---- key is removed or the `observe()` effect is disposed. Effects created
---- during the callback will also be bound to the lifetime of the key.
----
---- @param getter A function that returns the table to observe.
---- @param fn A function that is called for each key in the table.
---- @return A function for disposing the observer.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
+--[[
+	Calls the callback function for each unique key in the table returned by the
+	getter. The callback is called once for each key, and again when a new key
+	is added.
+
+	The callback may return a cleanup function, which will be called when the
+	key is removed or the `observe()` effect is disposed. Effects created
+	during the callback will also be bound to the lifetime of the key.
+
+	@param getter A function that returns the table to observe.
+	@param fn A function that is called for each key in the table.
+	@return A function for disposing the observer.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
+]]
 local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	local innerScopes: { [K]: () -> () } = {}
 	local disposed = false
@@ -659,27 +673,15 @@ local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> 
 				end
 			end
 		end
-
 		for key, value in data do
 			if innerScopes[key] == nil then
 				local disposeScope = effectScope(function()
 					return fn(value, key)
 				end, true)
 				if disposed then
-					disposeScope()
-					return
+					return disposeScope()
 				end
 				innerScopes[key] = disposeScope
-			end
-		end
-	end
-
-	local function disposeScopes()
-		if not disposed then
-			disposed = true
-			for key, dispose in innerScopes do
-				innerScopes[key] = nil
-				dispose()
 			end
 		end
 	end
@@ -694,18 +696,28 @@ local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> 
 			-- interfere with the current update cycle.
 			batch(updateScopes, getter())
 		end)
-
-		return disposeScopes
+		return function()
+			if disposed then
+				return
+			end
+			disposed = true
+			for key, dispose in innerScopes do
+				innerScopes[key] = nil
+				dispose()
+			end
+		end
 	end)
 end
 
---- Creates a new read-only signal that is computed by mapping over the entries
---- of an existing atom. If the key is omitted from the mapper's return value,
---- the original key is preserved.
----
---- @param getter Returns the table to map over.
---- @param mapper Transforms each value-key pair from the source into a new value or value-key pair for the resulting table.
---- @see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
+--[[
+	Creates a new read-only signal that is computed by mapping over the entries
+	of an existing atom. If the key is omitted from the mapper's return value,
+	the original key is preserved.
+
+	@param getter Returns the table to map over.
+	@param mapper Transforms each value-key pair from the source into a new value or value-key pair for the resulting table.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
+]]
 local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
 	local currentInput: { [KI]: VI } = {}
 	local keyCache: { [KI]: KO } = {}
@@ -761,6 +773,111 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item:
 	end)
 end
 
+--[[
+	Creates a deep reactive value that tracks properties when they're accessed.
+	Returns a proxy object that subscribes to changes on any nested property
+	you read, and a function for mutating the original table.
+
+	@example
+	```luau
+	local users, setUsers = reactive({
+		user = { name = "John", surname = "Doe" },
+	})
+
+	effect(function()
+		print(users.user and `{users.user.name} {users.user.surname}`)
+	end)
+
+	setUsers(function(state)
+		state.user.name = "Jane"
+		state.user.surname = "Smith"
+	end)
+	```
+
+	@param initialValue The value to make deeply reactive.
+	@return A proxy table that tracks reads to nested properties.
+	@return A function for updating the original table.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+]]
+local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -> ())
+	local track = signal(nil)
+
+	local function setValue(update: ((T) -> ()) | T?)
+		if type(update) == "function" then
+			update(initialValue)
+		elseif type(update) == "table" then
+			table.clear(initialValue)
+			for key, value in update do
+				(initialValue :: Target)[key] = value
+			end
+		end
+		trigger(track)
+	end
+
+	local proxyMeta = {
+		initialValue = initialValue,
+		track = track,
+		setValue = setValue,
+	}
+
+	local proxyMap = setmetatable({} :: { [Target]: any }, { __mode = "k" })
+
+	local function trackProperty(cache: { [any]: () -> any }, target: Target, key: any)
+		if not cache[key] then
+			cache[key] = untracked(computed, function()
+				track()
+				return target[key]
+			end)
+		end
+		cache[key]()
+	end
+
+	local function createProxy(target: Target): Proxy
+		if not proxyMap[target] then
+			proxyMap[target] = setmetatable({
+				__target = target,
+				__signals = setmetatable({}, { __mode = "v" }),
+			}, proxyMeta)
+		end
+		return proxyMap[target]
+	end
+
+	local function nextProxy(target: Target, index: any)
+		local nextKey, nextValue = next(target, index)
+		return nextKey, if type(nextValue) == "table" then createProxy(nextValue) else nextValue
+	end
+
+	function proxyMeta.__index(self: Proxy, key: any): any
+		if activeSub then
+			trackProperty(self.__signals, self.__target, key)
+		end
+		local value = self.__target[key]
+		return if type(value) == "table" then createProxy(value) else value
+	end
+
+	function proxyMeta.__newindex(self: Proxy, key: any, value: any)
+		if type(value) == "table" and getmetatable(value) == proxyMeta then
+			value = value.__target
+		end
+		if self.__target[key] ~= value then
+			self.__target[key] = value
+			trigger(track)
+		end
+	end
+
+	function proxyMeta.__iter(self: Proxy)
+		track()
+		return nextProxy, self.__target
+	end
+
+	function proxyMeta.__len(self: Proxy)
+		track()
+		return #self.__target
+	end
+
+	return createProxy(initialValue) :: any, setValue
+end
+
 local reactiveSystem = system.createReactiveSystem({
 	update = function(node)
 		if node.depsTail then
@@ -814,12 +931,10 @@ shallowPropagate = reactiveSystem.shallowPropagate
 return {
 	ReactiveFlags = system.ReactiveFlags,
 	flags = flags,
-
 	getActiveSub = getActiveSub,
 	setActiveSub = setActiveSub,
 	startBatch = startBatch,
 	endBatch = endBatch,
-
 	signal = signal,
 	computed = computed,
 	effect = effect,
@@ -838,4 +953,5 @@ return {
 		getter: () -> { [KI]: VI },
 		mapper: (item: VI, key: KI) -> (VO, KO)
 	) -> () -> { [KO]: VO }) & (<K, VI, VO>(getter: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO }),
+	reactive = reactive,
 }

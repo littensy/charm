@@ -25,25 +25,23 @@ local function isTableUnsafe(object: { [any]: any })
 	return false
 end
 
---- Throws an error if the value is a table that cannot be synced via
---- RemoteEvents or RemoteFunctions. This only aims to catch common mistakes
---- with remote argument limitations, such as sparse arrays or mixed tables.
----
---- @param value The table value.
---- @param key The key of the value.
---- @error Throws an error if the value cannot be synced.
+--[[
+	Emits a warning if the value is a table that cannot be synced via
+	RemoteEvents or RemoteFunctions. This only aims to catch common mistakes
+	with remote argument limitations, such as sparse arrays or mixed tables.
+
+	@param value The table value.
+	@param key The key of the value.
+]]
 local function validate(value: { [any]: any })
 	if isTableUnsafe(value) then
-		-- Silence warnings during testing
-		if game then
-			warn("Cannot sync table:", value)
-		end
-		error(
-			`Cannot sync tables unsupported by remote events! See the warning above for more info.\n\n`
+		warn(
+			`Cannot sync tables unsupported by remote events! See the table below for more info.\n\n`
 				.. "This can be for the following reasons:\n"
 				.. "1. The table is a sparse array with non-sequential indices\n"
 				.. "2. The table is a mixed table (not all keys have the same type)\n\n"
-				.. "Read more: https://create.roblox.com/docs/scripting/events/remote#argument-limitations"
+				.. "Read more: https://create.roblox.com/docs/scripting/events/remote#argument-limitations\n",
+			value
 		)
 	end
 end

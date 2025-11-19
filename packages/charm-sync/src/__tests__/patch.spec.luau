@@ -31,17 +31,17 @@ end)
 test("returns a patch", function()
 	local prevState = { foo = "bar", baz = "qux" }
 	local nextState = { foo = "bar", baz = "quux" }
-	local patches = patch.diff(prevState, nextState)
+	local diffs = patch.diff(prevState, nextState)
 
-	assert(patches ~= nil, "should return a patch")
-	assert(patches.baz == "quux", "should return the changed value")
-	assert(patches.foo == nil, "should omit unchanged values")
+	assert(diffs ~= nil, "should return a patch")
+	assert(diffs.baz == "quux", "should return the changed value")
+	assert(diffs.foo == nil, "should omit unchanged values")
 end)
 
 test("applies a patch", function()
 	local prevState = { foo = "bar", baz = "qux" }
-	local patches = { baz = "quux", qaz = "qux" }
-	local applied = patch.apply(prevState, patches)
+	local diffs = { baz = "quux", qaz = "qux" }
+	local applied = patch.apply(prevState, diffs)
 
 	assert(applied ~= nil, "should return a new state")
 	assert(applied.baz == "quux", "should apply the changed value")
@@ -49,11 +49,11 @@ test("applies a patch", function()
 	assert(applied.qaz == "qux", "should add the new value")
 end)
 
-test("allows nested patches", function()
+test("allows nested diffs", function()
 	local prevState = { foo = { bar = "baz" } }
 	local nextState = { foo = { bar = "qux" } }
-	local patches = patch.diff(prevState, nextState)
-	local applied = patch.apply(prevState, patches)
+	local diffs = patch.diff(prevState, nextState)
+	local applied = patch.apply(prevState, diffs)
 
 	assert(applied.foo.bar == "qux", "should apply the nested patch")
 end)
@@ -78,8 +78,8 @@ test("preserves array density after serdes", function()
 	local prevState = { "a", "b", "c", "d", "e" }
 	local nextState = { "A", "b", "c", "D" }
 
-	local patches = mockArraySerdes(patch.diff(prevState, nextState))
-	local applied = patch.apply(prevState, patches)
+	local diffs = mockArraySerdes(patch.diff(prevState, nextState))
+	local applied = patch.apply(prevState, diffs)
 
 	for index in prevState do
 		assert(applied[index] == nextState[index], `expected {applied[index]} to be {nextState[index]}`)
@@ -96,10 +96,10 @@ test("cannot preserve sparse arrays", function()
 	local prevState = {}
 	local nextState = { [2] = "foo" }
 
-	local patches = mockArraySerdes(patch.diff(prevState, nextState))
-	local applied = patch.apply(prevState, patches)
+	local diffs = mockArraySerdes(patch.diff(prevState, nextState))
+	local applied = patch.apply(prevState, diffs)
 
-	-- Not enough information is available to determine whether 'patches'
+	-- Not enough information is available to determine whether 'diffs'
 	-- should keep the string keys added during remote event serialization.
 	assert(applied["2"] ~= nil, "will fail to convert string keys to numbers")
 	assert(applied[2] == nil, "will fail to convert string keys to numbers")
@@ -119,20 +119,12 @@ test("optionally fixes sparse arrays", function()
 	end
 end)
 
-test("optionally validates state", function()
-	local success = pcall(function()
-		config.validatePatches = true
-		patch.diff({}, { [1] = 1, a = true })
-	end)
-
-	assert(not success, "should not allow mixed tables")
-
-	success = pcall(function()
-		config.validatePatches = false
-		patch.diff({}, { [1] = 1, a = true })
-	end)
-
-	assert(success, "should skip validation if not requested")
+test("patches mutable state", function()
+	local targetState: { [string]: string } = { foo = "bar", baz = "qux" }
+	patch.applyMutable(targetState, { baz = "quux", qaz = "qux" })
+	assert(targetState.baz == "quux", "should apply the changed value")
+	assert(targetState.foo == "bar", "should keep the unchanged value")
+	assert(targetState.qaz == "qux", "should add the new value")
 end)
 
 return {}

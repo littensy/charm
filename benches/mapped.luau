@@ -58,7 +58,9 @@ for _, percent in { 0.1, 0.5, 1 } do
 		bench.profilebegin("init")
 		out()
 		bench.profileend()
+
 		setSrc(updatePercentage(percent))
+
 		bench.profilebegin("update")
 		out()
 		bench.profileend()
@@ -71,7 +73,9 @@ for _, percent in { 0.1, 0.5, 1 } do
 		bench.profilebegin("init")
 		out()
 		bench.profileend()
+
 		setSrc(updatePercentage(percent))
+
 		bench.profilebegin("update")
 		out()
 		bench.profileend()
