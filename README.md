@@ -636,7 +636,7 @@ id.name = "Jane" -- Jane Doe
 id.surname = "Smith" -- Jane Smith
 ```
 
-> [!WARN]
+> [!WARNING]
 > Be careful when mutating the reactive object! Because it's a proxy, functions like `table.insert` will not work. Table functions should be called on the original table, which is provided by the setter function.
 
 ---
