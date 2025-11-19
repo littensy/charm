@@ -604,7 +604,7 @@ print(total()) -- 2
 
 ### `reactive(initialValue)`
 
-The `reactive()` function creates a deeply reactive value that tracks properties when they're accessed. It returns a setter function where you can make changes by mutating the original table.
+The `reactive()` function creates a mutable reactive object that subscribes to only the properties you read. It also returns a setter function you can use to mutate the original table:
 
 ```luau
 local users, setUsers = reactive({
@@ -623,7 +623,7 @@ setUsers(function(state)
 end)
 ```
 
-You can also set properties on the reactive value directly:
+You can also set properties on the reactive object directly:
 
 ```luau
 local id = reactive({ name = "John", surname = "Doe" })
@@ -636,7 +636,8 @@ id.name = "Jane" -- Jane Doe
 id.surname = "Smith" -- Jane Smith
 ```
 
-Be careful when mutating the reactive value: because it's a proxy table, functions like `table.insert` will not work. Table functions should be called on the original table provided by the setter function.
+> [!WARN]
+> Be careful when mutating the reactive object! Because it's a proxy, functions like `table.insert` will not work. Table functions should be called on the original table, which is provided by the setter function.
 
 ---
 
