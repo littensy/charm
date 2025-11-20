@@ -1,4 +1,4 @@
-local function isTableUnsafe(object: { [any]: any })
+local function isTableUnsafe(object: {})
 	local key = next(object)
 
 	if key == nil then
@@ -12,7 +12,7 @@ local function isTableUnsafe(object: { [any]: any })
 	for key in object do
 		if type(key) ~= keyType then
 			return true
-		elseif keyType == "number" and key > maxKey then
+		elseif type(key) == "number" and key > maxKey then
 			maxKey = key
 		end
 	end
@@ -33,7 +33,7 @@ end
 	@param value The table value.
 	@param key The key of the value.
 ]]
-local function validate(value: { [any]: any })
+local function validate(value: {})
 	if isTableUnsafe(value) then
 		warn(
 			`Cannot sync tables unsupported by remote events! See the table below for more info.\n\n`

@@ -39,7 +39,7 @@ end
 	long as the target array is not sparse. This function ensures that the diff
 	function produces a patch that can be correctly applied.
 ]]
-local function stringifySparseArray(object: { any }): { [string | number]: any }
+local function stringifySparseArray(object: {}): { [string | number]: any }
 	local maxn = table.maxn(object)
 
 	if maxn == 0 or maxn == #object then
@@ -65,7 +65,7 @@ local function diff(oldState: any, newState: any): any
 		return newState
 	end
 
-	local diffs: { [any]: any } = table.clone(newState)
+	local diffs = table.clone(newState)
 
 	for key, oldValue in oldState do
 		diffs[key] = diff(oldValue, newState[key])

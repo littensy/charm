@@ -2,13 +2,11 @@ local Charm = require("../Charm")
 local patch = require("./patch")
 local types = require("./types")
 
+type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
 type SyncPayload = types.SyncPayload
 
-type SignalSetter<T = any> = (update: ((T) -> T) | T) -> ()
-
-type ReactiveSetter<T = any> = (update: ((T) -> ()) | T) -> ()
-
-type Reactive<T = any> = typeof(setmetatable({}, {} :: { setValue: ReactiveSetter<T> }))
+type SignalSetter<T = any> = (T | (T) -> T) -> ()
+type ReactiveSetter<T = any> = (T | (T) -> ()) -> ()
 
 local trackedSignals: { [string]: SignalSetter } = {}
 local trackedReactives: { [string]: ReactiveSetter } = {}
@@ -24,12 +22,12 @@ local trackedReactives: { [string]: ReactiveSetter } = {}
 
 	@param signals A map of setter functions to sync with the server.
 ]]
-local function addSignals(signals: { [string]: SignalSetter | { [any]: any } })
+local function addSignals(signals: { [string]: SignalSetter | {} })
 	for key, signal in signals do
 		if type(signal) == "function" then
 			trackedSignals[key] = signal
 		else
-			trackedReactives[key] = getmetatable((signal :: any) :: Reactive).setValue
+			trackedReactives[key] = getmetatable(signal :: ReactiveProxy).set
 		end
 	end
 end

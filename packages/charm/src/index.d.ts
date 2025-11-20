@@ -302,13 +302,22 @@ export function recursive(): void;
  * ```
  *
  * @param initialValue The value to make deeply reactive.
- * @return A proxy table that tracks reads to nested properties.
- * @return A function for updating the original table.
+ * @returns A proxy table and a function to mutate the original table.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
  */
 export function reactive<T extends object>(
 	initialValue: T,
 ): LuaTuple<[value: T, setter: (update: T | ((initialValue: T) => void)) => T]>;
+
+/**
+ * Unwraps a reactive proxy to get the original table. If the provided value
+ * is not a proxy, it is returned as-is.
+ *
+ * @param value A reactive proxy or a non-proxy value.
+ * @returns The unwrapped target value.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+ */
+export function toRaw<T>(value: T): T;
 
 export function getActiveSub(): ReactiveNode | undefined;
 

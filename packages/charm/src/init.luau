@@ -6,12 +6,18 @@ export type Link = system.Link
 
 export type Atom<T = any> = (...((T) -> T) | T) -> T
 
-type Target = { [any]: any }
-
-type Proxy = {
-	__target: Target,
-	__signals: { [any]: () -> any },
+type ReactiveProxyMeta<T = {}> = {
+	value: T,
+	track: () -> (),
+	set: (T | (T) -> ()?) -> (),
 }
+
+type ReactiveProxyProps<T = {}> = {
+	__target: T,
+	__signals: { [unknown]: () -> unknown },
+}
+
+export type ReactiveProxy<T = {}> = T & typeof(setmetatable({} :: ReactiveProxyProps<T>, {} :: ReactiveProxyMeta<T>))
 
 type EffectScopeNode = ReactiveNode & {
 	cleanups: { () -> () },
@@ -135,7 +141,7 @@ local function runCleanups(effect: EffectScopeNode)
 	end
 end
 
-local function run(e: EffectNode): ()
+local function run(e: EffectNode)
 	local flags = e.flags
 	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(e.deps :: Link, e)) then
 		runCleanups(e)
@@ -157,7 +163,7 @@ local function run(e: EffectNode): ()
 	end
 end
 
-local function flush(): ()
+local function flush()
 	while notifyIndex < queuedLength do
 		local effect = queued[notifyIndex] :: EffectNode
 		queued[notifyIndex] = nil
@@ -317,6 +323,50 @@ local function effectOper(this: EffectScopeNode): () -> ()
 			unlink(sub, this)
 		end
 		runCleanups(this)
+	end
+end
+
+local function update(node: ReactiveNode): boolean
+	if node.depsTail then
+		return updateComputed(node :: ComputedNode)
+	else
+		return updateSignal(node :: SignalNode)
+	end
+end
+
+local function notify(effect: ReactiveNode)
+	local insertIndex = queuedLength
+	local firstInsertedIndex = insertIndex
+
+	repeat
+		effect.flags = bit32.band(effect.flags, bit32.bnot(WATCHING))
+		queued[insertIndex] = effect :: EffectNode
+		insertIndex += 1
+		effect = (effect.subs and effect.subs.sub) :: EffectNode
+		if not effect or bit32.band(effect.flags, WATCHING) == 0 then
+			break
+		end
+	until false
+
+	queuedLength = insertIndex
+
+	insertIndex -= 1
+	while firstInsertedIndex < insertIndex do
+		local left = queued[firstInsertedIndex]
+		queued[firstInsertedIndex] = queued[insertIndex]
+		queued[insertIndex] = left
+		firstInsertedIndex += 1
+		insertIndex -= 1
+	end
+end
+
+local function unwatched(node: ReactiveNode)
+	if bit32.band(node.flags, MUTABLE) == 0 then
+		effectOper(node :: EffectScopeNode)()
+	elseif node.depsTail then
+		node.depsTail = nil
+		node.flags = bit32.bor(MUTABLE, DIRTY)
+		purgeDeps(node)
 	end
 end
 
@@ -590,6 +640,7 @@ end
 local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): () -> ()
 	local tracked = toSignal(getter)
 	local current: T
+
 	return effect(function()
 		local previous = current
 		current = tracked()
@@ -614,6 +665,7 @@ local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ())
 	local tracked = toSignal(getter)
 	local current: T
 	local firstRun = true
+
 	return effect(function()
 		local previous = current
 		current = tracked()
@@ -673,6 +725,7 @@ local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> 
 				end
 			end
 		end
+
 		for key, value in data do
 			if innerScopes[key] == nil then
 				local disposeScope = effectScope(function()
@@ -696,6 +749,7 @@ local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> 
 			-- interfere with the current update cycle.
 			batch(updateScopes, getter())
 		end)
+
 		return function()
 			if disposed then
 				return
@@ -781,16 +835,16 @@ end
 	@example
 	```luau
 	local users, setUsers = reactive({
-		user = { name = "John", surname = "Doe" },
+		{ name = "John", surname = "Doe" },
 	})
 
 	effect(function()
-		print(users.user and `{users.user.name} {users.user.surname}`)
+		print(`{users[1].name} {users[1].surname}`)
 	end)
 
 	setUsers(function(state)
-		state.user.name = "Jane"
-		state.user.surname = "Smith"
+		state[1].name = "Jane"
+		state[1].surname = "Smith"
 	end)
 	```
 
@@ -801,53 +855,32 @@ end
 ]]
 local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -> ())
 	local track = signal(nil)
+	local proxyMeta = { value = initialValue, track = track }
+	local proxyMap = setmetatable({} :: { [{}]: any }, { __mode = "v" })
 
-	local function setValue(update: ((T) -> ()) | T?)
-		if type(update) == "function" then
-			update(initialValue)
-		elseif type(update) == "table" then
-			table.clear(initialValue)
-			for key, value in update do
-				(initialValue :: Target)[key] = value
-			end
+	local function trackProperty(cache: { [any]: () -> any }, target: {}, key: any)
+		if cache[key] then
+			return cache[key]()
 		end
-		trigger(track)
+		cache[key] = computed(function()
+			track()
+			return target[key]
+		end)
+		return cache[key]()
 	end
 
-	local proxyMeta = {
-		initialValue = initialValue,
-		track = track,
-		setValue = setValue,
-	}
-
-	local proxyMap = setmetatable({} :: { [Target]: any }, { __mode = "k" })
-
-	local function trackProperty(cache: { [any]: () -> any }, target: Target, key: any)
-		if not cache[key] then
-			cache[key] = untracked(computed, function()
-				track()
-				return target[key]
-			end)
+	local function createProxy<T>(target: T & {}): ReactiveProxy<T>
+		if proxyMap[target] then
+			return proxyMap[target]
 		end
-		cache[key]()
-	end
-
-	local function createProxy(target: Target): Proxy
-		if not proxyMap[target] then
-			proxyMap[target] = setmetatable({
-				__target = target,
-				__signals = setmetatable({}, { __mode = "v" }),
-			}, proxyMeta)
-		end
+		proxyMap[target] = setmetatable({
+			__target = target,
+			__signals = setmetatable({}, { __mode = "v" }),
+		}, proxyMeta)
 		return proxyMap[target]
 	end
 
-	local function nextProxy(target: Target, index: any)
-		local nextKey, nextValue = next(target, index)
-		return nextKey, if type(nextValue) == "table" then createProxy(nextValue) else nextValue
-	end
-
-	function proxyMeta.__index(self: Proxy, key: any): any
+	function proxyMeta.__index(self: ReactiveProxy, key: any): any
 		if activeSub then
 			trackProperty(self.__signals, self.__target, key)
 		end
@@ -855,7 +888,7 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		return if type(value) == "table" then createProxy(value) else value
 	end
 
-	function proxyMeta.__newindex(self: Proxy, key: any, value: any)
+	function proxyMeta.__newindex(self: ReactiveProxy, key: any, value: any)
 		if type(value) == "table" and getmetatable(value) == proxyMeta then
 			value = value.__target
 		end
@@ -865,61 +898,61 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		end
 	end
 
-	function proxyMeta.__iter(self: Proxy)
+	function proxyMeta.__iter(self: ReactiveProxy)
 		track()
-		return nextProxy, self.__target
+		local function iterator(target: {}, index: any)
+			local key, value = next(target, index)
+			return key, if type(value) == "table" then createProxy(value) else value
+		end
+		return iterator, self.__target
 	end
 
-	function proxyMeta.__len(self: Proxy)
+	function proxyMeta.__len(self: ReactiveProxy)
 		track()
 		return #self.__target
 	end
 
-	return createProxy(initialValue) :: any, setValue
+	function proxyMeta.set(update: ((T) -> ()) | T?)
+		if type(update) == "function" then
+			update(initialValue)
+		elseif type(update) == "table" then
+			table.clear(initialValue)
+			for key, value in update :: {} do
+				(initialValue :: {})[key] = value
+			end
+		end
+		trigger(track)
+	end
+
+	return createProxy(initialValue), proxyMeta.set
+end
+
+--[[
+	Unwraps a reactive proxy to get the original table. If the provided value
+	is not a proxy, it is returned as-is.
+
+	@param value A reactive proxy or a non-proxy value.
+	@return The unwrapped target value.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+]]
+local function toRaw<T>(value: T): T
+	if type(value) == "table" and getmetatable(value) ~= nil then
+		local proxy: ReactiveProxy = value
+		local meta = getmetatable(proxy)
+		if meta.value == proxy.__target then
+			-- Track the root proxy since nested proxies are already tracked
+			meta.track()
+		end
+		return proxy.__target :: any
+	else
+		return value
+	end
 end
 
 local reactiveSystem = system.createReactiveSystem({
-	update = function(node)
-		if node.depsTail then
-			return updateComputed(node :: ComputedNode)
-		else
-			return updateSignal(node :: SignalNode)
-		end
-	end,
-	notify = function(effect)
-		local insertIndex = queuedLength
-		local firstInsertedIndex = insertIndex
-
-		repeat
-			effect.flags = bit32.band(effect.flags, bit32.bnot(WATCHING))
-			queued[insertIndex] = effect :: EffectNode
-			insertIndex += 1
-			effect = (effect.subs and effect.subs.sub) :: EffectNode
-			if not effect or bit32.band(effect.flags, WATCHING) == 0 then
-				break
-			end
-		until false
-
-		queuedLength = insertIndex
-
-		insertIndex -= 1
-		while firstInsertedIndex < insertIndex do
-			local left = queued[firstInsertedIndex]
-			queued[firstInsertedIndex] = queued[insertIndex]
-			queued[insertIndex] = left
-			firstInsertedIndex += 1
-			insertIndex -= 1
-		end
-	end,
-	unwatched = function(node)
-		if bit32.band(node.flags, MUTABLE) == 0 then
-			effectOper(node :: EffectScopeNode)()
-		elseif node.depsTail then
-			node.depsTail = nil
-			node.flags = bit32.bor(MUTABLE, DIRTY)
-			purgeDeps(node)
-		end
-	end,
+	update = update,
+	notify = notify,
+	unwatched = unwatched,
 })
 
 link = reactiveSystem.link
@@ -954,4 +987,5 @@ return {
 		mapper: (item: VI, key: KI) -> (VO, KO)
 	) -> () -> { [KO]: VO }) & (<K, VI, VO>(getter: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO }),
 	reactive = reactive,
+	toRaw = toRaw,
 }

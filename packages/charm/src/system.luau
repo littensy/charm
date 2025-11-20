@@ -89,7 +89,7 @@ local function createReactiveSystem(props: {
 		return false
 	end
 
-	local function link(dep: ReactiveNode, sub: ReactiveNode, version: number): ()
+	local function link(dep: ReactiveNode, sub: ReactiveNode, version: number)
 		-- DEVIATION: Do not link signals to peeking subscribers
 		if bit32.btest(sub.flags, PEEKING) and bit32.btest(dep.flags, MUTABLE) then
 			return
@@ -166,7 +166,7 @@ local function createReactiveSystem(props: {
 		return nextDep
 	end
 
-	local function propagate(link: Link): ()
+	local function propagate(link: Link)
 		repeat
 			local sub = link.sub
 			local flags = sub.flags
@@ -200,7 +200,7 @@ local function createReactiveSystem(props: {
 		until not link
 	end
 
-	local function shallowPropagate(link: Link): ()
+	local function shallowPropagate(link: Link)
 		repeat
 			local sub = link.sub
 			local flags = sub.flags

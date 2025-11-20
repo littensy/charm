@@ -3,6 +3,7 @@ local suite = require("../../../../test/suite")
 
 local effect = Charm.effect
 local reactive = Charm.reactive
+local toRaw = Charm.toRaw
 local test = suite.test
 
 test("should track nested properties", function()
@@ -119,6 +120,24 @@ test("should overwrite with table passed to setter", function()
 
 	setSrc({ a = 2, c = 4 })
 	assert(table.concat(calls, ",") == "123,2nil4", table.concat(calls, ","))
+end)
+
+test("should unwrap raw table", function()
+	local raw = {}
+	local src = reactive(raw)
+	local runs = 0
+
+	effect(function()
+		local _ = toRaw(src)
+		runs += 1
+	end)
+
+	assert(toRaw(src) == raw, "unwrap did not return the original table")
+	assert(toRaw(raw) == raw, "unwrap modified a non-proxy value")
+	assert(runs == 1, runs)
+
+	src.x = 1
+	assert(runs == 2, runs)
 end)
 
 return {}

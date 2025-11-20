@@ -34,6 +34,8 @@
 - https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
 - https://angular.dev/guide/signals
 
+[Migrating from an older version?](#migration)
+
 <details>
 <summary><b>Table of Contents</b></summary>
 
@@ -42,6 +44,7 @@
     - [`signal(initialValue, equals?)`](#signalinitialvalue-equals)
     - [`computed(getter)`](#computedgetter)
     - [`effect(callback)`](#effectcallback)
+    - [`reactive(initialValue)`](#reactiveinitialvalue)
     - [`untracked(callback)`](#untrackedcallback)
     - [`peek(callback)`](#peekcallback)
     - [`batch(callback)`](#batchcallback)
@@ -54,7 +57,6 @@
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
     - [`recursive()`](#recursive)
     - [`trigger(callback)`](#triggercallback)
-    - [`reactive(initialValue)`](#reactiveinitialvalue)
     - [`flags`](#flags)
 - [Client-Server Sync](#client-server-sync)
     - [Installation](#installation-1)
@@ -276,9 +278,50 @@ setCounter(2) -- Outer: 2, Inner: 2
 
 ---
 
+### `reactive(initialValue)`
+
+By default, Charm's signals are _shallowly reactive_, meaning only the value itself is reactive, and table properties are not tracked. Signal values must also be **immutable** in order to track changes in tables.
+
+You can opt-in to deep reactivity with **reactive proxies**. The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and table values will also be wrapped in a reactive proxy.
+
+```luau
+local users, setUsers = reactive({
+	{ name = "John", surname = "Doe" },
+})
+
+-- Output: John Doe
+effect(function()
+	print(`{users[1].name} {users[1].surname}`)
+end)
+
+-- Output: Jane Smith
+setUsers(function(state)
+	state[1].name = "Jane"
+	state[1].surname = "Smith"
+	table.insert(state, { name = "Steve", surname = "Doe" })
+end)
+
+-- You can also mutate the reactive proxy directly:
+users[1].name = "John" -- John Smith
+```
+
+> [!WARNING]
+> Because reactive proxies use metatables for reading and writing, functions like `table.insert` will not work on the proxy. Table functions should only be called on the raw table value.
+
+If you need to access the raw table through the reactive proxy, use the `toRaw()` function:
+
+```luau
+local raw = {}
+local proxy = reactive(raw)
+
+print(toRaw(proxy) == raw) -- true
+```
+
+---
+
 ### `untracked(callback)`
 
-In case you want to read signals but don't want to subscribe to them, you can use `untracked()` to essentially run code _outside_ the current effect, preventing signals and effects in the callback from being tracked.
+In case you want to opt-out of dependency tracking in an effect, you can use `untracked()` to call a function _outside_ the current scope, preventing signals and effects in the function from being tracked.
 
 ```luau
 local getTracked, setTracked = signal(0)
@@ -294,7 +337,7 @@ setUntracked(1) -- No output
 setTracked(2) -- Tracked: 2, Untracked: 1
 ```
 
-Because `untracked()` executes the callback outside the current effect, nested effects created in the callback do not get tracked by the parent effect:
+Because `untracked()` executes the callback outside the current effect, nested effects created during the execution of the callback will not be tracked by the parent effect:
 
 ```luau
 local stopEffect
@@ -599,45 +642,6 @@ end)
 
 print(total()) -- 2
 ```
-
----
-
-### `reactive(initialValue)`
-
-The `reactive()` function creates a mutable reactive object that subscribes to only the properties you read. It also returns a setter function you can use to mutate the original table:
-
-```luau
-local users, setUsers = reactive({
-	user = { name = "John", surname = "Doe" },
-})
-
--- Output: John Doe
-effect(function()
-	print(`{users.user.name} {users.user.surname}`)
-end)
-
--- Output: Jane Smith
-setUsers(function(state)
-	state.user.name = "Jane"
-	state.user.surname = "Smith"
-end)
-```
-
-You can also set properties on the reactive object directly:
-
-```luau
-local id = reactive({ name = "John", surname = "Doe" })
-
-effect(function()
-	print(`{id.name} {id.surname}`)
-end)
-
-id.name = "Jane" -- Jane Doe
-id.surname = "Smith" -- Jane Smith
-```
-
-> [!WARNING]
-> Be careful when mutating the reactive object! Because it's a proxy, functions like `table.insert` will not work. Table functions should be called on the original table, which is provided by the setter function.
 
 ---
 
@@ -948,7 +952,7 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
     - Instead of creating client/server syncers, these modules now act like singletons. Sync APIs are called directly through `CharmSync.client`/`server`.
     - [Read the updated docs for syncing state →](#client-server-sync)
 
-3. The [`strict` and `frozen` flags](#flags) are automatically enabled in Roblox Studio, so unsafe Charm code will start throwing errors if you didn't use the old `__DEV__` flag. The flags have the following behavior:
+3. The [`strict` and `frozen` flags](#flags) are automatically enabled in Roblox Studio, so unsafe Charm code will start throwing errors. The flags have the following behaviors:
     - `strict`: Yielding in effects, signals, and other critical Charm functions will throw an error
     - `frozen`: Tables passed to signals are deeply frozen to strictly enforce data immutability and prevent accidental mutations
 
@@ -966,14 +970,12 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
     - Recursive checks are opt-out. You can allow recursion for a specific effect by calling [`recursive()`](#recursive) at the top of the effect callback.
 
 6. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
-    - Added [`signal()`](#signalinitialvalue-equals) to make reads and writes more explicit
-    - Added [`listen()`](#listengetter-callback) to create a subscription that runs once immediately
-    - Added [`effectScope()`](#effectscopecallback) for collecting and cleaning up multiple effects at once
-    - Added [`onCleanup()`](#oncleanupcallback-failsilently) to bind a cleanup function to the active effect
-    - Added [`trigger()`](#triggercallback) to trigger updates for table mutations
-    - The [`computed()`](#computedgetter) callback now gets called with the previous computed value
-    - Optimized `computed()` to use lazy evaluation instead of eager updates
-    - Optimized `mapped()` to only map values that changed in the original table
+    - [`reactive()`](#reactiveinitialvalue): make mutable tables deeply reactive
+    - [`signal()`](#signalinitialvalue-equals): make reads and writes more explicit
+    - [`listen()`](#listengetter-callback): create a subscription that runs once immediately
+    - [`effectScope()`](#effectscopecallback): collect and clean up multiple effects at once
+    - [`onCleanup()`](#oncleanupcallback-failsilently): bind a cleanup function to the active effect
+    - [`trigger()`](#triggercallback): trigger updates for table mutations
 
 ---
 

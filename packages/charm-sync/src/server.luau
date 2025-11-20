@@ -4,20 +4,19 @@ local patch = require("./patch")
 local types = require("./types")
 local utils = require("./utils")
 
+type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
 type SyncPayload = types.SyncPayload
 
 type SyncStatus = number
 
 type ClientKeys = { [string]: SyncStatus }
 
-type Reactive<T> = typeof(setmetatable({}, {} :: { initialValue: T, track: () -> () }))
-
 type TrackedState<T = any> = {
 	target: any,
 	currentValue: T,
 	lastSyncedValue: T,
-	dispose: () -> (),
 	isReactive: boolean?,
+	dispose: () -> (),
 }
 
 type StateUpdate = {
@@ -68,21 +67,21 @@ local function trackSignal<T>(key: string, getter: () -> T)
 	trackedStates[key] = trackedState
 end
 
-local function trackReactive<T>(key: string, reactive: Reactive<T>)
+local function trackReactive<T>(key: string, proxy: ReactiveProxy<T>)
 	if trackedStates[key] then
-		if trackedStates[key].target ~= reactive then
+		if trackedStates[key].target ~= proxy then
 			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
 		return
 	end
 
-	local meta = getmetatable(reactive)
-	local snapshot = utils.deepCopy(meta.initialValue)
+	local meta = getmetatable(proxy)
+	local snapshot = utils.deepCopy(meta.value)
 	local firstRun = true
 
 	local trackedState = {
-		target = reactive,
-		currentValue = meta.initialValue,
+		target = proxy,
+		currentValue = meta.value,
 		lastSyncedValue = snapshot,
 		isReactive = true,
 	}
@@ -93,7 +92,7 @@ local function trackReactive<T>(key: string, reactive: Reactive<T>)
 			firstRun = false
 		else
 			local oldSnapshot = snapshot
-			snapshot = utils.deepCopy(meta.initialValue)
+			snapshot = utils.deepCopy(meta.value)
 			table.insert(globalUpdates, {
 				key = key,
 				newValue = snapshot,
@@ -258,7 +257,7 @@ end
 	@param client The client receiving state updates.
 	@param signals A map of getter functions to sync with the client.
 ]]
-local function addSignalsToClient(client: any, signals: { [string]: { [any]: any } | () -> any })
+local function addSignalsToClient(client: any, signals: { [string]: {} | () -> any })
 	if not clients[client] then
 		clients[client] = {}
 	end

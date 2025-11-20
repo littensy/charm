@@ -6,10 +6,6 @@ type NestedTable = {
 	[any]: NestedTable | any,
 }
 
-type FlattenedTable = {
-	[any]: any,
-}
-
 --[[
 	Flattens a nested table into a single table with slash-separated keys.
 	Useful for recursively collecting atoms returned by modules.
@@ -17,15 +13,15 @@ type FlattenedTable = {
 	@param input A nested table.
 	@return A flattened table with slash-separated keys.
 ]]
-local function flatten(input: NestedTable): FlattenedTable
-	local result: FlattenedTable = {}
+local function flatten<Flattened>(input: {}): Flattened
+	local result = {}
 
-	local function visit(node: NestedTable, path: string)
+	local function visit(node: {}, path: string)
 		for key, value in node do
-			local location = if path == "" then key else path .. "/" .. key
+			local location = if path == "" then tostring(key) else path .. "/" .. tostring(key)
 
 			if type(value) == "table" then
-				visit(value :: NestedTable, location)
+				visit(value :: {}, location)
 			else
 				result[location] = value
 			end
@@ -34,7 +30,7 @@ local function flatten(input: NestedTable): FlattenedTable
 
 	visit(input, "")
 
-	return result
+	return result :: any
 end
 
 --[[

@@ -1,22 +1,19 @@
 local Charm = require("../")
 local suite = require("../../../../test/suite")
 
-local atom = Charm.atom
+type ReactiveProxy<T = any> = Charm.ReactiveProxy<T>
+
+local signal = Charm.signal
 local computed = Charm.computed
 local effect = Charm.effect
 local effectScope = Charm.effectScope
+local reactive = Charm.reactive
 local test = suite.test
 
---[[
-	Creates a weak reference to a value.
-]]
 local function weakRef<T>(value: T): { value: T? }
 	return setmetatable({ value = value }, { __mode = "v" }) :: any
 end
 
---[[
-	Triggers garbage collection by creating a large number of tables.
-]]
 local function gc()
 	for _ = 1, 2000 do
 		local _ = table.create(100, 0)
@@ -41,14 +38,14 @@ end
 
 test("should release computed cache", function()
 	local srcRef = weakRef({})
-	local src = atom(srcRef.value)
+	local src, setSrc = signal(srcRef.value)
 	local c = computed(function()
 		return src()
 	end)
 
 	c() -- cache src value
-	src(nil) -- release value
-	c = unlink(c) -- release computed
+	setSrc(nil) -- release value
+	unlink(c) -- release computed
 
 	gc()
 	assert(srcRef.value == nil, "should release computed cache")
@@ -56,7 +53,7 @@ end)
 
 test("should not release effect for atom", function()
 	local effectCalls = 0
-	local src = atom(0)
+	local src, setSrc = signal(0)
 
 	effect(function()
 		effectCalls += 1
@@ -65,8 +62,52 @@ test("should not release effect for atom", function()
 	assert(effectCalls == 1, "should call effect once")
 
 	gc()
-	src(src() + 1)
+	setSrc(src() + 1)
 	assert(effectCalls == 2, "should call effect again")
+end)
+
+test("should release reactive tables", function()
+	local valueRef = weakRef({})
+	local src = reactive({ value = valueRef.value })
+
+	effect(function()
+		local _ = src.value -- create proxy
+	end)
+	src.value = nil :: any -- release proxy
+
+	gc()
+	assert(valueRef.value == nil, "should release reactive table")
+	assert((src :: ReactiveProxy).__signals.value == nil, "should release reactive signals")
+end)
+
+test("should release reactive property deps", function()
+	local src = reactive({ foo = 1 })
+
+	local c = computed(function()
+		return src.foo
+	end)
+
+	c()
+	assert((src :: ReactiveProxy).__signals.foo ~= nil, "should have deps for foo")
+
+	c = nil :: any
+	gc()
+	assert((src :: ReactiveProxy).__signals.foo == nil, "should release deps for foo")
+end)
+
+test("should not release effect for reactive", function()
+	local src = reactive({ foo = 1 })
+	local calls = 0
+
+	effect(function()
+		calls += 1
+		local _ = src.foo
+	end)
+	assert(calls == 1, "should call effect once")
+
+	gc()
+	src.foo += 1
+	assert(calls == 2, "should call effect again")
 end)
 
 return {}

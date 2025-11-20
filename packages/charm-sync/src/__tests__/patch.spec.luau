@@ -5,7 +5,7 @@ local suite = require("../../../../test/suite")
 local test = suite.test
 local afterEach = suite.afterEach
 
-local function mockArraySerdes(object: { [any]: any }): { [any]: any }
+local function mockArraySerdes(object: {}): {}
 	if object[1] then
 		local copy = {}
 		for index = 1, #object do
