@@ -6,7 +6,7 @@ export type Link = system.Link
 
 export type Atom<T = any> = (...((T) -> T) | T) -> T
 
-type ReactiveProxyMeta<T = {}> = {
+type ReactiveProxyApi<T = {}> = {
 	value: T,
 	track: () -> (),
 	set: (T | (T) -> ()?) -> (),
@@ -17,7 +17,7 @@ type ReactiveProxyProps<T = {}> = {
 	__signals: { [unknown]: () -> unknown },
 }
 
-export type ReactiveProxy<T = {}> = T & typeof(setmetatable({} :: ReactiveProxyProps<T>, {} :: ReactiveProxyMeta<T>))
+export type ReactiveProxy<T = {}> = T & typeof(setmetatable({} :: ReactiveProxyProps<T>, {} :: ReactiveProxyApi<T>))
 
 type EffectScopeNode = ReactiveNode & {
 	cleanups: { () -> () },
@@ -855,7 +855,7 @@ end
 ]]
 local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -> ())
 	local track = signal(nil)
-	local proxyMeta = { value = initialValue, track = track }
+	local proxyApi = { value = initialValue, track = track }
 	local proxyMap = setmetatable({} :: { [{}]: any }, { __mode = "v" })
 
 	local function trackProperty(cache: { [any]: () -> any }, target: {}, key: any)
@@ -876,11 +876,11 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		proxyMap[target] = setmetatable({
 			__target = target,
 			__signals = setmetatable({}, { __mode = "v" }),
-		}, proxyMeta)
+		}, proxyApi)
 		return proxyMap[target]
 	end
 
-	function proxyMeta.__index(self: ReactiveProxy, key: any): any
+	function proxyApi.__index(self: ReactiveProxy, key: any): any
 		if activeSub then
 			trackProperty(self.__signals, self.__target, key)
 		end
@@ -888,8 +888,8 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		return if type(value) == "table" then createProxy(value) else value
 	end
 
-	function proxyMeta.__newindex(self: ReactiveProxy, key: any, value: any)
-		if type(value) == "table" and getmetatable(value) == proxyMeta then
+	function proxyApi.__newindex(self: ReactiveProxy, key: any, value: any)
+		if type(value) == "table" and getmetatable(value) == proxyApi then
 			value = value.__target
 		end
 		if self.__target[key] ~= value then
@@ -898,7 +898,7 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		end
 	end
 
-	function proxyMeta.__iter(self: ReactiveProxy)
+	function proxyApi.__iter(self: ReactiveProxy)
 		track()
 		local function iterator(target: {}, index: any)
 			local key, value = next(target, index)
@@ -907,12 +907,12 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		return iterator, self.__target
 	end
 
-	function proxyMeta.__len(self: ReactiveProxy)
+	function proxyApi.__len(self: ReactiveProxy)
 		track()
 		return #self.__target
 	end
 
-	function proxyMeta.set(update: ((T) -> ()) | T?)
+	function proxyApi.set(update: ((T) -> ()) | T?)
 		if type(update) == "function" then
 			update(initialValue)
 		elseif type(update) == "table" then
@@ -924,7 +924,7 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 		trigger(track)
 	end
 
-	return createProxy(initialValue), proxyMeta.set
+	return createProxy(initialValue), proxyApi.set
 end
 
 --[[
@@ -938,10 +938,10 @@ end
 local function toRaw<T>(value: T): T
 	if type(value) == "table" and getmetatable(value) ~= nil then
 		local proxy: ReactiveProxy = value
-		local meta = getmetatable(proxy)
-		if meta.value == proxy.__target then
+		local api = getmetatable(proxy)
+		if api.value == proxy.__target then
 			-- Track the root proxy since nested proxies are already tracked
-			meta.track()
+			api.track()
 		end
 		return proxy.__target :: any
 	else

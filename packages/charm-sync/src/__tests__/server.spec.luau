@@ -210,6 +210,26 @@ test("should serialize state", function()
 	assert(patch.isNone(payloads[1].data.a["5"]), "Expected index 5 to be serialized as string key")
 end)
 
+test("should not send unchanged state", function()
+	local client = {}
+	local a = Charm.atom(0)
+	local payloads
+
+	server.addSignalsToClient(client, { a = a })
+	server.connect(function(_, p)
+		payloads = p
+	end)
+
+	server.flush()
+	assert(payloads[1].type == "init", "Expected first payload to be init")
+	assert(payloads[1].data.a == 0, "Expected init payload to contain atom 'a'")
+
+	payloads = {}
+	a(0)
+	server.flush()
+	assert(#payloads == 0, "Expected no payloads to be sent for unchanged state")
+end)
+
 describe("historical", function()
 	beforeEach(function()
 		config.preserveHistory = true
@@ -343,6 +363,26 @@ describe("historical", function()
 		assert(payloads[3].data.b == 1, "Expected init payload to contain atom 'b'")
 		assert(payloads[4].type == "patch", "Expected fourth payload to be patch")
 		assert(payloads[4].data.b == 2, "Expected patch payload to contain atom 'b'")
+	end)
+
+	test("should not send unchanged state", function()
+		local client = {}
+		local a = Charm.atom(0)
+		local payloads
+
+		server.addSignalsToClient(client, { a = a })
+		server.connect(function(_, p)
+			payloads = p
+		end)
+
+		server.flush()
+		assert(payloads[1].type == "init", "Expected first payload to be init")
+		assert(payloads[1].data.a == 0, "Expected init payload to contain atom 'a'")
+
+		payloads = {}
+		a(0)
+		server.flush()
+		assert(#payloads == 0, "Expected no payloads to be sent for unchanged state")
 	end)
 end)
 

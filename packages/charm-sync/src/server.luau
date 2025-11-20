@@ -75,24 +75,24 @@ local function trackReactive<T>(key: string, proxy: ReactiveProxy<T>)
 		return
 	end
 
-	local meta = getmetatable(proxy)
-	local snapshot = utils.deepCopy(meta.value)
+	local api = getmetatable(proxy)
+	local snapshot = utils.deepCopy(api.value)
 	local firstRun = true
 
 	local trackedState = {
 		target = proxy,
-		currentValue = meta.value,
+		currentValue = api.value,
 		lastSyncedValue = snapshot,
 		isReactive = true,
 	}
 
 	trackedState.dispose = Charm.effect(function()
-		meta.track()
+		api.track()
 		if not config.preserveHistory or firstRun then
 			firstRun = false
 		else
 			local oldSnapshot = snapshot
-			snapshot = utils.deepCopy(meta.value)
+			snapshot = utils.deepCopy(api.value)
 			table.insert(globalUpdates, {
 				key = key,
 				newValue = snapshot,
@@ -132,8 +132,8 @@ local function diffGlobalUpdateBuffer(): { any }
 	local patchCount = #globalUpdates
 	local patches = table.create(patchCount)
 
-	for index, update in globalUpdates do
-		patches[index] = patch.diff(update.oldValue, update.newValue)
+	for _, update in globalUpdates do
+		table.insert(patches, patch.diff(update.oldValue, update.newValue))
 	end
 
 	return patches
@@ -176,7 +176,7 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 
 	-- If a pending signal was never updated, we still need to send its initial
 	-- state. This can happen if a signal was registered after its last change.
-	local initData: { [string]: any } = {}
+	local initData = {}
 
 	for key, status in clientKeys do
 		local trackedState = trackedStates[key]
@@ -194,7 +194,7 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 	return payloads
 end
 
-local function diffGlobalState(): any
+local function diffGlobalState(): { [string]: any }?
 	local currentGlobalState: { [string]: any } = {}
 	local previousGlobalState: { [string]: any } = {}
 
@@ -211,7 +211,7 @@ local function diffGlobalState(): any
 	return patch.diff(previousGlobalState, currentGlobalState)
 end
 
-local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPayload }?
+local function selectFromGlobalPatch(client: any, globalPatch: { [string]: any }?): { SyncPayload }?
 	local clientKeys = clients[client]
 
 	if not clientKeys then
@@ -227,7 +227,7 @@ local function selectFromGlobalPatch(client: any, globalPatch: any): { SyncPaylo
 	for key, status in clientKeys do
 		local trackedState = trackedStates[key]
 
-		if status == LISTENING_FOR_CHANGES then
+		if status == LISTENING_FOR_CHANGES and globalPatch then
 			patchData[key] = globalPatch[key]
 		elseif status == PENDING_INITIAL_STATE then
 			initData[key] = trackedState.currentValue
@@ -323,11 +323,11 @@ local function flush()
 	end
 
 	local granular = config.preserveHistory
-	local globalPatch = if granular then diffGlobalUpdateBuffer() else diffGlobalState()
+	local globalPatch: { [any]: any }? = if granular then diffGlobalUpdateBuffer() else diffGlobalState()
 
 	for client in clients do
 		local payloads = if granular
-			then selectFromGlobalPatchList(client, globalPatch)
+			then selectFromGlobalPatchList(client, globalPatch :: { any })
 			else selectFromGlobalPatch(client, globalPatch)
 
 		if payloads and payloads[1] then
