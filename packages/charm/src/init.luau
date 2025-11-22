@@ -900,11 +900,7 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 
 	function proxyApi.__iter(self: ReactiveProxy)
 		track()
-		local function iterator(target: {}, index: any)
-			local key, value = next(target, index)
-			return key, if type(value) == "table" then createProxy(value) else value
-		end
-		return iterator, self.__target
+		return next, self.__target
 	end
 
 	function proxyApi.__len(self: ReactiveProxy)
