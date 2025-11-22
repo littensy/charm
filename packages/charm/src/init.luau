@@ -933,16 +933,14 @@ end
 ]]
 local function toRaw<T>(value: T): T
 	if type(value) == "table" and getmetatable(value) ~= nil then
-		local proxy: ReactiveProxy = value
-		local api = getmetatable(proxy)
-		if api.value == proxy.__target then
-			-- Track the root proxy since nested proxies are already tracked
+		local value: ReactiveProxy = value
+		local api = getmetatable(value)
+		if api then
 			api.track()
+			return value.__target :: any
 		end
-		return proxy.__target :: any
-	else
-		return value
 	end
+	return value
 end
 
 local reactiveSystem = system.createReactiveSystem({

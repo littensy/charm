@@ -71,7 +71,7 @@ end)
 
 test("should replicate partial state patches (reactive)", function()
 	local client = {}
-	local a: { [string]: number? } = Charm.reactive({ x = 0, y = 0, z = 0 })
+	local a = Charm.reactive({ x = { y = 0 }, z = 0 :: number? })
 	local target, payloads
 
 	server.addSignalsToClient(client, { a = a })
@@ -82,18 +82,24 @@ test("should replicate partial state patches (reactive)", function()
 	server.flush()
 	assert(target == client, "Expected target to be the client")
 	assert(payloads[1].type == "init", "Expected first payload to be init")
-	assert(payloads[1].data.a.x == a.x, "Expected init payload to contain value 'a.x'")
-	assert(payloads[1].data.a.y == a.y, "Expected init payload to contain value 'a.y'")
+	assert(payloads[1].data.a.x ~= nil, "Expected init payload to contain value 'a.x'")
+	assert(payloads[1].data.a.x.y == a.x.y, "Expected init payload to contain value 'a.x.y'")
 	assert(payloads[1].data.a.z == a.z, "Expected init payload to contain value 'a.z'")
 
-	a.x = 1
+	a.x.y = 1
 	a.z = nil
 	server.flush()
 	assert(target == client, "Expected target to be the client")
 	assert(payloads[1].type == "patch", "Expected first payload to be patch")
-	assert(payloads[1].data.a.x == 1, "Expected patch payload to contain value 'a.x'")
-	assert(payloads[1].data.a.y == nil, "Expected patch payload to not contain value 'a.y'")
+	assert(payloads[1].data.a.x.y == 1, "Expected patch payload to contain value 'a.x'")
 	assert(patch.isNone(payloads[1].data.a.z), "Expected patch payload to contain value 'a.z' as None")
+
+	a.z = 1
+	server.flush()
+	assert(target == client, "Expected target to be the client")
+	assert(payloads[1].type == "patch", "Expected first payload to be patch")
+	assert(payloads[1].data.a.z == 1, "Expected patch payload to contain value 'a.z'")
+	assert(payloads[1].data.a.x == nil, "Expected patch payload to not contain value 'a.x'")
 end)
 
 test("should init new clients", function()

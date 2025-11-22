@@ -88,7 +88,10 @@ local function trackReactive<T>(key: string, proxy: ReactiveProxy<T>)
 
 	trackedState.dispose = Charm.effect(function()
 		api.track()
-		if not config.preserveHistory or firstRun then
+		if not config.preserveHistory then
+			return
+		end
+		if firstRun then
 			firstRun = false
 		else
 			local oldSnapshot = snapshot
