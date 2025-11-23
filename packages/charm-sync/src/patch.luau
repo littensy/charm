@@ -112,22 +112,22 @@ local function apply(oldState: any, diffs: any): any
 end
 
 local function applyMutable(targetState: any, sourceState: any): any
-	if type(targetState) == "table" and type(sourceState) == "table" then
-		local targetIsArray = targetState[1] ~= nil
-
-		for key, value in sourceState do
-			if targetIsArray and type(key) == "string" then
-				key = tonumber(key) or key
-			end
-			targetState[key] = applyMutable(targetState[key], value)
-		end
-
-		return targetState
-	elseif isNone(sourceState) then
+	if isNone(sourceState) then
 		return nil
-	else
+	elseif type(targetState) ~= "table" or type(sourceState) ~= "table" then
 		return sourceState
 	end
+
+	local targetIsArray = targetState[1] ~= nil
+
+	for key, value in sourceState do
+		if targetIsArray and type(key) == "string" then
+			key = tonumber(key) or key
+		end
+		targetState[key] = applyMutable(targetState[key], value)
+	end
+
+	return targetState
 end
 
 return {

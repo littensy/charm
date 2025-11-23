@@ -127,4 +127,10 @@ test("patches mutable state", function()
 	assert(targetState.qaz == "qux", "should add the new value")
 end)
 
+test("removes table from mutable state", function()
+	local targetState = { foo = { bar = "baz" } }
+	patch.applyMutable(targetState, { foo = { __none = "__none" } })
+	assert(targetState.foo == nil, "should remove the table")
+end)
+
 return {}
