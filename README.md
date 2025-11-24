@@ -981,7 +981,7 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 
 ## Examples
 
-Check out this simple [example project →](https://github.com/littensy/charm-example)
+- https://github.com/littensy/fishing-minigame: Fisch clone using Charm for server and client state
 
 ### React Counter
 

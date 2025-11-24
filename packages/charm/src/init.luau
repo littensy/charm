@@ -889,7 +889,7 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 	end
 
 	function proxyApi.__newindex(self: ReactiveProxy, key: any, value: any)
-		if type(value) == "table" and getmetatable(value) == proxyApi then
+		if type(value) == "table" and type(value.__target) == "table" then
 			value = value.__target
 		end
 		if self.__target[key] ~= value then
@@ -932,13 +932,12 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
 local function toRaw<T>(value: T): T
-	if type(value) == "table" and getmetatable(value) ~= nil then
-		local value: ReactiveProxy = value
-		local api = getmetatable(value)
-		if api then
-			api.track()
-			return value.__target :: any
+	if type(value) == "table" and type(value.__target) == "table" then
+		-- Iteration starts tracking the reactive proxy
+		for _ in value do
+			break
 		end
+		return value.__target
 	end
 	return value
 end
