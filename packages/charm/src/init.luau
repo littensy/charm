@@ -924,6 +924,17 @@ local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -
 end
 
 --[[
+	Determines if the provided value is a reactive proxy created by `reactive()`.
+
+	@param value A value to test.
+	@return `true` if the value is a reactive proxy, `false` otherwise.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+]]
+local function isReactive(value: any): boolean
+	return type(value) == "table" and type(value.__target) == "table" and getmetatable(value) ~= nil
+end
+
+--[[
 	Unwraps a reactive proxy to get the original table. If the provided value
 	is not a proxy, it is returned as-is.
 
@@ -932,12 +943,9 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
 local function toRaw<T>(value: T): T
-	if type(value) == "table" and type(value.__target) == "table" then
-		-- Iteration starts tracking the reactive proxy
-		for _ in value do
-			break
-		end
-		return value.__target
+	if isReactive(value) then
+		getmetatable(value :: ReactiveProxy<T>).track()
+		return (value :: ReactiveProxy<T>).__target
 	end
 	return value
 end
@@ -980,5 +988,6 @@ return {
 		mapper: (item: VI, key: KI) -> (VO, KO)
 	) -> () -> { [KO]: VO }) & (<K, VI, VO>(getter: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO }),
 	reactive = reactive,
+	isReactive = isReactive,
 	toRaw = toRaw,
 }

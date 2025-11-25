@@ -12,10 +12,10 @@ type SyncStatus = number
 type ClientKeys = { [string]: SyncStatus }
 
 type TrackedState<T = any> = {
-	target: any,
+	identifier: unknown,
 	currentValue: T,
 	lastSyncedValue: T,
-	isReactive: boolean?,
+	isReactive: boolean,
 	dispose: () -> (),
 }
 
@@ -35,74 +35,53 @@ local clients: { [any]: ClientKeys } = {}
 local connection: RBXScriptConnection?
 local syncCallback: (client: any, payloads: { SyncPayload }) -> ()?
 
-local function trackSignal<T>(key: string, getter: () -> T)
+local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 	if trackedStates[key] then
 		-- Ignore duplicates, but warn against name collisions
-		if trackedStates[key].target ~= getter then
+		if trackedStates[key].identifier ~= identifier then
 			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
 		return
 	end
 
-	local value = getter()
-	local trackedState = {
-		target = getter,
-		currentValue = value,
-		lastSyncedValue = value,
-	}
+	local trackedState: TrackedState<T>
+	local initialValue = getter()
+	local rawInitialValue = Charm.toRaw(initialValue)
+	local initialIsReactive = initialValue ~= rawInitialValue
+	local snapshot = if initialIsReactive then utils.deepCopy(rawInitialValue) else initialValue
 
-	trackedState.dispose = Charm.subscribe(getter, function(newValue, oldValue)
+	local dispose = Charm.effect(function()
+		local newValue = getter()
+		local rawValue = Charm.toRaw(newValue)
+		local isReactive = newValue ~= rawValue
+
+		if not trackedState then
+			return
+		end
+
 		-- When preserving history, we need to keep track of previous values
 		-- so we can create granular patches for each change.
 		if config.preserveHistory then
-			table.insert(globalUpdates, {
-				key = key,
-				newValue = newValue,
-				oldValue = oldValue,
-			})
-		end
-		trackedState.currentValue = newValue
-	end)
-
-	trackedStates[key] = trackedState
-end
-
-local function trackReactive<T>(key: string, proxy: ReactiveProxy<T>)
-	if trackedStates[key] then
-		if trackedStates[key].target ~= proxy then
-			warn("[Charm] Attempted to sync different states with the same key:", key)
-		end
-		return
-	end
-
-	local api = getmetatable(proxy)
-	local snapshot = utils.deepCopy(api.value)
-	local firstRun = true
-
-	local trackedState = {
-		target = proxy,
-		currentValue = api.value,
-		lastSyncedValue = snapshot,
-		isReactive = true,
-	}
-
-	trackedState.dispose = Charm.effect(function()
-		api.track()
-		if not config.preserveHistory then
-			return
-		end
-		if firstRun then
-			firstRun = false
-		else
 			local oldSnapshot = snapshot
-			snapshot = utils.deepCopy(api.value)
+			snapshot = if isReactive then utils.deepCopy(rawValue) else newValue
 			table.insert(globalUpdates, {
 				key = key,
 				newValue = snapshot,
 				oldValue = oldSnapshot,
 			})
 		end
+
+		trackedState.currentValue = rawValue
+		trackedState.isReactive = isReactive
 	end)
+
+	trackedState = {
+		identifier = identifier,
+		currentValue = rawInitialValue,
+		lastSyncedValue = snapshot,
+		isReactive = initialIsReactive,
+		dispose = dispose,
+	}
 
 	trackedStates[key] = trackedState
 end
@@ -269,9 +248,11 @@ local function addSignalsToClient(client: any, signals: { [string]: {} | () -> a
 
 	for key, signal in signals do
 		if type(signal) == "function" then
-			trackSignal(key, signal)
+			trackSignal(key, signal, signal)
 		else
-			trackReactive(key, signal :: any)
+			trackSignal(key, function()
+				return signal
+			end, signal)
 		end
 
 		if not clientKeys[key] then

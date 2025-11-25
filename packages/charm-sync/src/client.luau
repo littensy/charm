@@ -5,11 +5,10 @@ local types = require("./types")
 type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
 type SyncPayload = types.SyncPayload
 
-type SignalSetter<T = any> = (T | (T) -> T) -> ()
-type ReactiveSetter<T = any> = (T | (T) -> ()) -> ()
+type Setter<T = any> = (T | (T) -> any) -> ()
 
-local trackedSignals: { [string]: SignalSetter } = {}
-local trackedReactives: { [string]: ReactiveSetter } = {}
+local trackedSignals: { [string]: Setter } = {}
+local trackedReactives: { [string]: Setter } = {}
 
 --[[
 	Registers a map of setters to the state with the corresponding keys on the
@@ -22,7 +21,7 @@ local trackedReactives: { [string]: ReactiveSetter } = {}
 
 	@param signals A map of setter functions to sync with the server.
 ]]
-local function addSignals(signals: { [string]: SignalSetter | {} })
+local function addSignals(signals: { [string]: Setter | {} })
 	for key, signal in signals do
 		if type(signal) == "function" then
 			trackedSignals[key] = signal
@@ -55,7 +54,7 @@ end
 
 local function applyInitPayload(data: { [string]: any })
 	for key, value in data do
-		local trackedSignal: SignalSetter? = trackedSignals[key] or trackedReactives[key]
+		local trackedSignal: Setter? = trackedSignals[key] or trackedReactives[key]
 		if trackedSignal then
 			trackedSignal(value)
 		end
@@ -72,7 +71,7 @@ local function applyPatchPayload(data: { [string]: any })
 				return patch.apply(value, diffs)
 			end)
 		elseif trackedReactive then
-			trackedReactive(function(value)
+			trackedReactive(function(value): ()
 				patch.applyMutable(value, diffs)
 			end)
 		end

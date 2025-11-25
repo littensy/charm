@@ -111,16 +111,16 @@ local function apply(oldState: any, diffs: any): any
 	return newState
 end
 
-local function applyMutable(targetState: any, sourceState: any): any
-	if isNone(sourceState) then
+local function applyMutable(targetState: any, diffs: any): any
+	if isNone(diffs) then
 		return nil
-	elseif type(targetState) ~= "table" or type(sourceState) ~= "table" then
-		return sourceState
+	elseif type(targetState) ~= "table" or type(diffs) ~= "table" then
+		return diffs
 	end
 
 	local targetIsArray = targetState[1] ~= nil
 
-	for key, value in sourceState do
+	for key, value in diffs do
 		if targetIsArray and type(key) == "string" then
 			key = tonumber(key) or key
 		end

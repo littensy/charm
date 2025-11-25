@@ -310,6 +310,15 @@ export function reactive<T extends object>(
 ): LuaTuple<[value: T, setter: (update: T | ((initialValue: T) => void)) => T]>;
 
 /**
+ * Determines if the provided value is a reactive proxy created by `reactive()`.
+ *
+ * @param value A value to test.
+ * @returns `true` if the value is a reactive proxy, `false` otherwise.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+ */
+export function isReactive(value: unknown): boolean;
+
+/**
  * Unwraps a reactive proxy to get the original table. If the provided value
  * is not a proxy, it is returned as-is.
  *
