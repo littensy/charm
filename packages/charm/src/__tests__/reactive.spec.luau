@@ -122,7 +122,7 @@ test("should overwrite with table passed to setter", function()
 	assert(table.concat(calls, ",") == "123,2nil4", table.concat(calls, ","))
 end)
 
-test("should unwrap raw table", function()
+test("should unwrap proxy", function()
 	local raw = {}
 	local src = reactive(raw)
 	local runs = 0
@@ -138,6 +138,27 @@ test("should unwrap raw table", function()
 
 	src.x = 1
 	assert(runs == 2, runs)
+end)
+
+test("should unwrap nested proxy", function()
+	local raw = {}
+	local inner = reactive(raw)
+	local src = reactive(inner)
+	local runs = 0
+
+	effect(function()
+		local _ = toRaw(src)
+		runs += 1
+	end)
+
+	assert(toRaw(src) == raw, "unwrap did not return the original table")
+	assert(runs == 1, runs)
+
+	inner.x = 1
+	assert(runs == 2, runs)
+
+	src.y = 2
+	assert(runs == 3, runs)
 end)
 
 return {}

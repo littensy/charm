@@ -6,18 +6,15 @@ export type Link = system.Link
 
 export type Atom<T = any> = (...((T) -> T) | T) -> T
 
-type ReactiveProxyApi<T = {}> = {
-	value: T,
-	track: () -> (),
-	set: (T | (T) -> ()?) -> (),
-}
-
-type ReactiveProxyProps<T = {}> = {
-	__target: T,
-	__signals: { [unknown]: () -> unknown },
-}
-
-export type ReactiveProxy<T = {}> = T & typeof(setmetatable({} :: ReactiveProxyProps<T>, {} :: ReactiveProxyApi<T>))
+export type ReactiveProxy<T = any> = typeof(setmetatable(
+	{} :: {
+		__track: () -> (),
+		__set: (T | ((T) -> ())?) -> (),
+		__target: T,
+		__signals: { [unknown]: () -> unknown },
+	},
+	{}
+))
 
 type EffectScopeNode = ReactiveNode & {
 	cleanups: { () -> () },
@@ -82,6 +79,9 @@ local notifyIndex = 0
 local queued: { EffectNode? } = {}
 local queuedLength = 0
 local activeSub: ReactiveNode?
+
+local ReactiveProxy = {}
+local proxyMap = setmetatable({} :: { [any]: ReactiveProxy }, { __mode = "v" })
 
 local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args...) -> Results...
 	if not flags.strict then
@@ -828,6 +828,34 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item:
 end
 
 --[[
+	Determines if the provided value is a reactive proxy created by `reactive()`.
+
+	@param value A value to test.
+	@return `true` if the value is a reactive proxy, `false` otherwise.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+]]
+local function isReactive(value: any): boolean
+	return type(value) == "table" and getmetatable(value) == ReactiveProxy
+end
+
+--[[
+	Unwraps a reactive proxy to get the original table. If the provided value
+	is not a proxy, it is returned as-is.
+
+	@param value A reactive proxy or a non-proxy value.
+	@return The unwrapped target value.
+	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
+]]
+local function toRaw<T>(value: T): T
+	if isReactive(value) then
+		local value: ReactiveProxy<T> = value :: any
+		value.__track()
+		return toRaw(value.__target)
+	end
+	return value
+end
+
+--[[
 	Creates a deep reactive value that tracks properties when they're accessed.
 	Returns a proxy object that subscribes to changes on any nested property
 	you read, and a function for mutating the original table.
@@ -853,101 +881,79 @@ end
 	@return A function for updating the original table.
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
-local function reactive<T>(initialValue: T & {}): (T, (update: (T) -> () | T?) -> ())
-	local track = signal(nil)
-	local proxyApi = { value = initialValue, track = track }
-	local proxyMap = setmetatable({} :: { [{}]: any }, { __mode = "v" })
+local function reactive<T>(initialValue: T & {}, trackParent: (() -> ())?): (T, (update: (T) -> () | T?) -> ())
+	initialValue = toRaw(initialValue)
 
-	local function trackProperty(cache: { [any]: () -> any }, target: {}, key: any)
-		if cache[key] then
-			return cache[key]()
-		end
-		cache[key] = computed(function()
-			track()
-			return target[key]
+	local proxy = proxyMap[initialValue]
+
+	if not proxy then
+		local track = computed(function()
+			if trackParent then
+				trackParent()
+			end
+			return {}
 		end)
-		return cache[key]()
-	end
 
-	local function createProxy<T>(target: T & {}): ReactiveProxy<T>
-		if proxyMap[target] then
-			return proxyMap[target]
-		end
-		proxyMap[target] = setmetatable({
-			__target = target,
-			__signals = setmetatable({}, { __mode = "v" }),
-		}, proxyApi)
-		return proxyMap[target]
-	end
-
-	function proxyApi.__index(self: ReactiveProxy, key: any): any
-		if activeSub then
-			trackProperty(self.__signals, self.__target, key)
-		end
-		local value = self.__target[key]
-		return if type(value) == "table" then createProxy(value) else value
-	end
-
-	function proxyApi.__newindex(self: ReactiveProxy, key: any, value: any)
-		if type(value) == "table" and type(value.__target) == "table" then
-			value = value.__target
-		end
-		if self.__target[key] ~= value then
-			self.__target[key] = value
+		local function set(update: (T) -> () | T?)
+			if type(update) == "function" then
+				update(initialValue)
+			elseif type(update) == "table" then
+				table.clear(initialValue)
+				for key, value in update :: {} do
+					(initialValue :: {})[key] = value
+				end
+			end
 			trigger(track)
 		end
+
+		proxy = setmetatable({
+			__target = initialValue,
+			__signals = setmetatable({}, { __mode = "v" }) :: any,
+			__track = track,
+			__set = set,
+		}, ReactiveProxy)
+
+		proxyMap[initialValue] = proxy
 	end
 
-	function proxyApi.__iter(self: ReactiveProxy)
-		track()
-		return next, self.__target
-	end
+	return proxy :: any, proxy.__set
+end
 
-	function proxyApi.__len(self: ReactiveProxy)
-		track()
-		return #self.__target
-	end
+function ReactiveProxy.__index(self: ReactiveProxy, key: any): any
+	local track = self.__track
+	local signals = self.__signals
+	local target = self.__target
+	local value = target[key]
 
-	function proxyApi.set(update: ((T) -> ()) | T?)
-		if type(update) == "function" then
-			update(initialValue)
-		elseif type(update) == "table" then
-			table.clear(initialValue)
-			for key, value in update :: {} do
-				(initialValue :: {})[key] = value
-			end
+	if activeSub then
+		if not signals[key] then
+			signals[key] = computed(function()
+				track()
+				return target[key]
+			end)
 		end
-		trigger(track)
+		signals[key]()
 	end
 
-	return createProxy(initialValue), proxyApi.set
+	return if type(value) == "table" then reactive(value, track) else value
 end
 
---[[
-	Determines if the provided value is a reactive proxy created by `reactive()`.
-
-	@param value A value to test.
-	@return `true` if the value is a reactive proxy, `false` otherwise.
-	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
-]]
-local function isReactive(value: any): boolean
-	return type(value) == "table" and type(value.__target) == "table" and getmetatable(value) ~= nil
-end
-
---[[
-	Unwraps a reactive proxy to get the original table. If the provided value
-	is not a proxy, it is returned as-is.
-
-	@param value A reactive proxy or a non-proxy value.
-	@return The unwrapped target value.
-	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
-]]
-local function toRaw<T>(value: T): T
-	if isReactive(value) then
-		getmetatable(value :: ReactiveProxy<T>).track()
-		return (value :: ReactiveProxy<T>).__target
+function ReactiveProxy.__newindex(self: ReactiveProxy, key: any, value: any)
+	value = toRaw(value)
+	if self.__target[key] ~= value then
+		self.__target[key] = value
+		trigger(self.__track)
 	end
-	return value
+end
+
+function ReactiveProxy.__iter(self: ReactiveProxy)
+	self.__track()
+	return next, self.__target
+end
+
+function ReactiveProxy.__len(self: ReactiveProxy)
+	self.__track()
+	return #self.__target
 end
 
 local reactiveSystem = system.createReactiveSystem({

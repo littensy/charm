@@ -102,6 +102,22 @@ test("should replicate partial state patches (reactive)", function()
 	assert(payloads[1].data.a.x == nil, "Expected patch payload to not contain value 'a.x'")
 end)
 
+test("should handle nested proxies", function()
+	local client = {}
+	local src = Charm.reactive({ (Charm.reactive({})) })
+	local payloads: {}? = nil
+
+	server.addSignalsToClient(client, { src = src })
+	server.connect(function(_, newPayloads)
+		payloads = newPayloads
+	end)
+	server.flush()
+
+	payloads = nil
+	server.flush()
+	assert(payloads == nil, "Expected no payloads to be sent for unchanged nested proxy")
+end)
+
 test("should init new clients", function()
 	local clientA = {}
 	local clientB = {}

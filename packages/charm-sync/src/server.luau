@@ -33,7 +33,7 @@ local globalUpdates: { StateUpdate } = {}
 local clients: { [any]: ClientKeys } = {}
 
 local connection: RBXScriptConnection?
-local syncCallback: (client: any, payloads: { SyncPayload }) -> ()?
+local syncCallback: ((client: any, payloads: { SyncPayload }) -> ())?
 
 local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 	if trackedStates[key] then
@@ -47,8 +47,7 @@ local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 	local trackedState: TrackedState<T>
 	local initialValue = getter()
 	local rawInitialValue = Charm.toRaw(initialValue)
-	local initialIsReactive = initialValue ~= rawInitialValue
-	local snapshot = if initialIsReactive then utils.deepCopy(rawInitialValue) else initialValue
+	local snapshot = if initialValue ~= rawInitialValue then utils.deepCopy(rawInitialValue) else initialValue
 
 	local dispose = Charm.effect(function()
 		local newValue = getter()
@@ -62,12 +61,12 @@ local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 		-- When preserving history, we need to keep track of previous values
 		-- so we can create granular patches for each change.
 		if config.preserveHistory then
-			local oldSnapshot = snapshot
+			local prevSnapshot = snapshot
 			snapshot = if isReactive then utils.deepCopy(rawValue) else newValue
 			table.insert(globalUpdates, {
 				key = key,
 				newValue = snapshot,
-				oldValue = oldSnapshot,
+				oldValue = prevSnapshot,
 			})
 		end
 
@@ -79,7 +78,7 @@ local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 		identifier = identifier,
 		currentValue = rawInitialValue,
 		lastSyncedValue = snapshot,
-		isReactive = initialIsReactive,
+		isReactive = initialValue ~= rawInitialValue,
 		dispose = dispose,
 	}
 

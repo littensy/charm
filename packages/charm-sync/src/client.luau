@@ -26,7 +26,7 @@ local function addSignals(signals: { [string]: Setter | {} })
 		if type(signal) == "function" then
 			trackedSignals[key] = signal
 		else
-			trackedReactives[key] = getmetatable(signal :: ReactiveProxy).set
+			trackedReactives[key] = ((signal :: any) :: ReactiveProxy).__set
 		end
 	end
 end

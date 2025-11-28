@@ -49,12 +49,13 @@ local function signalToAtom<T>(getter: () -> T, setter: (value: ((T) -> T) | T) 
 end
 
 --[[
-	Returns a deep copy of the given table.
+	Returns a deep copy of the given table. Skips tables with metatables to
+	prevent copying reactive proxies.
 ]]
 local function deepCopy<T>(object: T): T
 	local copy: any = table.clone(object :: any)
 	for key, value in copy do
-		if type(value) == "table" then
+		if type(value) == "table" and getmetatable(value) == nil then
 			copy[key] = deepCopy(value)
 		end
 	end
