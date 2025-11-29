@@ -224,7 +224,7 @@ local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
 end
 
 local function computedOper<T>(this: ComputedNode<T>): () -> T
-	local function computedGetter(): T
+	local function readComputed(): T
 		local flags = this.flags
 		if
 			bit32.btest(flags, DIRTY)
@@ -253,14 +253,14 @@ local function computedOper<T>(this: ComputedNode<T>): () -> T
 		end
 		return this.value :: T
 	end
-	return computedGetter
+	return readComputed
 end
 
 local function signalOper<T>(
 	this: SignalNode<T>,
 	equals: ((current: T, incoming: T) -> boolean)?
 ): (() -> T, (((T) -> T) | T) -> T)
-	local function signalSetter(update: ((T) -> T) | T): T
+	local function writeSignal(update: ((T) -> T) | T): T
 		local value: T
 		if type(update) == "function" then
 			local prevSub = setActiveSub(nil)
@@ -291,7 +291,7 @@ local function signalOper<T>(
 		return this.currentValue
 	end
 
-	local function signalGetter(): T
+	local function readSignal(): T
 		if bit32.btest(this.flags, DIRTY) then
 			if updateSignal(this) then
 				local subs = this.subs
@@ -312,7 +312,7 @@ local function signalOper<T>(
 		return this.currentValue
 	end
 
-	return signalGetter, signalSetter
+	return readSignal, writeSignal
 end
 
 local function effectOper(this: EffectScopeNode): () -> ()
@@ -406,9 +406,9 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
 ]]
 local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): Atom<T>
-	local getter, setter = signal(initialValue, equals)
+	local get, set = signal(initialValue, equals)
 	local function atomOper(...)
-		return if select("#", ...) == 0 then getter() else setter((...))
+		return if select("#", ...) == 0 then get() else set((...))
 	end
 	return atomOper
 end
@@ -625,7 +625,7 @@ end
 ]]
 local function toSignal<T>(fn: () -> T): () -> T
 	local name = debug.info(fn, "n")
-	return if name == "signalGetter" or name == "computedGetter" or name == "atomOper" then fn else computed(fn)
+	return if name == "readSignal" or name == "readComputed" or name == "atomOper" then fn else computed(fn)
 end
 
 --[[
@@ -922,11 +922,22 @@ local function reactive<T>(initialValue: T & {}, trackParent: (() -> ())?): (T, 
 	return proxy :: any, setValue
 end
 
+--[[
+	Wraps a value in `reactive()` if it is a table; otherwise, returns the
+	value as-is.
+
+	@param value A value to make reactive.
+	@param trackParent An optional tracking function to propagate deep updates.
+	@return A reactive proxy if the value is a table.
+]]
+local function toReactive<T>(value: T, trackParent: (() -> ())?): T
+	return if type(value) == "table" then reactive(value, trackParent) else value
+end
+
 function ReactiveProxy.__index(self: ReactiveProxy, key: any): any
 	local track = self.__track
 	local signals = self.__signals
 	local target = self.__target
-	local value = target[key]
 
 	if activeSub then
 		if not signals[key] then
@@ -938,7 +949,7 @@ function ReactiveProxy.__index(self: ReactiveProxy, key: any): any
 		signals[key]()
 	end
 
-	return if type(value) == "table" then reactive(value, track) else value
+	return toReactive(target[key], track)
 end
 
 function ReactiveProxy.__newindex(self: ReactiveProxy, key: any, value: any)
@@ -951,7 +962,11 @@ end
 
 function ReactiveProxy.__iter(self: ReactiveProxy)
 	self.__track()
-	return next, self.__target
+	local function nextReactive(target: any, prevKey: any)
+		local nextKey, nextValue = next(target, prevKey)
+		return nextKey, toReactive(nextValue, self.__track)
+	end
+	return nextReactive, self.__target
 end
 
 function ReactiveProxy.__len(self: ReactiveProxy)

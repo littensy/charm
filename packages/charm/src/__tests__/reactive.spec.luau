@@ -81,6 +81,27 @@ test("should track iteration", function()
 	assert(table.concat(calls) == "a=2;b=2;", table.concat(calls))
 end)
 
+test("should track iteration for nested tables", function()
+	local src = reactive({} :: { [string]: { value: number } })
+	local calls = {}
+
+	effect(function()
+		for key, obj in src do
+			table.insert(calls, `{key}={obj.value};`)
+		end
+	end)
+
+	src.a = { value = 1 }
+
+	table.clear(calls)
+	src.b = { value = 1 }
+	assert(table.concat(calls) == "a=1;b=1;", table.concat(calls))
+
+	table.clear(calls)
+	src.a.value = 2
+	assert(table.concat(calls) == "a=2;b=1;", table.concat(calls))
+end)
+
 test("should track array length", function()
 	local src = reactive({ array = {} :: { number } })
 	local calls = {}
