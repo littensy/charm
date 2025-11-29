@@ -69,6 +69,22 @@ test("should trigger effect once", function()
 	assert(triggers == 2, "effect should run twice")
 end)
 
+test("should not notify the trigger function sub", function()
+	local src1 = signal({})
+	local src2 = computed(function()
+		return src1()
+	end)
+
+	effect(function()
+		src1()
+		src2()
+	end)
+	trigger(function()
+		src1()
+		src2()
+	end)
+end)
+
 test("should trigger updates for subscribe", function()
 	local src = signal({} :: { number })
 	local triggers = 0

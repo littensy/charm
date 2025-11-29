@@ -8,7 +8,15 @@ type SyncPayload = types.SyncPayload
 type Setter<T = any> = (T | (T) -> any) -> ()
 
 local trackedSignals: { [string]: Setter } = {}
-local trackedReactives: { [string]: Setter } = {}
+local trackedReactives: { [string]: ReactiveProxy } = {}
+
+local function shallowMergeReactive(reactive: ReactiveProxy, source: { [any]: any })
+	local target = reactive.__target
+	for key, value in source do
+		target[key] = value
+	end
+	Charm.trigger(reactive.__track)
+end
 
 --[[
 	Registers a map of setters to the state with the corresponding keys on the
@@ -26,7 +34,7 @@ local function addSignals(signals: { [string]: Setter | {} })
 		if type(signal) == "function" then
 			trackedSignals[key] = signal
 		else
-			trackedReactives[key] = ((signal :: any) :: ReactiveProxy).__set
+			trackedReactives[key] = (signal :: any) :: ReactiveProxy
 		end
 	end
 end
@@ -54,9 +62,10 @@ end
 
 local function applyInitPayload(data: { [string]: any })
 	for key, value in data do
-		local trackedSignal: Setter? = trackedSignals[key] or trackedReactives[key]
-		if trackedSignal then
-			trackedSignal(value)
+		if trackedSignals[key] then
+			trackedSignals[key](value)
+		elseif trackedReactives[key] then
+			shallowMergeReactive(trackedReactives[key], value)
 		end
 	end
 end
@@ -71,9 +80,8 @@ local function applyPatchPayload(data: { [string]: any })
 				return patch.apply(value, diffs)
 			end)
 		elseif trackedReactive then
-			trackedReactive(function(value): ()
-				patch.applyMutable(value, diffs)
-			end)
+			patch.applyMutable(trackedReactive.__target, diffs)
+			Charm.trigger(trackedReactive.__track)
 		end
 	end
 end

@@ -66,33 +66,34 @@ test("should not release effect for atom", function()
 	assert(effectCalls == 2, "should call effect again")
 end)
 
-test("should release reactive tables", function()
+test("should release inner reactive proxy", function()
 	local valueRef = weakRef({})
-	local src = reactive({ value = valueRef.value })
+	local src: any = reactive({ value = valueRef.value })
 
-	effect(function()
+	local dispose = effect(function()
 		local _ = src.value -- create proxy
 	end)
 	src.value = nil :: any -- release proxy
+	dispose()
 
 	gc()
-	assert(valueRef.value == nil, "should release reactive table")
-	assert((src :: ReactiveProxy).__signals.value == nil, "should release reactive signals")
+	assert(src.__signals.value == nil, "should release signals")
+	assert(valueRef.value == nil, "should release inner proxy")
 end)
 
 test("should release reactive property deps", function()
-	local src = reactive({ foo = 1 })
+	local src: any = reactive({ foo = 1 })
 
 	local c = computed(function()
 		return src.foo
 	end)
 
 	c()
-	assert((src :: ReactiveProxy).__signals.foo ~= nil, "should have deps for foo")
+	assert(src.__signals.foo ~= nil, "should have deps for foo")
 
 	c = nil :: any
 	gc()
-	assert((src :: ReactiveProxy).__signals.foo == nil, "should release deps for foo")
+	assert(src.__signals.foo == nil, "should release deps for foo")
 end)
 
 test("should not release effect for reactive", function()
@@ -108,6 +109,19 @@ test("should not release effect for reactive", function()
 	gc()
 	src.foo += 1
 	assert(calls == 2, "should call effect again")
+end)
+
+test("should not release tracked reactive", function()
+	local src = Charm.reactive({ users = {} :: { [string]: {}? } })
+	local user
+
+	effect(function()
+		user = src.users.user
+	end)
+
+	gc()
+	src.users.user = {}
+	assert(user ~= nil, "src.users.user should not be released")
 end)
 
 return {}

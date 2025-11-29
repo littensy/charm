@@ -111,14 +111,18 @@ test("should not track unread properties", function()
 end)
 
 test("should overwrite with table passed to setter", function()
-	local src, setSrc = reactive({ a = 1, b = 2, c = 3 } :: { [string]: number })
+	local src, setSrc = reactive({ a = 1, b = 2, c = 3 } :: { [string]: number? })
 	local calls = {}
 
 	effect(function()
 		table.insert(calls, `{src.a}{src.b}{src.c}`)
 	end)
 
-	setSrc({ a = 2, c = 4 })
+	setSrc(function(src)
+		src.a = 2
+		src.b = nil
+		src.c = 4
+	end)
 	assert(table.concat(calls, ",") == "123,2nil4", table.concat(calls, ","))
 end)
 

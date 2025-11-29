@@ -1,7 +1,9 @@
 local system = require("@self/system")
 
 export type ReactiveFlags = system.ReactiveFlags
+
 export type ReactiveNode = system.ReactiveNode
+
 export type Link = system.Link
 
 export type Atom<T = any> = (...((T) -> T) | T) -> T
@@ -9,11 +11,10 @@ export type Atom<T = any> = (...((T) -> T) | T) -> T
 export type ReactiveProxy<T = any> = typeof(setmetatable(
 	{} :: {
 		__track: () -> (),
-		__set: (T | ((T) -> ())?) -> (),
 		__target: T,
 		__signals: { [unknown]: () -> unknown },
 	},
-	{}
+	{} :: { __index: T }
 ))
 
 type EffectScopeNode = ReactiveNode & {
@@ -73,15 +74,16 @@ local propagate: (link: Link) -> ()
 local checkDirty: (link: Link, sub: ReactiveNode) -> boolean
 local shallowPropagate: (link: Link) -> ()
 
+local ReactiveProxy = {
+	proxyMap = setmetatable({} :: { [any]: ReactiveProxy }, { __mode = "v" }),
+}
+
 local cycle = 0
 local batchDepth = 0
 local notifyIndex = 0
 local queued: { EffectNode? } = {}
 local queuedLength = 0
 local activeSub: ReactiveNode?
-
-local ReactiveProxy = {}
-local proxyMap = setmetatable({} :: { [any]: ReactiveProxy }, { __mode = "v" })
 
 local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args...) -> Results...
 	if not flags.strict then
@@ -504,13 +506,15 @@ local function trigger(fn: () -> ())
 	local prevSub = setActiveSub(sub)
 	local success, result: any = pcall(noYield(fn))
 	activeSub = prevSub
-	while sub.deps do
-		local link = sub.deps :: Link
+	local link = sub.deps
+	while link do
 		local dep = link.dep
-		unlink(link, sub)
-		if dep.subs then
-			propagate(dep.subs)
-			shallowPropagate(dep.subs)
+		link = unlink(link, sub)
+		local subs = dep.subs
+		if subs then
+			sub.flags = NONE
+			propagate(subs)
+			shallowPropagate(subs)
 		end
 	end
 	if batchDepth == 0 then
@@ -848,7 +852,7 @@ end
 ]]
 local function toRaw<T>(value: T): T
 	if isReactive(value) then
-		local value: ReactiveProxy<T> = value :: any
+		local value = value :: ReactiveProxy<T> & T
 		value.__track()
 		return toRaw(value.__target)
 	end
@@ -881,42 +885,41 @@ end
 	@return A function for updating the original table.
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
-local function reactive<T>(initialValue: T & {}, trackParent: (() -> ())?): (T, (update: (T) -> () | T?) -> ())
+local function reactive<T>(initialValue: T & {}, trackParent: (() -> ())?): (T, (update: ((T) -> ())?) -> ())
 	initialValue = toRaw(initialValue)
 
-	local proxy = proxyMap[initialValue]
+	local proxy = ReactiveProxy.proxyMap[initialValue]
 
 	if not proxy then
-		local track = computed(function()
+		local track = computed(function(version: number?)
+			-- Reference the proxy to avoid GCing while an effect is actively
+			-- tracking this reactive object.
+			local _ref = proxy
+			-- Allow updates from the parent to propagate down when the
+			-- target is mutated directly through the setter.
 			if trackParent then
 				trackParent()
 			end
-			return {}
+			return (version or 0) + 1
 		end)
-
-		local function set(update: (T) -> () | T?)
-			if type(update) == "function" then
-				update(initialValue)
-			elseif type(update) == "table" then
-				table.clear(initialValue)
-				for key, value in update :: {} do
-					(initialValue :: {})[key] = value
-				end
-			end
-			trigger(track)
-		end
 
 		proxy = setmetatable({
 			__target = initialValue,
 			__signals = setmetatable({}, { __mode = "v" }) :: any,
 			__track = track,
-			__set = set,
 		}, ReactiveProxy)
 
-		proxyMap[initialValue] = proxy
+		ReactiveProxy.proxyMap[initialValue] = proxy
 	end
 
-	return proxy :: any, proxy.__set
+	local function setValue(update: ((T) -> ())?)
+		if update then
+			update(proxy.__target)
+		end
+		trigger(proxy.__track)
+	end
+
+	return proxy :: any, setValue
 end
 
 function ReactiveProxy.__index(self: ReactiveProxy, key: any): any
