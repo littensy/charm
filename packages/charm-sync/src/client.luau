@@ -5,9 +5,7 @@ local types = require("./types")
 type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
 type SyncPayload = types.SyncPayload
 
-type Setter<T = any> = (T | (T) -> any) -> ()
-
-local trackedSignals: { [string]: Setter } = {}
+local trackedSignals: { [string]: (any) -> any } = {}
 local trackedReactives: { [string]: ReactiveProxy } = {}
 
 local function shallowMergeReactive(reactive: ReactiveProxy, source: { [any]: any })
@@ -29,7 +27,7 @@ end
 
 	@param signals A map of setter functions to sync with the server.
 ]]
-local function addSignals(signals: { [string]: Setter | {} })
+local function addSignals(signals: { [string]: ((any) -> any) | {} })
 	for key, signal in signals do
 		if type(signal) == "function" then
 			trackedSignals[key] = signal
