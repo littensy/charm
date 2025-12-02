@@ -1,3 +1,3 @@
-[submodule "test/suite"]
-	path = test/suite
+[submodule "tests/test"]
+	path = tests/test
 	url = https://gist.github.com/littensy/fa9afcc5d66d25e86538634982be4ee4

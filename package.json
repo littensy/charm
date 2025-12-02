@@ -1,9 +1,9 @@
 {
 	"private": true,
 	"scripts": {
-		"test": "lune run test/spec.server.luau",
-		"build": "sh bin/build.sh",
-		"check": "sh bin/check.sh",
+		"test": "lute run test",
+		"build": "lute run build",
+		"check": "lute run check",
 		"publish:npm": "pnpm publish -r --access public",
 		"publish:wally": "pnpm -r --workspace-concurrency 1 publish:wally"
 	},

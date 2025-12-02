@@ -1,0 +1,96 @@
+local Charm = require("../../Charm")
+local client = require("../client")
+local config = require("../config")
+local server = require("../server")
+local test = require("../../../../tests/test")
+
+test.afterEach(function()
+	server.reset()
+	client.removeAllSignals()
+	config.preserveHistory = false
+end)
+
+test("should replicate server state to client", function()
+	local target = {}
+	local serverA = Charm.atom({ count = 0 })
+	local serverB = Charm.reactive({ count = 0 })
+	local clientA = Charm.atom({ count = -1 })
+	local clientB = Charm.reactive({ count = -1 })
+
+	client.addSignals({ a = clientA, b = clientB })
+	server.addSignalsToClient(target, { a = serverA, b = serverB })
+	server.connect(function(syncTarget, payloads)
+		if syncTarget == target then
+			client.patch(payloads)
+		end
+	end)
+
+	server.flush()
+	assert(clientA().count == 0, "Client atom A should be initialized to 0")
+	assert(clientB.count == 0, "Client reactive B should be initialized to 0")
+
+	serverA({ count = 1 })
+	serverB.count = 1
+	server.flush()
+	assert(clientA().count == 1, "Client atom A should be updated to 1")
+	assert(clientB.count == 1, "Client reactive B should be updated to 1")
+
+	local runs = -1
+	Charm.effect(function()
+		local _ = clientB.count
+		runs += 1
+	end)
+
+	serverA({ count = 2 })
+	server.flush()
+	assert(clientA().count == 2, "Client atom A should be updated to 2")
+	assert(runs == 0, "Client reactive B should not trigger update")
+end)
+
+test("should replicate historical server state to client", function()
+	local target = {}
+	local serverA = Charm.atom({ count = 0 })
+	local serverB = Charm.reactive({ count = 0 })
+	local clientA = Charm.atom({ count = -1 })
+	local clientB = Charm.reactive({ count = -1 })
+
+	config.preserveHistory = true
+
+	client.addSignals({ a = clientA, b = clientB })
+	server.addSignalsToClient(target, { a = serverA, b = serverB })
+	server.connect(function(syncTarget, payloads)
+		if syncTarget == target then
+			client.patch(payloads)
+		end
+	end)
+
+	local expectedA = { -1, 0, 1, 2, 3, 4 }
+	local expectedB = { -1, 0, 1, 2 }
+
+	Charm.effect(function()
+		local expected = table.remove(expectedA, 1)
+		assert(expected == clientA().count, `Client reactive A should be {expected}`)
+	end)
+
+	Charm.effect(function()
+		local expected = table.remove(expectedB, 1)
+		assert(expected == clientB.count, `Client reactive B should be {expected}`)
+	end)
+
+	server.flush()
+
+	serverA({ count = 1 })
+	serverA({ count = 2 })
+	serverB.count = 1
+	serverB.count = 2
+	server.flush()
+	assert(clientA().count == 2, "Client atom A should be updated to 2")
+	assert(clientB.count == 2, "Client reactive B should be updated to 2")
+
+	serverA({ count = 3 })
+	serverA({ count = 4 })
+	server.flush()
+	assert(clientA().count == 4, "Client atom A should be updated to 4")
+end)
+
+return {}

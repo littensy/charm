@@ -43,8 +43,8 @@
 			"@rbxts-js": {
 				"$path": "node_modules/@rbxts-js"
 			},
-			"test": {
-				"$path": "test"
+			"tests": {
+				"$path": "tests"
 			}
 		}
 	}
