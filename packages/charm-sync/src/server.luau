@@ -5,6 +5,7 @@ local types = require("./types")
 local utils = require("./utils")
 
 type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
+
 type SyncPayload = types.SyncPayload
 
 type SyncStatus = number
@@ -227,6 +228,27 @@ local function selectFromGlobalPatch(client: any, globalPatch: { [string]: any }
 	return payloads
 end
 
+local function startInterval(callback: () -> ())
+	if not game then
+		return
+	end
+
+	if connection then
+		connection:Disconnect()
+	end
+
+	local timestamp = os.clock()
+
+	connection = game:GetService("RunService").Heartbeat:Connect(function()
+		if config.interval >= 0 and os.clock() >= timestamp + config.interval then
+			timestamp = os.clock()
+			debug.profilebegin("CharmSync")
+			callback()
+			debug.profileend()
+		end
+	end)
+end
+
 --[[
 	Subscribes a client to the given signals. When an update occurs, the client
 	will receive a partial state patch to merge into their local state. May be
@@ -270,6 +292,7 @@ end
 ]]
 local function removeClient(client: any)
 	clients[client] = nil
+	purgeUntracked()
 end
 
 --[[
@@ -292,6 +315,8 @@ local function removeSignalsFromClient(client: any, ...: string)
 
 	if next(clientKeys) == nil then
 		removeClient(client)
+	else
+		purgeUntracked()
 	end
 end
 
@@ -322,7 +347,6 @@ local function flush()
 		end
 	end
 
-	purgeUntracked()
 	table.clear(globalUpdates)
 end
 
@@ -334,32 +358,8 @@ end
 	@param onSync Called when sending patches to a client.
 ]]
 local function connect(onSync: (client: any, payloads: { SyncPayload }) -> ())
-	if connection then
-		connection:Disconnect()
-	end
-
 	syncCallback = onSync
-
-	if not game then
-		return
-	end
-
-	local timer = 0
-
-	connection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime)
-		if config.interval < 0 then
-			return
-		end
-
-		timer += deltaTime
-
-		if timer >= config.interval then
-			timer = 0
-			debug.profilebegin("CharmSync")
-			flush()
-			debug.profileend()
-		end
-	end)
+	startInterval(flush)
 end
 
 --[[
