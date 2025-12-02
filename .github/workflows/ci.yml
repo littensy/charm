@@ -14,11 +14,14 @@ jobs:
           run_install: true
       - uses: CompeyDev/setup-rokit@v0.1.2
 
+      - name: Setup Lute
+        run: lute setup --with-luaurc
+
       - name: Check code quality
-        run: pnpm check
+        run: lute run check
 
       - name: Run tests
-        run: pnpm test
+        run: lute run test
 
       - name: Build models
-        run: pnpm build
+        run: lute run build
