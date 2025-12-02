@@ -1,6 +1,6 @@
 {
 	"name": "@rbxts/charm-sync",
-	"version": "0.4.0-rc.5",
+	"version": "0.4.0-rc.6",
 	"description": "Simple server-to-client sync for Charm",
 	"license": "MIT",
 	"main": "src/init.luau",
