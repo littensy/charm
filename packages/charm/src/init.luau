@@ -1,10 +1,13 @@
+--[[
+	Reactive system adapted from alien-signals at
+	https://github.com/stackblitz/alien-signals/blob/master/src/system.ts
+]]
+
 local system = require("@self/system")
 
-export type ReactiveFlags = system.ReactiveFlags
-
-export type ReactiveNode = system.ReactiveNode
-
 export type Link = system.Link
+export type ReactiveFlags = system.ReactiveFlags
+export type ReactiveNode = system.ReactiveNode
 
 export type Atom<T = any> = (...((T) -> T) | T) -> T
 
@@ -36,17 +39,21 @@ type SignalNode<T = any> = ReactiveNode & {
 	pendingValue: T,
 }
 
-local NONE = 0b0000000
-local MUTABLE = 0b0000001
-local WATCHING = 0b0000010
-local RECURSED_CHECK = 0b0000100
-local DIRTY = 0b0010000
-local PENDING = 0b0100000
-local PEEKING = 0b1000000
+-- Bitmask flags for tracking the state of reactive nodes. Flags are combined
+-- and checked using bitwise operations for efficiency.
+local NONE = 0b0000000 -- Default state
+local MUTABLE = 0b0000001 -- Can be changed (signal or computed)
+local WATCHING = 0b0000010 -- Watching for changes (effects)
+local RECURSED_CHECK = 0b0000100 -- Being checked for circular dependencies
+local DIRTY = 0b0010000 -- Value has changed and needs updating
+local PENDING = 0b0100000 -- Might be dirty, pending verification
+local PEEKING = 0b1000000 -- Blocking dependency tracking
 
 local function inlineTest(): string
 	return debug.info(1, "n")
 end
+
+local IS_O2 = inlineTest() ~= "inlineTest"
 
 local flags = {
 	--[[
@@ -54,12 +61,12 @@ local flags = {
 		Also enables state validation in Charm Sync to catch sync errors early.
 		Enabled if the optimization level is below 2, which is true in studio.
 	]]
-	strict = inlineTest() == "inlineTest",
+	strict = not IS_O2,
 	--[[
 		Enforces immutability of tables by deep-freezing table values. Enabled
 		if the optimization level is below 2, which is true in studio.
 	]]
-	frozen = inlineTest() == "inlineTest",
+	frozen = not IS_O2,
 	--[[
 		Whether parent effects should track inner effects and clean them up
 		when the parent effect re-runs. This is usually desirable, but can be
@@ -68,27 +75,45 @@ local flags = {
 	trackInnerEffects = true,
 }
 
+local ReactiveProxy = {
+	proxyMap = setmetatable({} :: { [any]: ReactiveProxy }, { __mode = "v" }),
+}
+
+-- Alien Signals reactive system
 local link: (dep: ReactiveNode, sub: ReactiveNode, version: number) -> ()
 local unlink: (link: Link, sub: ReactiveNode?) -> Link?
 local propagate: (link: Link) -> ()
 local checkDirty: (link: Link, sub: ReactiveNode) -> boolean
 local shallowPropagate: (link: Link) -> ()
 
-local ReactiveProxy = {
-	proxyMap = setmetatable({} :: { [any]: ReactiveProxy }, { __mode = "v" }),
-}
-
+-- Global version counter for dependency link deduplication. Incremented at the
+-- start of each effect/computed run to ensure links created in the same cycle
+-- are deduplicated.
 local cycle = 0
-local batchDepth = 0
-local notifyIndex = 0
+-- Effects runs are queued to prevent redundant executions when multiple
+-- signals update in the same batch.
 local queued: { EffectNode? } = {}
 local queuedLength = 0
+local notifyIndex = 0
+-- Batch operations group multiple updates together, deferring effect runs
+-- until the batch completes. Effects only run when the outermost batch ends.
+local batchDepth = 0
+-- Tracks the currently active effect or computed signal during execution.
+-- Dependencies accessed during this time will link to the active subscriber.
 local activeSub: ReactiveNode?
 
+--[[
+	Wraps a function to prevent yielding when in strict mode. If the function
+	attempts to yield, an error is thrown.
+
+	@param fn The function to wrap.
+	@return A wrapped function that cannot yield in strict mode.
+]]
 local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args...) -> Results...
 	if not flags.strict then
 		return fn
 	end
+
 	local function resultHandler(thread: thread, ok: boolean, ...)
 		if not ok then
 			error(debug.traceback(thread, tostring((...))))
@@ -97,31 +122,57 @@ local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args.
 		end
 		return ...
 	end
+
 	return function(...)
 		local thread = coroutine.create(fn)
 		return resultHandler(thread, coroutine.resume(thread, ...))
 	end
 end
 
-local function deepFreeze(object: any)
-	if type(object) == "table" and not table.isfrozen(object) and getmetatable(object) == nil then
-		table.freeze(object)
-		for _, value in object do
-			deepFreeze(value)
+--[[
+	Recursively freezes a table and all nested tables to enforce immutability.
+	Tables with metatables are skipped, as they are assumed to be mutable.
+
+	@param value Table to freeze
+]]
+local function deepFreeze(value: any)
+	if type(value) == "table" and not table.isfrozen(value) and getmetatable(value) == nil then
+		table.freeze(value)
+		for _, entry in value do
+			deepFreeze(entry)
 		end
 	end
 end
 
+--[[
+	Returns the currently active subscriber (effect or computed node).
+
+	@return Current active subscriber or `nil`
+]]
 local function getActiveSub(): ReactiveNode?
 	return activeSub
 end
 
+--[[
+	Sets the currently active subscriber (effect or computed node) and returns
+	the previous subscriber.
+
+	@param sub New subscriber to set as active
+	@return Previous active subscriber
+]]
 local function setActiveSub(sub: ReactiveNode?)
 	local prevSub = activeSub
 	activeSub = sub
 	return prevSub
 end
 
+--[[
+	Removes dependencies from the subscriber's dependency list. When called
+	after tracking is complete, this ensures that only currently tracked
+	dependencies remain linked.
+
+	@param sub Effect or computed node
+]]
 local function purgeDeps(sub: ReactiveNode)
 	local depsTail = sub.depsTail
 	local dep = if depsTail then depsTail.nextDep else sub.deps
@@ -130,41 +181,58 @@ local function purgeDeps(sub: ReactiveNode)
 	end
 end
 
-local function runCleanups(effect: EffectScopeNode)
-	local cleanups = effect.cleanups
+--[[
+	Runs all cleanup functions registered with the effect node. Any errors
+	thrown during cleanup are caught and logged as warnings.
+
+	@param cleanups List of cleanup functions
+]]
+local function runCleanups(cleanups: { () -> () })
 	for key, cleanup in cleanups do
-		local prevSub = setActiveSub(nil)
-		local success, result: any = pcall(cleanup)
-		activeSub = prevSub
 		cleanups[key] = nil
-		if not success then
-			warn("An error occurred during effect cleanup:", result)
-		end
+		local prevSub = setActiveSub(nil)
+		xpcall(cleanup, warn or print)
+		activeSub = prevSub
 	end
 end
 
-local function run(e: EffectNode)
-	local flags = e.flags
-	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(e.deps :: Link, e)) then
-		runCleanups(e)
+--[[
+	Checks if the effect node needs to run based on its flags and dependencies.
+	Effects run if they are marked dirty or pending with dirty dependencies.
+
+	@param effect Effect node to run
+]]
+local function run(effect: EffectNode)
+	local flags = effect.flags
+
+	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(effect.deps :: Link, effect)) then
+		runCleanups(effect.cleanups)
+
 		cycle += 1
-		e.depsTail = nil
-		e.flags = bit32.bor(WATCHING, RECURSED_CHECK)
-		local prevSub = setActiveSub(e)
-		local success, result = pcall(e.fn)
+		effect.depsTail = nil
+		effect.flags = bit32.bor(WATCHING, RECURSED_CHECK)
+
+		local prevSub = setActiveSub(effect)
+		local success, result = pcall(effect.fn)
 		activeSub = prevSub
-		e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
-		purgeDeps(e)
+
+		effect.flags = bit32.band(effect.flags, bit32.bnot(RECURSED_CHECK))
+		purgeDeps(effect)
+
 		if not success then
 			error(result)
 		elseif result then
-			table.insert(e.cleanups, noYield(result))
+			table.insert(effect.cleanups, noYield(result))
 		end
 	else
-		e.flags = WATCHING
+		effect.flags = WATCHING
 	end
 end
 
+--[[
+	Processes the queued effect runs. Effects are run in the order they were
+	queued, ensuring that all updates are processed.
+]]
 local function flush()
 	while notifyIndex < queuedLength do
 		local effect = queued[notifyIndex] :: EffectNode
@@ -172,14 +240,23 @@ local function flush()
 		notifyIndex += 1
 		run(effect)
 	end
+
 	notifyIndex = 0
 	queuedLength = 0
 end
 
+--[[
+	Starts a batch operation, incrementing the batch depth counter. Effects
+	will not run until the outermost batch ends.
+]]
 local function startBatch()
 	batchDepth += 1
 end
 
+--[[
+	Ends a batch operation, decrementing the batch depth counter. If this is
+	the outermost batch, queued effects are flushed and run.
+]]
 local function endBatch()
 	batchDepth -= 1
 	if batchDepth == 0 then
@@ -187,56 +264,88 @@ local function endBatch()
 	end
 end
 
-local function updateComputed(c: ComputedNode): boolean
+--[[
+	Updates a computed signal by re-evaluating its getter function. Returns
+	whether the computed value changed.
+
+	@param computed Computed node to update
+	@return Boolean indicating whether the computed value changed
+]]
+local function updateComputed(computed: ComputedNode): boolean
 	cycle += 1
-	c.depsTail = nil
-	c.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
-	local prevSub = setActiveSub(c)
-	local oldValue = c.value
-	local success, result = pcall(c.getter, oldValue)
+	computed.depsTail = nil
+	computed.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
+
+	local prevSub = setActiveSub(computed)
+	local oldValue = computed.value
+	local success, newValue = pcall(computed.getter, oldValue)
 	activeSub = prevSub
-	c.flags = bit32.band(c.flags, bit32.bnot(RECURSED_CHECK))
-	purgeDeps(c)
-	if not success then
-		error(result)
+
+	computed.flags = bit32.band(computed.flags, bit32.bnot(RECURSED_CHECK))
+	purgeDeps(computed)
+
+	if success then
+		computed.value = newValue
+		return oldValue ~= newValue
+	else
+		error(newValue)
 	end
-	if oldValue ~= result then
-		c.value = result
+end
+
+--[[
+	Updates a signal by applying its pending value. Returns whether the
+	signal's value changed.
+
+	@param signal Signal node to update
+	@return Boolean indicating whether the signal's value changed
+]]
+local function updateSignal(signal: SignalNode): boolean
+	signal.flags = MUTABLE
+	local pendingValue = signal.pendingValue
+	if signal.currentValue ~= pendingValue then
+		signal.currentValue = pendingValue
 		return true
 	else
 		return false
 	end
 end
 
-local function updateSignal(s: SignalNode): boolean
-	s.flags = MUTABLE
-	local pendingValue = s.pendingValue
-	if s.currentValue ~= pendingValue then
-		s.currentValue = pendingValue
-		return true
-	else
-		return false
-	end
-end
+--[[
+	Clears the pending flag from a subscriber. Used inside of if conditions to
+	inline the operation.
 
-local function setNotPending(sub: ReactiveNode, flags: ReactiveFlags)
+	@param sub Effect or computed node
+	@param flags Subscriber's current flags
+]]
+local function clearPending(sub: ReactiveNode, flags: ReactiveFlags)
 	sub.flags = bit32.band(flags, bit32.bnot(PENDING))
 end
 
+--[[
+	Returns a function that evaluates the computed value when accessed.
+	Computed values are lazily evaluated and cached unless marked dirty or
+	pending with dirty dependencies.
+
+	@param this Computed node
+	@return Operator to read the computed value
+]]
 local function computedOper<T>(this: ComputedNode<T>): () -> T
 	local function readComputed(): T
 		local flags = this.flags
+
 		if
 			bit32.btest(flags, DIRTY)
-			or (bit32.btest(flags, PENDING) and (checkDirty(this.deps :: Link, this) or setNotPending(this, flags)))
+			or (bit32.btest(flags, PENDING) and (checkDirty(this.deps :: Link, this) or clearPending(this, flags)))
 		then
 			if updateComputed(this) then
+				-- Notify subscribers if the value changed
 				local subs = this.subs
 				if subs then
 					shallowPropagate(subs)
 				end
 			end
 		elseif flags == NONE then
+			-- First access should initialize the computed value
 			this.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 			local prevSub = setActiveSub(this)
 			local success, result = pcall(this.getter)
@@ -248,31 +357,50 @@ local function computedOper<T>(this: ComputedNode<T>): () -> T
 				error(result)
 			end
 		end
+
 		if activeSub then
 			link(this, activeSub, cycle)
 		end
+
 		return this.value :: T
 	end
+
 	return readComputed
 end
 
+--[[
+	Returns functions to read and write a signal's value:
+	- Setter: Updates the signal's value and notifies subscribers
+	- Getter: Returns the current value and registers dependency
+
+	@param this Signal node
+	@param equals Optional comparator function to check for value changes
+	@return Operator to get the signal value
+	@return Operator to set the signal value
+]]
 local function signalOper<T>(
 	this: SignalNode<T>,
 	equals: ((current: T, incoming: T) -> boolean)?
 ): (() -> T, (((T) -> T) | T) -> T)
 	local function writeSignal(update: ((T) -> T) | T): T
 		local value: T
+
+		-- Determine the new value based on whether the update is a function or
+		-- a direct value
 		if type(update) == "function" then
 			local prevSub = setActiveSub(nil)
 			local success, result = pcall(noYield(update), this.pendingValue)
 			activeSub = prevSub
-			if not success then
+			if success then
+				value = result
+			else
 				error(result)
 			end
-			value = result
 		else
 			value = update
 		end
+
+		-- Check if the new value is different from the pending value
 		if if equals then not equals(this.pendingValue, value) else this.pendingValue ~= value then
 			if flags.frozen then
 				deepFreeze(value)
@@ -288,10 +416,12 @@ local function signalOper<T>(
 			end
 			return value
 		end
+
 		return this.currentValue
 	end
 
 	local function readSignal(): T
+		-- Check if the signal needs to be updated (for signals within effects)
 		if bit32.btest(this.flags, DIRTY) then
 			if updateSignal(this) then
 				local subs = this.subs
@@ -300,6 +430,8 @@ local function signalOper<T>(
 				end
 			end
 		end
+
+		-- Register this signal as a dependency of the active subscriber
 		local sub = activeSub
 		while sub do
 			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
@@ -309,12 +441,25 @@ local function signalOper<T>(
 			local subs = sub.subs
 			sub = if subs then subs.sub else nil
 		end
+
 		return this.currentValue
 	end
 
 	return readSignal, writeSignal
 end
 
+--[[
+	Returns an effect cleanup operator that disposes of the effect. This
+	operator performs a thorough cleanup:
+
+	1. Removes all dependency links
+	2. Unlinks from parent effects/scopes
+	3. Clears state flags to mark the effect as inactive
+	4. Runs all registered cleanup functions
+
+	@param this Effect node
+	@return Effect cleanup operator
+]]
 local function effectOper(this: EffectScopeNode): () -> ()
 	return function()
 		this.depsTail = nil
@@ -324,10 +469,16 @@ local function effectOper(this: EffectScopeNode): () -> ()
 		if sub then
 			unlink(sub, this)
 		end
-		runCleanups(this)
+		runCleanups(this.cleanups)
 	end
 end
 
+--[[
+	Updates a signal or computed value and returns whether the value changed.
+
+	@param node Signal or computed node
+	@return Boolean indicating whether the value changed
+]]
 local function update(node: ReactiveNode): boolean
 	if node.depsTail then
 		return updateComputed(node :: ComputedNode)
@@ -336,10 +487,17 @@ local function update(node: ReactiveNode): boolean
 	end
 end
 
+--[[
+	Queues an effect for execution, ensuring inner effects are notified in the
+	correct order.
+
+	@param effect Effect node to notify
+]]
 local function notify(effect: ReactiveNode)
 	local insertIndex = queuedLength
 	local firstInsertedIndex = insertIndex
 
+	-- Collect inner effects in a chain
 	repeat
 		effect.flags = bit32.band(effect.flags, bit32.bnot(WATCHING))
 		queued[insertIndex] = effect :: EffectNode
@@ -351,8 +509,10 @@ local function notify(effect: ReactiveNode)
 	until false
 
 	queuedLength = insertIndex
-
 	insertIndex -= 1
+
+	-- Reverse the collected effects to maintain correct order
+	-- Note: insertIndex should decrement before the next condition evaluation
 	while firstInsertedIndex < insertIndex do
 		local left = queued[firstInsertedIndex]
 		queued[firstInsertedIndex] = queued[insertIndex]
@@ -362,6 +522,15 @@ local function notify(effect: ReactiveNode)
 	end
 end
 
+--[[
+	Called when a node is not being watched by any subscribers. Cleans up the
+	node's dependencies and performs the necessary cleanup operations:
+
+	- Computed signals: Unlink dependencies and mark as dirty for potential future updates
+	- Effects/scopes: Perform full cleanup to free resources
+
+	@param node Reactive node (computed or effect/scope)
+]]
 local function unwatched(node: ReactiveNode)
 	if bit32.band(node.flags, MUTABLE) == 0 then
 		effectOper(node :: EffectScopeNode)()
@@ -376,10 +545,10 @@ end
 	Creates a reactive signal that stores a value and notifies subscribers when
 	the value changes. The signal provides both a getter and a setter.
 
-	@param initialValue The initial value of the signal.
-	@param equals A comparator function to determine if the signal's value has changed.
-	@return A function to get the current value of the signal.
-	@return A function to set a new value and notify subscribers.
+	@param initialValue Initial value for the signal
+	@param equals Optional comparator function to check for value changes
+	@return Getter function to read the signal value
+	@return Setter function to update the signal value
 	@see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
 ]]
 local function signal<T>(
@@ -397,12 +566,12 @@ local function signal<T>(
 end
 
 --[[
-	Creates a reactive atom that acts as both a signal getter and setter.
-	Calling the atom with an argument sets its value, while calling it with no
-	arguments returns its current value.
+	Creates a signal and returns a function that can act as both the getter and
+	setter. Calling the atom with one argument sets its value, while calling it
+	with no arguments returns its current value.
 
-	@param initialValue The initial value of the atom. If empty, the atom's value will be `nil`.
-	@param equals A comparator function to determine if the atom's value has changed.
+	@param initialValue Initial value for the atom
+	@param equals Optional comparator function to check for value changes
 	@see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
 ]]
 local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): Atom<T>
@@ -418,7 +587,8 @@ end
 	other signals. The computed signal's value is automatically updated when a
 	change is detected in any of its dependencies.
 
-	@param getter A function that produces the next value.
+	@param getter Function that calculates the next value
+	@return A function that returns the cached value
 	@see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
 ]]
 local function computed<T>(getter: (previousValue: T?) -> T): () -> T
@@ -439,73 +609,88 @@ end
 	If the effect is called within another effect, it will be disposed when the
 	parent effect re-runs.
 
-	@param fn The function to run when dependencies change.
-	@return A function for disposing the effect.
+	@param fn Function to execute reactively
+	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
 ]]
 local function effect(fn: () -> ...(() -> ())?): () -> ()
-	local e: EffectNode = {
+	local this: EffectNode = {
 		fn = noYield(fn),
 		flags = bit32.bor(WATCHING, RECURSED_CHECK),
 		cleanups = {},
 	}
-	local prevSub = setActiveSub(e)
-	if prevSub and (flags.trackInnerEffects or prevSub.flags == NONE) then
-		link(e, prevSub, 0)
+
+	if activeSub and (flags.trackInnerEffects or activeSub.flags == NONE) then
+		link(this, activeSub, 0)
 	end
-	local success, result = pcall(e.fn)
+
+	local prevSub = setActiveSub(this)
+	local success, result = pcall(this.fn)
 	activeSub = prevSub
-	e.flags = bit32.band(e.flags, bit32.bnot(RECURSED_CHECK))
+
+	this.flags = bit32.band(this.flags, bit32.bnot(RECURSED_CHECK))
+
 	if not success then
 		error(result)
 	elseif result then
-		table.insert(e.cleanups, noYield(result))
+		table.insert(this.cleanups, noYield(result))
 	end
-	return effectOper(e)
+
+	return effectOper(this)
 end
 
 --[[
 	Creates an effect scope that can capture reactive effects and computed
 	signals created within it so that they can be disposed together.
 
-	@param fn A function that may create reactive effects.
-	@param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
-	@return A function for disposing all effects created within the scope.
+	@param fn Function that creates effects within the scope
+	@param detached If true, the scope will not be tracked by the parent effect/scope
+	@return A cleanup function that stops all effects in the scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
 ]]
 local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
-	local e: EffectScopeNode = {
+	local this: EffectScopeNode = {
 		flags = NONE,
 		cleanups = {},
 	}
-	local prevSub = setActiveSub(e)
-	if prevSub and not detached then
-		link(e, prevSub, 0)
+
+	if activeSub and not detached then
+		link(this, activeSub, 0)
 	end
+
+	local prevSub = setActiveSub(this)
 	local success, result = pcall(noYield(fn))
 	activeSub = prevSub
+
 	if not success then
 		error(result)
 	elseif result then
-		table.insert(e.cleanups, noYield(result))
+		table.insert(this.cleanups, noYield(result))
 	end
-	return effectOper(e)
+
+	return effectOper(this)
 end
 
 --[[
 	Allows you to manually trigger updates for downstream dependencies when
 	you've directly mutated a signal's value without using the signal setter.
 
-	@param fn The dependency or a function that calls multiple dependencies.
+	@param fn A signal or function that accesses signals
 	@see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
 ]]
 local function trigger(fn: () -> ())
 	local sub: ReactiveNode = {
 		flags = WATCHING,
 	}
+
 	local prevSub = setActiveSub(sub)
 	local success, result: any = pcall(noYield(fn))
 	activeSub = prevSub
+
+	if not success then
+		error(result)
+	end
+
 	local link = sub.deps
 	while link do
 		local dep = link.dep
@@ -517,11 +702,9 @@ local function trigger(fn: () -> ())
 			shallowPropagate(subs)
 		end
 	end
+
 	if batchDepth == 0 then
 		flush()
-	end
-	if not success then
-		error(result)
 	end
 end
 
@@ -530,8 +713,8 @@ end
 	there is no active effect, a warning is logged, unless `failSilently` is
 	set to `true`.
 
-	@param fn The cleanup function to register.
-	@param failSilently If `true`, suppresses the warning when there is no active effect or scope. Defaults to `false`.
+	@param fn Function to run during cleanup
+	@param failSilently If true, silences the warning when called outside an effect/scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
 ]]
 local function onCleanup(fn: () -> (), failSilently: boolean?)
@@ -548,9 +731,9 @@ end
 
 	For an alternative that still cleans up inner effects, use `peek` instead.
 
-	@param fn A function that may read signals or create effects.
-	@param ...args Arguments to pass to the function.
-	@return The return value of the function.
+	@param fn A signal or function that accesses signals
+	@param ...args Arguments to pass to the function
+	@return Values returned by the function
 	@see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
 ]]
 local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
@@ -573,9 +756,9 @@ end
 
 	To avoid capturing inner effects, use `untracked` instead.
 
-	@param fn A function that may read signals.
-	@param ...args Arguments to pass to the function.
-	@return The return value of the function.
+	@param fn A signal or function that accesses signals
+	@param ...args Arguments to pass to the function
+	@return Values returned by the function
 	@see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
 ]]
 local function peek<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
@@ -600,9 +783,9 @@ end
 	Combines multiple updates into a single "commit" that runs effects and
 	computed signals after the provided callback finishes running.
 
-	@param fn A function that performs multiple updates.
-	@param ...args Arguments to pass to the function.
-	@return The return value of the function.
+	@param fn Function that updates signals
+	@param ...args Arguments to pass to the function
+	@return Values returned by the function
 	@see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
 ]]
 local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
@@ -620,8 +803,8 @@ end
 	signal, it is returned as-is. Useful for memoizing a getter function
 	without creating unnecessary nested signals.
 
-	@param fn A function that returns the value to track.
-	@return A computed signal that tracks the value returned by the getter.
+	@param fn A signal or function that accesses signals
+	@return Computed signal if `fn` is not already a signal
 ]]
 local function toSignal<T>(fn: () -> T): () -> T
 	local name = debug.info(fn, "n")
@@ -636,9 +819,9 @@ end
 	Effects created within the callback are cleaned up when the listener runs
 	or the listener is disposed.
 
-	@param getter A function that returns the value to watch.
-	@param fn The function to run when the value changes.
-	@return A function for disposing the effect.
+	@param getter A signal or function that accesses signals
+	@param fn Function to run when the value changes
+	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
 local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): () -> ()
@@ -660,9 +843,9 @@ end
 	Effects created within the callback are cleaned up when the listener runs
 	or the listener is disposed.
 
-	@param getter A function that returns the value to watch.
-	@param fn The function to run when the value changes.
-	@return A function for disposing the effect.
+	@param getter A signal or function that accesses signals
+	@param fn Function to run when the value changes
+	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
 local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ()): () -> ()
@@ -710,9 +893,9 @@ end
 	key is removed or the `observe()` effect is disposed. Effects created
 	during the callback will also be bound to the lifetime of the key.
 
-	@param getter A function that returns the table to observe.
-	@param fn A function that is called for each key in the table.
-	@return A function for disposing the observer.
+	@param getter Function that returns a table
+	@param fn Function that is called for each key added to the table
+	@return A cleanup function that disposes scopes for all keys
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
 local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> ...(() -> ())?): () -> ()
@@ -772,8 +955,8 @@ end
 	of an existing atom. If the key is omitted from the mapper's return value,
 	the original key is preserved.
 
-	@param getter Returns the table to map over.
-	@param mapper Transforms each value-key pair from the source into a new value or value-key pair for the resulting table.
+	@param getter Function that returns a table
+	@param mapper Function that maps each entry from the source to a new entry in the mapped table
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
 ]]
 local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
@@ -834,8 +1017,6 @@ end
 --[[
 	Determines if the provided value is a reactive proxy created by `reactive()`.
 
-	@param value A value to test.
-	@return `true` if the value is a reactive proxy, `false` otherwise.
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
 local function isReactive(value: any): boolean
@@ -846,8 +1027,8 @@ end
 	Unwraps a reactive proxy to get the original table. If the provided value
 	is not a proxy, it is returned as-is.
 
-	@param value A reactive proxy or a non-proxy value.
-	@return The unwrapped target value.
+	@param value A reactive proxy or a non-proxy value
+	@return The source table if `value` is a reactive proxy
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
 local function toRaw<T>(value: T): T
@@ -880,9 +1061,9 @@ end
 	end)
 	```
 
-	@param initialValue The value to make deeply reactive.
-	@return A proxy table that tracks reads to nested properties.
-	@return A function for updating the original table.
+	@param initialValue Source table to make deeply reactive
+	@return A proxy table that tracks reads to nested properties
+	@return A function for batching mutations to the source table
 	@see https://github.com/littensy/charm?tab=readme-ov-file#reactiveinitialvalue
 ]]
 local function reactive<T>(initialValue: T & {}, trackParent: (() -> ())?): (T, (update: ((T) -> ())?) -> ())
@@ -926,9 +1107,9 @@ end
 	Wraps a value in `reactive()` if it is a table; otherwise, returns the
 	value as-is.
 
-	@param value A value to make reactive.
-	@param trackParent An optional tracking function to propagate deep updates.
-	@return A reactive proxy if the value is a table.
+	@param value Source value to make deeply reactive
+	@param trackParent Optional tracking function to propagate deep updates
+	@return A reactive proxy if the value is a table
 ]]
 local function toReactive<T>(value: T, trackParent: (() -> ())?): T
 	return if type(value) == "table" then reactive(value, trackParent) else value
@@ -974,30 +1155,22 @@ function ReactiveProxy.__len(self: ReactiveProxy)
 	return #self.__target
 end
 
-local reactiveSystem = system.createReactiveSystem({
+link, unlink, propagate, checkDirty, shallowPropagate = system.createReactiveSystem({
 	update = update,
 	notify = notify,
 	unwatched = unwatched,
 })
 
-link = reactiveSystem.link
-unlink = reactiveSystem.unlink
-propagate = reactiveSystem.propagate
-checkDirty = reactiveSystem.checkDirty
-shallowPropagate = reactiveSystem.shallowPropagate
-
 return {
-	ReactiveFlags = system.ReactiveFlags,
-	flags = flags,
-	getActiveSub = getActiveSub,
-	setActiveSub = setActiveSub,
-	startBatch = startBatch,
-	endBatch = endBatch,
+	-- Core reactive primitives
 	signal = signal,
 	computed = computed,
 	effect = effect,
 	effectScope = effectScope,
 	trigger = trigger,
+
+	-- Charm utilities
+	flags = flags,
 	atom = atom,
 	onCleanup = onCleanup,
 	untracked = untracked,
@@ -1011,7 +1184,16 @@ return {
 		getter: () -> { [KI]: VI },
 		mapper: (item: VI, key: KI) -> (VO, KO)
 	) -> () -> { [KO]: VO }) & (<K, VI, VO>(getter: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO }),
+
+	-- Reactive proxies
 	reactive = reactive,
 	isReactive = isReactive,
 	toRaw = toRaw,
+
+	-- Advanced API
+	ReactiveFlags = system.ReactiveFlags,
+	getActiveSub = getActiveSub,
+	setActiveSub = setActiveSub,
+	startBatch = startBatch,
+	endBatch = endBatch,
 }
