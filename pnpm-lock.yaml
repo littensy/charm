@@ -65,13 +65,13 @@ importers:
   packages/charm-sync:
     dependencies:
       '@rbxts/charm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../charm
 
   packages/react-charm:
     dependencies:
       '@rbxts/charm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../charm
       '@rbxts/react':
         specifier: '*'
@@ -80,7 +80,7 @@ importers:
   packages/vide-charm:
     dependencies:
       '@rbxts/charm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../charm
       '@rbxts/vide':
         specifier: '*'

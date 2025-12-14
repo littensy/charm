@@ -22,7 +22,7 @@
 		"publish:wally": "wally publish"
 	},
 	"dependencies": {
-		"@rbxts/charm": "workspace:*"
+		"@rbxts/charm": "workspace:^"
 	},
 	"peerDependencies": {
 		"@rbxts/react": "*"
