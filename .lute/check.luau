@@ -21,6 +21,10 @@ local function analyze()
 	local data: any = json.deserialize(response.body)
 
 	for name, value in data.applicationSettings do
+		if type(name) ~= "string" then
+			continue
+		end
+
 		for _, kind in FFLAG_KINDS do
 			if string.find(name, `^{kind}Luau`) then
 				table.insert(args, `--flag:{string.sub(name, #kind + 1)}={value}`)
