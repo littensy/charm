@@ -191,7 +191,9 @@ local function runCleanups(cleanups: { () -> () })
 	for key, cleanup in cleanups do
 		cleanups[key] = nil
 		local prevSub = setActiveSub(nil)
-		xpcall(cleanup, warn or print)
+		xpcall(cleanup, function(err)
+			warn("Error occurred during effect cleanup:", debug.traceback(tostring(err), 2))
+		end)
 		activeSub = prevSub
 	end
 end
@@ -799,14 +801,14 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 end
 
 --[[
-	Converts a non-signal into a computed signal. If the function is already a
-	signal, it is returned as-is. Useful for memoizing a getter function
-	without creating unnecessary nested signals.
+	Wraps a function in a computed signal if it is not already a reactive
+	signal. Useful for memoizing a getter function without creating unnecessary
+	nested signals.
 
 	@param fn A signal or function that accesses signals
-	@return Computed signal if `fn` is not already a signal
+	@return `fn` wrapped in a computed signal if needed
 ]]
-local function toSignal<T>(fn: () -> T): () -> T
+local function toComputed<T>(fn: () -> T): () -> T
 	local name = debug.info(fn, "n")
 	return if name == "readSignal" or name == "readComputed" or name == "atomOper" then fn else computed(fn)
 end
@@ -825,7 +827,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
 local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): () -> ()
-	local tracked = toSignal(getter)
+	local tracked = toComputed(getter)
 	local current: T
 
 	return effect(function()
@@ -849,7 +851,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
 local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ()): () -> ()
-	local tracked = toSignal(getter)
+	local tracked = toComputed(getter)
 	local current: T
 	local firstRun = true
 

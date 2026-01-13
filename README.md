@@ -233,10 +233,9 @@ Effects are fundamental to reactivity, allowing you to react to signal updates. 
 ```luau
 local getCounter, setCounter = signal(0)
 
--- Count is 0
 effect(function()
 	print(`Count is {getCounter()}`)
-end)
+end) -- Count is 0
 
 setCounter(1) -- Count is 1
 ```
@@ -257,21 +256,32 @@ setCounter(1) -- Cleanup 0
 dispose() -- Cleanup 1
 ```
 
-Effects can be nested and they will clean up automatically when the parent effect re-runs or gets disposed. This means you don't have to manually clean up inner effects, and this applies to functions like `subscribe()` and `observe()`.
+### Nested Effects
+
+Effects can be nested inside other effects. When the outer effect re-runs, inner effects from the previous run are automatically cleaned up, and new inner effects are created if needed. The system ensures proper execution order; outer effects always run before their inner effects:
 
 ```luau
-local getCounter, setCounter = signal(0)
+local getShow, setShow = signal(true)
+local getCount, setCount = signal(1)
 
 effect(function()
-	print(`Outer: {getCounter()}`)
-	effect(function()
-		print(`Inner: {getcounter()}`)
-	end)
-end)
+	if getShow() then
+		-- This inner effect is created when show() is true
+		effect(function()
+			print(`Count is: {getCount()}`)
+		end)
+	end
+end) -- Output: Count is: 1
 
-setCounter(1) -- Outer: 1, Inner: 1
-setCounter(2) -- Outer: 2, Inner: 2
+setCount(2) -- Count is: 2
+
+-- When show becomes false, the inner effect is cleaned up
+setShow(false) -- No output
+
+setCount(3) -- No output (inner effect no longer exists)
 ```
+
+Nested effect cleanup also applies to every reaction API (`subscribe()`, `listen()`, `observe()`) because they are built upon effects.
 
 > [!NOTE]
 > To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `flags.trackInnerEffects` flag to assist with debugging.
@@ -289,17 +299,15 @@ local users, setUsers = reactive({
 	{ name = "John", surname = "Doe" },
 })
 
--- Output: John Doe
 effect(function()
 	print(`{users[1].name} {users[1].surname}`)
-end)
+end) -- Output: John Doe
 
--- Output: Jane Smith
 setUsers(function(state)
 	state[1].name = "Jane"
 	state[1].surname = "Smith"
 	table.insert(state, { name = "Steve", surname = "Doe" })
-end)
+end) -- Output: Jane Smith
 
 -- You can also mutate the reactive proxy directly:
 users[1].name = "John" -- John Smith
@@ -327,10 +335,9 @@ In case you want to opt-out of dependency tracking in an effect, you can use `un
 local getTracked, setTracked = signal(0)
 local getUntracked, setUntracked = signal(0)
 
--- Tracked: 0, Untracked: 0
 effect(function()
 	print(`Tracked: {getTracked()}, Untracked: {untracked(getUntracked)}`)
-end)
+end) -- Output: Tracked: 0, Untracked: 0
 
 setTracked(1) -- Tracked: 1, Untracked: 0
 setUntracked(1) -- No output
@@ -364,10 +371,9 @@ Similar to `untracked()`, but does not prevent the parent effect from tracking n
 ```luau
 local getCounter, setCounter = signal(0)
 
--- Count is 0
 local disposeOuter = effect(function()
 	print(`Count is {peek(getCounter)}`)
-end)
+end) -- Output: Count is 0
 
 setCounter(1) -- No output; count was accessed in peek()
 ```
@@ -430,7 +436,7 @@ The callback also receives the previous value, or `nil` when running for the fir
 ```luau
 local getCounter, setCounter = signal(0)
 
--- Count is 0 (was nil)
+-- Output: Count is 0 (was nil)
 listen(getCounter, function(count, prevCount)
 	print(`Count is {count} (was {prevCount})`)
 end)
@@ -595,9 +601,7 @@ effect(function()
 	setCounter(function(count)
 		return math.min(count + 1, 3)
 	end)
-end)
-
--- Output: 0, 1, 2, 3
+end) -- Output: 0, 1, 2, 3
 ```
 
 ---
@@ -931,7 +935,7 @@ This means nilable values may be replaced with `None` in patches, and code worki
 Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that might help you migrate from an older version.
 
 <details>
-<summary><b>Terminology changes</b></summary>
+<summary><b>Terminology</b></summary>
 
 - Signal: A state container with one function to get the state, and another to update it
 - Atom: A signal with the getter and setter combined into one function
