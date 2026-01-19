@@ -94,4 +94,51 @@ return function()
 		expect(added).to.equal(3)
 		expect(deleted).to.equal(3)
 	end)
+
+	it("only maps changed entries", function()
+		local itemsAtom = atom({ "a", "b" })
+		local mapperInvocations = 0
+		local mappedAtom = mapped(itemsAtom, function(value, key)
+			mapperInvocations += 1
+			return value, key
+		end)
+
+		local initialInvocations = mapperInvocations
+		itemsAtom({ "a", "b" })
+		expect(mapperInvocations).to.equal(initialInvocations)
+
+		itemsAtom({ "a", "c" })
+		expect(mapperInvocations).to.equal(initialInvocations + 1)
+		expect(mappedAtom()[2]).to.equal("c")
+	end)
+
+	it("omits entries when mapper returns nil", function()
+		local itemsAtom = atom({ "a", "b", "c" })
+		local mappedAtom = mapped(itemsAtom, function(value, key)
+			if key == 2 then
+				return nil, key
+			end
+			return value, key
+		end)
+
+		expect(mappedAtom()[1]).to.equal("a")
+		expect(mappedAtom()[2]).to.never.be.ok()
+		expect(mappedAtom()[3]).to.equal("c")
+
+		itemsAtom({ "a", "b", "c" })
+		expect(mappedAtom()[2]).to.never.be.ok()
+
+		itemsAtom({ "a", "b", "d" })
+		expect(mappedAtom()[2]).to.never.be.ok()
+		expect(mappedAtom()[3]).to.equal("d")
+	end)
+
+	it("throws on duplicate mapped keys", function()
+		local itemsAtom = atom({ "a", "b" })
+		expect(function()
+			mapped(itemsAtom, function(value)
+				return value, 1
+			end)
+		end).to.throw()
+	end)
 end

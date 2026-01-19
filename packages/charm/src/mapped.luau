@@ -24,6 +24,8 @@ local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: 
 	local mappedAtom = atom({})
 	local mappedAtomRef = setmetatable({ current = mappedAtom }, { __mode = "v" })
 	local prevMappedItems: { [K1]: V1 } = {}
+	local prevKeyForItem: { [K0]: K1 } = {}
+	local prevItems: { [K0]: V0 } = {}
 	local unsubscribe
 
 	local function listener(items: { [K0]: V0 })
@@ -33,30 +35,103 @@ local function mapped<K0, V0, K1, V1>(callback: Selector<{ [K0]: V0 }>, mapper: 
 			return unsubscribe()
 		end
 
-		local mappedItems = table.clone(mappedAtom())
-		local mappedKeys = {}
-
-		-- TODO: Only call mapper if the item has changed.
+		local hasChanges = false
 		for key, item in next, items do
-			local newItem, newKey = mapper(item, key)
-			if newKey == nil then
-				newKey = key :: any
+			if prevItems[key] ~= item or prevKeyForItem[key] == nil then
+				hasChanges = true
+				break
 			end
-			if mappedItems[newKey :: K1] ~= newItem then
-				mappedItems[newKey :: K1] = newItem :: V1
+		end
+		if not hasChanges then
+			for key in next, prevItems do
+				if items[key] == nil then
+					hasChanges = true
+					break
+				end
+			end
+		end
+		if not hasChanges then
+			return
+		end
+
+		local currentMapped = mappedAtom()
+		local mappedItems: { [K1]: V1 } = currentMapped
+		local mappedKeys = {}
+		local newPrevKeyForItem: { [K0]: K1 } = {}
+		local updatedPrevItems: { [K0]: V0 } = {}
+		local changed = false
+
+		local function ensureWritable()
+			if mappedItems ~= currentMapped then
+				return
+			end
+
+			local nextItems: { [K1]: V1 } = {}
+			for key, value in next, currentMapped do
+				nextItems[key] = value
+			end
+			mappedItems = nextItems
+		end
+
+		for key, item in next, items do
+			local mappedKey: K1?
+			local newItem: V1?
+			local shouldReuseKey = prevItems[key] == item and prevKeyForItem[key] ~= nil
+
+			if shouldReuseKey then
+				mappedKey = prevKeyForItem[key]
+				newItem = currentMapped[mappedKey :: K1]
 			else
-				mappedKeys[newKey] = key
+				local derivedItem, derivedKey = mapper(item, key)
+				newItem = derivedItem
+				if derivedKey == nil then
+					derivedKey = key :: any
+				end
+				mappedKey = derivedKey :: K1
+				if newItem == nil then
+					if currentMapped[mappedKey :: K1] ~= nil then
+						ensureWritable()
+						mappedItems[mappedKey :: K1] = nil
+						changed = true
+					end
+				else
+					if currentMapped[mappedKey :: K1] ~= newItem then
+						ensureWritable()
+						mappedItems[mappedKey :: K1] = newItem :: V1
+						changed = true
+					end
+				end
 			end
+
+			if mappedKey ~= nil and newItem ~= nil then
+				local existingKey = mappedKeys[mappedKey]
+				if existingKey ~= nil and existingKey ~= key then
+					error("mapped(): mapper returned duplicate key")
+				end
+				mappedKeys[mappedKey] = key
+				newPrevKeyForItem[key] = mappedKey
+			end
+
+			updatedPrevItems[key] = item
 		end
 
 		for key in next, prevMappedItems do
-			if mappedKeys[key] == nil and mappedItems[key] == prevMappedItems[key] then
-				mappedItems[key] = nil
+			if mappedKeys[key] == nil and currentMapped[key] == prevMappedItems[key] then
+				ensureWritable()
+				if mappedItems[key] ~= nil then
+					mappedItems[key] = nil
+					changed = true
+				end
 			end
 		end
 
+		prevKeyForItem = newPrevKeyForItem
+		prevItems = updatedPrevItems
 		prevMappedItems = mappedItems
-		mappedAtom(mappedItems)
+
+		if changed then
+			mappedAtom(mappedItems)
+		end
 	end
 
 	unsubscribe = subscribe(callback, listener)
