@@ -76,7 +76,7 @@ export function signal<T>(
 	equals?: Equals<T>,
 ): LuaTuple<[getter: () => T, setter: (newValue: T | ((currentValue: T) => T)) => T]>;
 export function signal<T>(): LuaTuple<
-	[getter: () => T | undefined, setter: (newValue: T | ((currentValue?: T) => T | undefined)) => T | undefined]
+	[getter: () => T | undefined, setter: (newValue: T | undefined | ((currentValue?: T) => T | undefined)) => T | undefined]
 >;
 
 /**
