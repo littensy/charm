@@ -44,17 +44,17 @@ Charm is a state management library that brings the [fine-grained reactivity](ht
     - [`computed(getter)`](#computedgetter)
     - [`effect(callback)`](#effectcallback)
     - [Nested effects](#nested-effects)
-    - [`reactive(initialValue)`](#reactiveinitialvalue)
-    - [`untracked(callback)`](#untrackedcallback)
-    - [`peek(callback)`](#peekcallback)
-    - [`batch(callback)`](#batchcallback)
     - [`effectScope(callback)`](#effectscopecallback)
     - [`listen(getter, callback)`](#listengetter-callback)
     - [Getter functions](#getter-functions)
-    - [`subscribe(getter, callback)`](#subscribegetter-callback)
     - [`observe(getter, callback)`](#observegetter-callback)
+    - [`subscribe(getter, callback)`](#subscribegetter-callback)
+    - [`untracked(callback)`](#untrackedcallback)
+    - [`peek(callback)`](#peekcallback)
+    - [`batch(callback)`](#batchcallback)
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
+    - [`reactive(initialValue)`](#reactiveinitialvalue)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
     - [`recursive()`](#recursive)
     - [`trigger(callback)`](#triggercallback)
@@ -290,41 +290,129 @@ Computed signals are updated lazily, meaning the getter will only re-execute onc
 
 ---
 
-### `reactive(initialValue)`
+### `effectScope(callback)`
 
-By default, Charm's signals are _shallowly reactive_, meaning only the value itself is reactive, and table properties are not tracked. Signal values must also be **immutable** in order to track changes in tables.
-
-You can opt-in to deep reactivity with **reactive proxies**. The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and table values will also be wrapped in a reactive proxy.
+Scopes allow you to dispose multiple effects at once. The `effectScope` function creates a scope that tracks inner effects, so effects created inside the callback clean up when the scope disposes.
 
 ```luau
-local users, setUsers = reactive({
-	{ name = "John", surname = "Doe" },
-})
+local getCounter, setCounter = signal(0)
 
-effect(function()
-	print(`{users[1].name} {users[1].surname}`)
-end) -- Output: John Doe
+local dispose = effectScope(function()
+	effect(function()
+		print(`Count 1 is {getCounter()}`)
+	end)
+	effect(function()
+		print(`Count 2 is {getCounter()}`)
+	end)
+end)
 
-setUsers(function(state)
-	state[1].name = "Jane"
-	state[1].surname = "Smith"
-	table.insert(state, { name = "Steve", surname = "Doe" })
-end) -- Output: Jane Smith
-
--- You can also mutate the reactive proxy directly:
-users[1].name = "John" -- John Smith
+setCounter(1) -- Count 1 is 1, Count 2 is 1
+dispose()
+setCounter(2) -- No output; effects got disposed
 ```
 
-> [!WARNING]
-> Because reactive proxies use metatables for reading and writing, functions like `table.insert` will not work on the proxy. Table functions should only be called on the raw table value.
+Similar to `effect()`, the callback can return a cleanup function that runs when the effect scope is disposed.
 
-If you need to access the raw table through the reactive proxy, use the `toRaw()` function:
+---
+
+### `listen(getter, callback)`
+
+The `listen` function creates an effect that only subscribes to the signals accessed by `getter`. Signals accessed by the callback will not be subscribed to, avoiding accidental subscriptions when you want to run side effects.
+
+The callback also receives the previous value, or `nil` when running for the first time.
 
 ```luau
-local raw = {}
-local proxy = reactive(raw)
+local getCounter, setCounter = signal(0)
 
-print(toRaw(proxy) == raw) -- true
+-- Output: Count is 0 (was nil)
+listen(getCounter, function(count, prevCount)
+	print(`Count is {count} (was {prevCount})`)
+end)
+
+setCounter(1) -- Count is 1 (was 0)
+```
+
+### Getter functions
+
+Reaction APIs like `listen()`, `subscribe()`, and `observe()` aren't only restricted to signals. You can listen to "getter" functions that call one or more signals, and they will automatically be memoized:
+
+```luau
+local getCounter, setCounter = signal(0)
+
+local function floorCounter()
+	return math.floor(getCounter())
+end
+
+-- Output: Floor of count is 0 (was nil)
+listen(floorCounter, function(count, prevCount)
+	print(`Floor of count is {count} (was {prevCount})`)
+end)
+
+setCounter(0.5) -- Doesn't print anything, floor is still 0
+setCounter(1) -- Floor of count is 1 (was 0)
+```
+
+Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
+
+---
+
+### `observe(getter, callback)`
+
+[Observers](https://sleitnick.github.io/RbxObservers/docs/observer-pattern) allow you to track the lifetime of a given state. The `observe` function executes the callback for every unique key added to a table, and disposes the callback when that key is removed.
+
+```luau
+local getItems, setItems = signal({ a = 0, b = 0 })
+
+-- Added a, Added b
+observe(getItems, function(value, key)
+	print(`Added {key}`)
+	return function()
+		print(`Removed {key}`)
+	end
+end)
+
+setItems({ a = 0, c = 0 }) -- Removed b, Added c
+```
+
+The callback runs in an effect scope, so effects created in the callback will be disposed when the key is removed:
+
+```luau
+local getItems, setItems = signal({ a = 0, b = 0 })
+
+local dispose = observe(getItems, function(value, key)
+	local getValue = computed(function(prevValue)
+		return getItems()[key] or prevValue
+	end)
+
+	effect(function()
+		local value = getValue()
+		print(`{key} = {value}`)
+		return function()
+			print(`Cleanup {key} = {value}`)
+		end
+	end)
+end)
+
+setItems({ a = 1, b = 0 }) -- Cleanup a = 0, a = 1
+setItems({ a = 1 }) -- Cleanup b = 0
+dispose() -- Cleanup a = 1
+```
+
+---
+
+### `subscribe(getter, callback)`
+
+The `subscribe` function is identical to `listen()`, but the effect callback skips the initial run. The callback only runs when the value returned by the getter function changes.
+
+```luau
+local getCounter, setCounter = signal(0)
+
+-- Does not output anything initially
+subscribe(getCounter, function(count, prevCount)
+	print(`Count is {count} (was {prevCount})`)
+end)
+
+setCounter(1) -- Count is 1 (was 0)
 ```
 
 ---
@@ -404,133 +492,6 @@ end)
 
 ---
 
-### `effectScope(callback)`
-
-Scopes allow you to dispose multiple effects at once. The `effectScope` function creates an effect with no dependencies, and effects created inside the callback clean up when the effect scope disposes.
-
-```luau
-local getCounter, setCounter = signal(0)
-
-local dispose = effectScope(function()
-	effect(function()
-		print(`Count 1 is {getCounter()}`)
-	end)
-	effect(function()
-		print(`Count 2 is {getCounter()}`)
-	end)
-end)
-
-setCounter(1) -- Count 1 is 1, Count 2 is 1
-dispose()
-setCounter(2) -- No output; effects got disposed
-```
-
-Similar to `effect()`, the callback can return a cleanup function that runs when the effect scope is disposed.
-
----
-
-### `listen(getter, callback)`
-
-The `listen` function creates an effect that only subscribes to the signals accessed by `getter`. Signals accessed by the callback will not be subscribed to, avoiding accidental subscriptions when you want to run side effects.
-
-The callback also receives the previous value, or `nil` when running for the first time.
-
-```luau
-local getCounter, setCounter = signal(0)
-
--- Output: Count is 0 (was nil)
-listen(getCounter, function(count, prevCount)
-	print(`Count is {count} (was {prevCount})`)
-end)
-
-setCounter(1) -- Count is 1 (was 0)
-```
-
-### Getter functions
-
-Reaction APIs like `listen()`, `subscribe()`, and `observe()` aren't only restricted to signals. You can listen to "getter" functions that call one or more signals, and they will automatically be memoized:
-
-```luau
-local getCounter, setCounter = signal(0)
-
-local function floorCounter()
-	return math.floor(getCounter())
-end
-
--- Output: Floor of count is 0 (was nil)
-listen(floorCounter, function(count, prevCount)
-	print(`Floor of count is {count} (was {prevCount})`)
-end)
-
-setCounter(0.5) -- Doesn't print anything, floor is still 0
-setCounter(1) -- Floor of count is 1 (was 0)
-```
-
-Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
-
----
-
-### `subscribe(getter, callback)`
-
-The `subscribe` function is identical to `listen()`, but the effect callback skips the initial run. The callback only runs when the value returned by the getter function changes.
-
-```luau
-local getCounter, setCounter = signal(0)
-
--- Does not output anything initially
-subscribe(getCounter, function(count, prevCount)
-	print(`Count is {count} (was {prevCount})`)
-end)
-
-setCounter(1) -- Count is 1 (was 0)
-```
-
----
-
-### `observe(getter, callback)`
-
-[Observers](https://sleitnick.github.io/RbxObservers/docs/observer-pattern) allow you to track the lifetime of a given state. The `observe` function executes the callback for every unique key added to a table, and disposes the callback when that key is removed.
-
-```luau
-local getItems, setItems = signal({ a = 0, b = 0 })
-
--- Added a, Added b
-observe(getItems, function(value, key)
-	print(`Added {key}`)
-	return function()
-		print(`Removed {key}`)
-	end
-end)
-
-setItems({ a = 0, c = 0 }) -- Removed b, Added c
-```
-
-The callback runs in an effect scope, so effects created in the callback will be disposed when the key is removed:
-
-```luau
-local getItems, setItems = signal({ a = 0, b = 0 })
-
-local dispose = observe(getItems, function(value, key)
-	local getValue = computed(function(prevValue)
-		return getItems()[key] or prevValue
-	end)
-
-	effect(function()
-		local value = getValue()
-		print(`{key} = {value}`)
-		return function()
-			print(`Cleanup {key} = {value}`)
-		end
-	end)
-end)
-
-setItems({ a = 1, b = 0 }) -- Cleanup a = 0, a = 1
-setItems({ a = 1 }) -- Cleanup b = 0
-dispose() -- Cleanup a = 1
-```
-
----
-
 ### `mapped(getter, mapper)`
 
 The `mapped` function iterates over every key in a table and uses the mapper to assign them to a new key and value. The result is returned as a read-only signal containing the new keys and values. When a key's value changes, or a new key is added to the table, the mapper is called for that key and its current value.
@@ -575,6 +536,45 @@ local dispose = effectScope(function()
 end)
 
 dispose() -- Cleaned up
+```
+
+---
+
+### `reactive(initialValue)`
+
+By default, Charm's signals are _shallowly reactive_, meaning only the value itself is reactive, and table properties are not tracked. Signal values must also be **immutable** in order to track changes in tables.
+
+You can opt-in to deep reactivity with **reactive proxies**. The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and table values will also be wrapped in a reactive proxy.
+
+```luau
+local users, setUsers = reactive({
+	{ name = "John", surname = "Doe" },
+})
+
+effect(function()
+	print(`{users[1].name} {users[1].surname}`)
+end) -- Output: John Doe
+
+setUsers(function(state)
+	state[1].name = "Jane"
+	state[1].surname = "Smith"
+	table.insert(state, { name = "Steve", surname = "Doe" })
+end) -- Output: Jane Smith
+
+-- You can also mutate the reactive proxy directly:
+users[1].name = "John" -- John Smith
+```
+
+> [!WARNING]
+> Because reactive proxies use metatables for reading and writing, functions like `table.insert` will not work on the proxy. Table functions should only be called on the raw table value.
+
+If you need to access the raw table through the reactive proxy, use the `toRaw()` function:
+
+```luau
+local raw = {}
+local proxy = reactive(raw)
+
+print(toRaw(proxy) == raw) -- true
 ```
 
 ---
