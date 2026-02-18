@@ -4,7 +4,7 @@
   </p>
   <h1 align="center"><b>Charm</b></h1>
   <p align="center">
-    Manage state with reactive signals
+    Fine-grained reactivity for Roblox
     <br />
     <a href="https://npmjs.com/package/@rbxts/charm"><strong>npm package →</strong></a>
   </p>
@@ -18,18 +18,17 @@
 
 </div>
 
-**Charm** is a Roblox state management library inspired by the [reactive signals](https://preactjs.com/blog/introducing-signals/) from libraries like Preact and Solid. It's built on [alien-signals](https://github.com/stackblitz/alien-signals), modified for a wide range of use cases: from rendering user interfaces to handling game logic.
+Charm is a state management library that brings the [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf) approach — used in libraries like Vue, Preact, and Solid — to your Luau projects.
 
-**Charm works under a few core principles.**
+**Build complex game state from simple building blocks:**
 
-- Manage state with reactive signals: state containers that hold a value
-- React to state updates: reading a signal automatically subscribes to it
-- Combine multiple signals: derive new values from existing state that stay up-to-date
-- Fine-grained reactivity: make targeted updates in response to specific changes in the state
-- Data should be immutable: values are compared directly (`==`) to optimize change detection
+- Store state in [reactive signals](#signalinitialvalue-equals): state containers that hold a value
+- React to state changes with [effects](#effectcallback): run code whenever a dependency updates
+- Derive new values with [computed signals](#computedgetter): memoize a function with automatic dependency tracking
 
 **Want to learn more about signals?**
 
+- https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf
 - https://preactjs.com/blog/introducing-signals
 - https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
 - https://angular.dev/guide/signals
@@ -44,12 +43,14 @@
     - [`signal(initialValue, equals?)`](#signalinitialvalue-equals)
     - [`computed(getter)`](#computedgetter)
     - [`effect(callback)`](#effectcallback)
+    - [Nested effects](#nested-effects)
     - [`reactive(initialValue)`](#reactiveinitialvalue)
     - [`untracked(callback)`](#untrackedcallback)
     - [`peek(callback)`](#peekcallback)
     - [`batch(callback)`](#batchcallback)
     - [`effectScope(callback)`](#effectscopecallback)
     - [`listen(getter, callback)`](#listengetter-callback)
+    - [Getter functions](#getter-functions)
     - [`subscribe(getter, callback)`](#subscribegetter-callback)
     - [`observe(getter, callback)`](#observegetter-callback)
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
@@ -150,6 +151,7 @@ pnpm add @rbxts/charm
 ```
 
 ```toml
+# wally.toml
 [dependencies]
 Charm = "littensy/charm@VERSION"
 ```
@@ -187,42 +189,7 @@ setMax(-1) -- 2
 ```
 
 > [!NOTE]
-> Looking for atoms? You can still use [`atom()`](#atominitialvalue-equals) to create a signal with a combined getter and setter.
-
----
-
-### `computed(getter)`
-
-The `computed` function creates a new signal with a value derived from multiple signals. The computed signal can be reacted to like a normal signal, and it returns the getter function's last return value.
-
-The computed signal will subscribe to signals accessed by the getter and track them as dependencies. Changes to these dependencies will re-execute the getter, and if it returns a new value, then the computed signal is updated to that value.
-
-```luau
-local getName, setName = signal("John")
-local getSurname, setSurname = signal("Doe")
-local getFullName = computed(function()
-	return `{getName()} {getSurname()}`
-end)
-
-print(getFullName()) -- "John Doe"
-setName("Jane")
-print(getFullName()) -- "Jane Doe"
-```
-
-The getter function also receives the previous state (or `nil` if running for the first time). You can use this for more complex state:
-
-```luau
-local getCounter, setCounter = signal(10)
-local getMax = computed(function(prevMax)
-	return math.max(getCounter(), prevMax or 0)
-end)
-
-print(getMax()) -- 10
-setCounter(5)
-print(getMax()) -- 10
-```
-
-Computed signals are updated lazily, meaning the getter will only re-execute once the computed signal is called _and_ if a dependency updated since the last call.
+> Looking for atoms? You can still use [`atom()`](#atominitialvalue-equals) to create a signal with a unified getter and setter.
 
 ---
 
@@ -285,6 +252,41 @@ Nested effect cleanup also applies to every reaction API (`subscribe()`, `listen
 
 > [!NOTE]
 > To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `flags.trackInnerEffects` flag to assist with debugging.
+
+---
+
+### `computed(getter)`
+
+The `computed` function creates a new signal with a value derived from multiple signals. The computed signal can be reacted to like a normal signal, and it returns the getter function's last return value.
+
+The computed signal will subscribe to signals accessed by the getter and track them as dependencies. Changes to these dependencies will re-execute the getter, and if it returns a new value, then the computed signal is updated to that value.
+
+```luau
+local getName, setName = signal("John")
+local getSurname, setSurname = signal("Doe")
+local getFullName = computed(function()
+	return `{getName()} {getSurname()}`
+end)
+
+print(getFullName()) -- "John Doe"
+setName("Jane")
+print(getFullName()) -- "Jane Doe"
+```
+
+The getter function also receives the previous state (or `nil` if running for the first time). You can use this for more complex state:
+
+```luau
+local getCounter, setCounter = signal(10)
+local getMax = computed(function(prevMax)
+	return math.max(getCounter(), prevMax or 0)
+end)
+
+print(getMax()) -- 10
+setCounter(5)
+print(getMax()) -- 10
+```
+
+Computed signals are updated lazily, meaning the getter will only re-execute once the computed signal is called _and_ if a dependency updated since the last call.
 
 ---
 
@@ -444,13 +446,33 @@ end)
 setCounter(1) -- Count is 1 (was 0)
 ```
 
+### Getter functions
+
+Reaction APIs like `listen()`, `subscribe()`, and `observe()` aren't only restricted to signals. You can listen to "getter" functions that call one or more signals, and they will automatically be memoized:
+
+```luau
+local getCounter, setCounter = signal(0)
+
+local function floorCounter()
+	return math.floor(getCounter())
+end
+
+-- Output: Floor of count is 0 (was nil)
+listen(floorCounter, function(count, prevCount)
+	print(`Floor of count is {count} (was {prevCount})`)
+end)
+
+setCounter(0.5) -- Doesn't print anything, floor is still 0
+setCounter(1) -- Floor of count is 1 (was 0)
+```
+
 Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
 
 ---
 
 ### `subscribe(getter, callback)`
 
-The `subscribe` function is identical to `listen()`, but the callback does not run initially. The callback only runs when the value returned by the getter function changes.
+The `subscribe` function is identical to `listen()`, but the effect callback skips the initial run. The callback only runs when the value returned by the getter function changes.
 
 ```luau
 local getCounter, setCounter = signal(0)
@@ -462,8 +484,6 @@ end)
 
 setCounter(1) -- Count is 1 (was 0)
 ```
-
-Note that nested effects can be created inside `subscribe`, and they will clean up automatically when the subscription re-runs or gets disposed.
 
 ---
 
