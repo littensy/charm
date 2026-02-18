@@ -387,4 +387,15 @@ test("should run cleanups outside any evaluation context", function()
 	assert(calls == 0, "should not run after b update")
 end)
 
+test("should avoid infinite recursive loops with multiple effects", function()
+	local counter, setCounter = Charm.signal(0)
+	effect(function()
+		setCounter(counter() + 1)
+	end)
+	effect(function()
+		counter()
+	end)
+	setCounter(counter() + 1)
+end)
+
 return {}

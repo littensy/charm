@@ -1,6 +1,7 @@
 local Charm = require("../")
 local test = require("../../../../tests/test")
 
+local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
 local signal = Charm.signal
@@ -100,6 +101,106 @@ test("should receive previous value", function()
 	setSrc(5)
 	assert(c1() == 4, "should skip odd value")
 	assert(table.concat(calls) == "024", `should only call on even updates, got {table.concat(calls)}`)
+end)
+
+-- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L875
+test("should chained computeds keep reactivity when computed effect happens", function()
+	local v = atom("Hello")
+	local c = computed(function()
+		v(v() .. " World")
+		return v()
+	end)
+	local d = computed(function()
+		return c()
+	end)
+	local e = computed(function()
+		return d()
+	end)
+	local res = computed(function()
+		return d() .. " | " .. e()
+	end)
+
+	assert(res() == "Hello World | Hello World", res())
+
+	v(v() .. " World")
+	assert(res() == "Hello World World World World | Hello World World World World", res())
+end)
+
+-- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L580
+test("should not trigger effect scheduler by recursive computed effect", function()
+	local v = atom("Hello")
+	local c = computed(function()
+		v(v() .. " World")
+		return v()
+	end)
+	local comp = computed(function()
+		return c()
+	end)
+
+	assert(comp() == "Hello World", comp())
+
+	v(v() .. " World")
+	assert(comp() == "Hello World World World World", comp())
+end)
+
+-- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L528
+test("should not override queried MaybeDirty result", function()
+	local Item = {
+		new = function()
+			return { v = atom(0) }
+		end,
+	}
+	local v1 = atom(nil :: any)
+	local v2 = atom(false)
+	local c1 = computed(function()
+		local c = v1()
+		if not v1() then
+			c = Item.new()
+			v1(c)
+		end
+		return c.v()
+	end)
+	local c2 = computed(function()
+		if not v2() then
+			return "no"
+		end
+		return if c1() then "yes" else "no"
+	end)
+	local c3 = computed(function()
+		return c2()
+	end)
+
+	c3()
+	v2(true)
+
+	c3()
+	v1().v(999)
+
+	assert(c3() == "yes", "should return correct value after update")
+end)
+
+-- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L503
+test("should trigger effect even computed already dirty", function()
+	local calls: { string } = {}
+	local v = atom(0)
+	local c1 = computed(function()
+		if v() == 0 then
+			v(1)
+		end
+		return "foo"
+	end)
+	local c2 = computed(function()
+		return v() .. c1()
+	end)
+
+	effect(function()
+		table.insert(calls, c2())
+	end)
+	assert(table.concat(calls, ",") == "0foo", table.concat(calls, ","))
+	assert(v() == 1, v())
+	v(2)
+	assert(table.concat(calls, ",") == "0foo,2foo", table.concat(calls, ","))
+	assert(v() == 2, v())
 end)
 
 return {}
