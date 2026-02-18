@@ -1,5 +1,3 @@
-_G.__ROACT_17_MOCK_SCHEDULER__ = true
-
 local React = require("../../../React")
 local ReactRoblox = require("../../../ReactRoblox")
 
