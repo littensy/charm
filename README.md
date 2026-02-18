@@ -332,6 +332,8 @@ end)
 setCounter(1) -- Count is 1 (was 0)
 ```
 
+Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
+
 ### Getter functions
 
 Reaction APIs like `listen()`, `subscribe()`, and `observe()` aren't only restricted to signals. You can listen to "getter" functions that call one or more signals, and they will automatically be memoized:
@@ -351,8 +353,6 @@ end)
 setCounter(0.5) -- Doesn't print anything, floor is still 0
 setCounter(1) -- Floor of count is 1 (was 0)
 ```
-
-Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
 
 ---
 
