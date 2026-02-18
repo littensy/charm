@@ -184,7 +184,7 @@ local function createReactiveSystem(props: {
 			local flags = sub.flags
 			if bit32.band(flags, bit32.bor(PENDING, DIRTY)) == PENDING then
 				sub.flags = bit32.bor(flags, DIRTY)
-				if bit32.btest(flags, WATCHING) then
+				if bit32.band(flags, bit32.bor(WATCHING, RECURSED_CHECK)) == WATCHING then
 					notify(sub)
 				end
 			end
