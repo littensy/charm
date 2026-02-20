@@ -15,6 +15,6 @@ module.exports = defineConfig(
 			"roblox-ts/no-any": "off",
 		},
 	},
-	globalIgnores(["out/**", "config.js"]),
+	globalIgnores(["out/**", "eslint.config.js"]),
 	prettierRecommended,
 );
