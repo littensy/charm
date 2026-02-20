@@ -25,6 +25,6 @@
 		"@rbxts/charm": "workspace:^"
 	},
 	"peerDependencies": {
-		"@rbxts/react": "*"
+		"@rbxts/react": ">=17.0.0"
 	}
 }

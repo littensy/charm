@@ -7,13 +7,13 @@
 		"publish:npm": "pnpm publish -r --access public",
 		"publish:wally": "pnpm -r --workspace-concurrency 1 publish:wally"
 	},
-	"packageManager": "pnpm@10.30.0",
+	"packageManager": "pnpm@10.30.1",
 	"devDependencies": {
 		"@eslint/js": "^9.39.2",
 		"@rbxts/compiler-types": "3.0.0-types.0",
 		"@rbxts/react": "17.3.7-ts.1",
 		"@rbxts/react-roblox": "17.3.7-ts.1",
-		"@rbxts/types": "^1.0.907",
+		"@rbxts/types": "^1.0.908",
 		"@rbxts/vide": "^0.6.0",
 		"@typescript-eslint/eslint-plugin": "^8.56.0",
 		"@typescript-eslint/parser": "^8.56.0",
