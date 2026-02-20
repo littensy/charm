@@ -71,7 +71,7 @@ importers:
         specifier: workspace:^
         version: link:../charm
       '@rbxts/react':
-        specifier: ^17.0.0
+        specifier: '>=17.0.0'
         version: 17.2.3
 
   packages/vide-charm:
