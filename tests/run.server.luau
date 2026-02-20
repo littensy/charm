@@ -9,19 +9,19 @@ local describeInRoblox = test.describeIf(function()
 end)
 
 test.describe("charm", function()
-	require("../packages/charm/src/__tests__")
+	require("../packages/charm/__tests__")
 end)
 
 test.describe("charm-sync", function()
-	require("../packages/charm-sync/src/__tests__")
+	require("../packages/charm-sync/__tests__")
 end)
 
 describeInRoblox("react-charm", function()
-	require("../packages/react-charm/src/__tests__")
+	require("../packages/react-charm/__tests__")
 end)
 
 describeInRoblox("vide-charm", function()
-	require("../packages/vide-charm/src/__tests__")
+	require("../packages/vide-charm/__tests__")
 end)
 
 test.finish()
