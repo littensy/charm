@@ -273,21 +273,6 @@ export function observe<V, K extends Key>(
 ): Cleanup;
 
 /**
- * Disables recursive checks for the current reactive node. Currently, only
- * computed signals use recursion checks, as effects allow recursion.
- *
- * @example
- * ```ts
- * computed(() => {
- * 	recursive();
- * 	setCount(getCount() + 1);
- * 	return getCount();
- * })
- * ```
- */
-export function recursive(): void;
-
-/**
  * Creates a deep reactive value that tracks properties when they're accessed.
  * Returns a proxy object that subscribes to changes on any nested property
  * you read, and a function for mutating the original table.

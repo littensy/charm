@@ -877,27 +877,6 @@ local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ())
 end
 
 --[[
-	Disables recursive checks for the current reactive node. Currently, only
-	computed signals use recursion checks, as effects allow recursion.
-
-	@example
-	```luau
-	computed(function()
-	    recursive()
-	    setCount(getCount() + 1)
-		return getCount()
-	end)
-	```
-]]
-local function recursive()
-	if activeSub then
-		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(RECURSED_CHECK))
-	else
-		warn(debug.traceback("recursive() can only be called inside a reactive node.", 2))
-	end
-end
-
---[[
 	Calls the callback function for each unique key in the table returned by the
 	getter. The callback is called once for each key, and again when a new key
 	is added.
@@ -1185,7 +1164,6 @@ return {
 	batch = batch,
 	subscribe = subscribe,
 	listen = listen,
-	recursive = recursive,
 	observe = observe,
 	mapped = mapped :: (<KI, VI, KO, VO>(
 		getter: () -> { [KI]: VI },
