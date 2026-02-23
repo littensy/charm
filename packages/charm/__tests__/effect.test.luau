@@ -6,7 +6,6 @@ local effect = Charm.effect
 local effectScope = Charm.effectScope
 local endBatch = Charm.endBatch
 local onCleanup = Charm.onCleanup
-local recursive = Charm.recursive
 local setActiveSub = Charm.setActiveSub
 local signal = Charm.signal
 local startBatch = Charm.startBatch
@@ -269,33 +268,11 @@ test("should handle flags are indirectly updated during checkDirty", function()
 	assert(triggers == 2, "did not update indirectly")
 end)
 
-test("should handle effect recursion for the first execution", function()
-	local src1, setSrc1 = signal(0)
-	local src2, setSrc2 = signal(0)
-
-	local triggers1 = 0
-	local triggers2 = 0
-
-	effect(function()
-		triggers1 += 1
-		setSrc1(math.min(src1() + 1, 5))
-	end)
-	effect(function()
-		triggers2 += 1
-		setSrc2(math.min(src2() + 1, 5))
-		src2()
-	end)
-
-	assert(triggers1 == 1, `bad triggers1: {triggers1}`)
-	assert(triggers2 == 1, `bad triggers2: {triggers2}`)
-end)
-
-test("should opt in to recursion", function()
+test("should allow recursion", function()
 	local src, setSrc = signal(0)
 	local order = {}
 
 	effect(function()
-		recursive()
 		table.insert(order, src())
 		setSrc(math.min(src() + 1, 5))
 	end)
@@ -387,15 +364,15 @@ test("should run cleanups outside any evaluation context", function()
 	assert(calls == 0, "should not run after b update")
 end)
 
-test("should avoid infinite recursive loops with multiple effects", function()
-	local counter, setCounter = Charm.signal(0)
-	effect(function()
-		setCounter(counter() + 1)
+test("infinite recursion should eventually throw", function()
+	local counter, setCounter = signal(0)
+
+	local success = pcall(function()
+		effect(function()
+			setCounter(counter() + 1)
+		end)
 	end)
-	effect(function()
-		counter()
-	end)
-	setCounter(counter() + 1)
+	assert(not success, "should have thrown")
 end)
 
 return {}

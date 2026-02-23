@@ -145,17 +145,12 @@ end)
 
 -- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L528
 test("should not override queried MaybeDirty result", function()
-	local Item = {
-		new = function()
-			return { v = atom(0) }
-		end,
-	}
 	local v1 = atom(nil :: any)
 	local v2 = atom(false)
 	local c1 = computed(function()
 		local c = v1()
 		if not v1() then
-			c = Item.new()
+			c = { v = atom(0) }
 			v1(c)
 		end
 		return c.v()

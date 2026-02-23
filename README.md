@@ -56,7 +56,6 @@ Charm is a state management library that brings the [fine-grained reactivity](ht
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`reactive(initialValue)`](#reactiveinitialvalue)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
-    - [`recursive()`](#recursive)
     - [`trigger(callback)`](#triggercallback)
     - [`flags`](#flags)
 - [Client-Server Sync](#client-server-sync)
@@ -608,24 +607,6 @@ max(-1) -- 1
 
 ---
 
-### `recursive()`
-
-By design, Charm's reactive system [does not allow recursion](https://github.com/stackblitz/alien-signals/issues/90#issuecomment-3489711800) in effects or computed signals. In case you need to opt out of recursion checks for an effect, you can call `recursive()` at the top of the effect callback:
-
-```luau
-local getCounter, setCounter = signal(0)
-
-effect(function()
-	recursive()
-	print(getCounter())
-	setCounter(function(count)
-		return math.min(count + 1, 3)
-	end)
-end) -- Output: 0, 1, 2, 3
-```
-
----
-
 ### `trigger(callback)`
 
 The `trigger()` function allows you to manually trigger updates for downstream dependencies when you've directly mutated a signal's value without using the signal setter:
@@ -990,10 +971,7 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 >
 > This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
 
-5. Recursion is now disallowed in effects and computed signals by default. This change may introduce bugs in code relying on the old behavior.
-    - Recursive checks are opt-out. You can allow recursion for a specific effect by calling [`recursive()`](#recursive) at the top of the effect callback.
-
-6. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
+5. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
     - [`reactive()`](#reactiveinitialvalue): make mutable tables deeply reactive
     - [`signal()`](#signalinitialvalue-equals): make reads and writes more explicit
     - [`listen()`](#listengetter-callback): create a subscription that runs once immediately

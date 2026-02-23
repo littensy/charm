@@ -153,10 +153,11 @@ export function trigger(fn: () => void): void;
 export function onCleanup(fn: Cleanup, failSilently?: boolean): void;
 
 /**
- * Runs the function without subscribing to signal updates or capturing inner
- * effects in the parent effect or scope.
+ * Runs the function without subscribing to signal updates and prevents the
+ * current effect or scope from tracking inner effects created within the
+ * function.
  *
- * For an alternative that still cleans up inner effects, use `peek` instead.
+ * For an alternative that allows nested effect cleanup, use `peek` instead.
  *
  * @param fn A function that may read signals or create effects.
  * @param args Arguments to pass to the function.
@@ -166,10 +167,12 @@ export function onCleanup(fn: Cleanup, failSilently?: boolean): void;
 export function untracked<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
 
 /**
- * Runs the function without subscribing to signal updates, but still captures
- * inner effects so that they dispose with the parent effect.
+ * Runs the function without subscribing to signal updates, but still allows
+ * inner effects to be tracked by parent effects/scopes.
  *
- * To avoid capturing inner effects, use `untracked` instead.
+ * This is useful for cases where you want to access the current value of a
+ * signal without creating a dependency, but still want any effects created
+ * within the function to be cleaned up properly.
  *
  * @param fn A function that may read signals.
  * @param args Arguments to pass to the function.
@@ -270,14 +273,15 @@ export function observe<V, K extends Key>(
 ): Cleanup;
 
 /**
- * Disables recursive checks for the current effect or computed signal.
- * Useful for effects that intentionally update signals they depend on.
+ * Disables recursive checks for the current reactive node. Currently, only
+ * computed signals use recursion checks, as effects allow recursion.
  *
  * @example
  * ```ts
- * effect(() => {
+ * computed(() => {
  * 	recursive();
  * 	setCount(getCount() + 1);
+ * 	return getCount();
  * })
  * ```
  */
@@ -331,10 +335,30 @@ export function isReactive(value: unknown): boolean;
  */
 export function toRaw<T>(value: T): T;
 
+/**
+ * Returns the currently active subscriber (effect or computed node).
+ *
+ * @return Current active subscriber or `nil`
+ */
 export function getActiveSub(): ReactiveNode | undefined;
 
+/**
+ * Sets the currently active subscriber (effect or computed node) and returns
+ * the previous subscriber.
+ *
+ * @param sub New subscriber to set as active
+ * @return Previous active subscriber
+ */
 export function setActiveSub(sub?: ReactiveNode): ReactiveNode | undefined;
 
+/**
+ * Starts a batch operation, incrementing the batch depth counter. Effects
+ * will not run until the outermost batch ends.
+ */
 export function startBatch(): void;
 
+/**
+ * Ends a batch operation, decrementing the batch depth counter. If this is
+ * the outermost batch, queued effects are flushed and run.
+ */
 export function endBatch(): void;

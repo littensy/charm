@@ -9,6 +9,8 @@ export type Link = system.Link
 export type ReactiveFlags = system.ReactiveFlags
 export type ReactiveNode = system.ReactiveNode
 
+type Cleanup = () -> ()
+
 export type Atom<T = any> = (...((T) -> T) | T) -> T
 
 export type ReactiveProxy<T = any> = typeof(setmetatable(
@@ -21,12 +23,12 @@ export type ReactiveProxy<T = any> = typeof(setmetatable(
 ))
 
 type EffectScopeNode = ReactiveNode & {
-	cleanups: { () -> () },
+	cleanups: { Cleanup },
 }
 
 type EffectNode = ReactiveNode & {
-	fn: () -> ...(() -> ())?,
-	cleanups: { () -> () },
+	fn: () -> ...Cleanup?,
+	cleanups: { Cleanup },
 }
 
 type ComputedNode<T = any> = ReactiveNode & {
@@ -38,16 +40,6 @@ type SignalNode<T = any> = ReactiveNode & {
 	currentValue: T,
 	pendingValue: T,
 }
-
--- Bitmask flags for tracking the state of reactive nodes. Flags are combined
--- and checked using bitwise operations for efficiency.
-local NONE = 0b0000000 -- Default state
-local MUTABLE = 0b0000001 -- Can be changed (signal or computed)
-local WATCHING = 0b0000010 -- Watching for changes (effects)
-local RECURSED_CHECK = 0b0000100 -- Being checked for circular dependencies
-local DIRTY = 0b0010000 -- Value has changed and needs updating
-local PENDING = 0b0100000 -- Might be dirty, pending verification
-local PEEKING = 0b1000000 -- Blocking dependency tracking
 
 local function inlineTest(): string
 	return debug.info(1, "n")
@@ -78,6 +70,16 @@ local flags = {
 local ReactiveProxy = {
 	proxyMap = setmetatable({} :: { [any]: ReactiveProxy }, { __mode = "v" }),
 }
+
+-- Bitmask flags for tracking the state of reactive nodes. Flags are combined
+-- and checked using bitwise operations for efficiency.
+local NONE = 0b0000000 -- Default state
+local MUTABLE = 0b0000001 -- Can be changed (signal or computed)
+local WATCHING = 0b0000010 -- Watching for changes (effects)
+local RECURSED_CHECK = 0b0000100 -- Being checked for circular dependencies
+local DIRTY = 0b0010000 -- Value has changed and needs updating
+local PENDING = 0b0100000 -- Might be dirty, pending verification
+local PEEKING = 0b1000000 -- Blocking dependency tracking
 
 -- Alien Signals reactive system
 local link: (dep: ReactiveNode, sub: ReactiveNode, version: number) -> ()
@@ -187,7 +189,7 @@ end
 
 	@param cleanups List of cleanup functions
 ]]
-local function runCleanups(cleanups: { () -> () })
+local function runCleanups(cleanups: { Cleanup })
 	for key, cleanup in cleanups do
 		cleanups[key] = nil
 		local prevSub = setActiveSub(nil)
@@ -212,13 +214,12 @@ local function run(effect: EffectNode)
 
 		cycle += 1
 		effect.depsTail = nil
-		effect.flags = bit32.bor(WATCHING, RECURSED_CHECK)
+		effect.flags = WATCHING
 
 		local prevSub = setActiveSub(effect)
 		local success, result = pcall(effect.fn)
 		activeSub = prevSub
 
-		effect.flags = bit32.band(effect.flags, bit32.bnot(RECURSED_CHECK))
 		purgeDeps(effect)
 
 		if not success then
@@ -349,10 +350,13 @@ local function computedOper<T>(this: ComputedNode<T>): () -> T
 		elseif flags == NONE then
 			-- First access should initialize the computed value
 			this.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
+
 			local prevSub = setActiveSub(this)
 			local success, result = pcall(this.getter)
 			activeSub = prevSub
+
 			this.flags = bit32.band(this.flags, bit32.bnot(RECURSED_CHECK))
+
 			if success then
 				this.value = result
 			else
@@ -393,6 +397,7 @@ local function signalOper<T>(
 			local prevSub = setActiveSub(nil)
 			local success, result = pcall(noYield(update), this.pendingValue)
 			activeSub = prevSub
+
 			if success then
 				value = result
 			else
@@ -407,8 +412,10 @@ local function signalOper<T>(
 			if flags.frozen then
 				deepFreeze(value)
 			end
+
 			this.pendingValue = value
 			this.flags = bit32.bor(MUTABLE, DIRTY)
+
 			local subs = this.subs
 			if subs then
 				propagate(subs)
@@ -416,6 +423,7 @@ local function signalOper<T>(
 					flush()
 				end
 			end
+
 			return value
 		end
 
@@ -462,7 +470,7 @@ end
 	@param this Effect node
 	@return Effect cleanup operator
 ]]
-local function effectOper(this: EffectScopeNode): () -> ()
+local function effectOper(this: EffectScopeNode): Cleanup
 	return function()
 		this.depsTail = nil
 		this.flags = NONE
@@ -511,16 +519,15 @@ local function notify(effect: ReactiveNode)
 	until false
 
 	queuedLength = insertIndex
-	insertIndex -= 1
 
-	-- Reverse the collected effects to maintain correct order
-	-- Note: insertIndex should decrement before the next condition evaluation
-	while firstInsertedIndex < insertIndex do
-		local left = queued[firstInsertedIndex]
-		queued[firstInsertedIndex] = queued[insertIndex]
-		queued[insertIndex] = left
-		firstInsertedIndex += 1
+	-- Reverse the collected effects to ensure outer effects run first
+	while true do
 		insertIndex -= 1
+		if firstInsertedIndex >= insertIndex then
+			break
+		end
+		queued[firstInsertedIndex], queued[insertIndex] = queued[insertIndex], queued[firstInsertedIndex]
+		firstInsertedIndex += 1
 	end
 end
 
@@ -615,10 +622,10 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
 ]]
-local function effect(fn: () -> ...(() -> ())?): () -> ()
+local function effect(fn: () -> ...Cleanup?): Cleanup
 	local this: EffectNode = {
 		fn = noYield(fn),
-		flags = bit32.bor(WATCHING, RECURSED_CHECK),
+		flags = WATCHING,
 		cleanups = {},
 	}
 
@@ -629,8 +636,6 @@ local function effect(fn: () -> ...(() -> ())?): () -> ()
 	local prevSub = setActiveSub(this)
 	local success, result = pcall(this.fn)
 	activeSub = prevSub
-
-	this.flags = bit32.band(this.flags, bit32.bnot(RECURSED_CHECK))
 
 	if not success then
 		error(result)
@@ -650,7 +655,7 @@ end
 	@return A cleanup function that stops all effects in the scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
 ]]
-local function effectScope(fn: () -> ...(() -> ())?, detached: boolean?): () -> ()
+local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	local this: EffectScopeNode = {
 		flags = NONE,
 		cleanups = {},
@@ -719,7 +724,7 @@ end
 	@param failSilently If true, silences the warning when called outside an effect/scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
 ]]
-local function onCleanup(fn: () -> (), failSilently: boolean?)
+local function onCleanup(fn: Cleanup, failSilently: boolean?)
 	if activeSub and (activeSub :: EffectNode).cleanups then
 		table.insert((activeSub :: EffectNode).cleanups, noYield(fn))
 	elseif not failSilently then
@@ -728,10 +733,11 @@ local function onCleanup(fn: () -> (), failSilently: boolean?)
 end
 
 --[[
-	Runs the function without subscribing to signal updates or capturing inner
-	effects in the parent effect or scope.
+	Runs the function without subscribing to signal updates and prevents the
+	current effect or scope from tracking inner effects created within the
+	function.
 
-	For an alternative that still cleans up inner effects, use `peek` instead.
+	For an alternative that allows nested effect cleanup, use `peek` instead.
 
 	@param fn A signal or function that accesses signals
 	@param ...args Arguments to pass to the function
@@ -753,8 +759,12 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 end
 
 --[[
-	Runs the function without subscribing to signal updates, but still captures
-	inner effects so that they dispose with the parent effect.
+	Runs the function without subscribing to signal updates, but still allows
+	inner effects to be tracked by parent effects/scopes.
+
+	This is useful for cases where you want to access the current value of a
+	signal without creating a dependency, but still want any effects created
+	within the function to be cleaned up properly.
 
 	To avoid capturing inner effects, use `untracked` instead.
 
@@ -815,8 +825,8 @@ end
 
 --[[
 	Creates an effect that runs the callback one immediately, and then again
-	when the value returned by the getter changes. The callback receives the new
-	value and the previous value as arguments.
+	when the value returned by the getter changes. The callback receives the
+	new value and the previous value as arguments.
 
 	Effects created within the callback are cleaned up when the listener runs
 	or the listener is disposed.
@@ -826,7 +836,7 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
-local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): () -> ()
+local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): Cleanup
 	local tracked = toComputed(getter)
 	local current: T
 
@@ -838,9 +848,9 @@ local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): (
 end
 
 --[[
-	Creates an effect that only runs the callback when the value returned by the
-	getter changes. The callback receives the new value and the previous value
-	as arguments.
+	Creates an effect that only runs the callback when the value returned by
+	the getter changes. The callback receives the new value and the previous
+	value as arguments.
 
 	Effects created within the callback are cleaned up when the listener runs
 	or the listener is disposed.
@@ -850,7 +860,7 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
-local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ()): () -> ()
+local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ()): Cleanup
 	local tracked = toComputed(getter)
 	local current: T
 	local firstRun = true
@@ -867,14 +877,15 @@ local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ())
 end
 
 --[[
-	Disables recursive checks for the current effect or computed signal. Useful
-	for effects that intentionally update signals they depend on.
+	Disables recursive checks for the current reactive node. Currently, only
+	computed signals use recursion checks, as effects allow recursion.
 
 	@example
 	```luau
-	effect(function()
+	computed(function()
 	    recursive()
 	    setCount(getCount() + 1)
+		return getCount()
 	end)
 	```
 ]]
@@ -882,7 +893,7 @@ local function recursive()
 	if activeSub then
 		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(RECURSED_CHECK))
 	else
-		warn(debug.traceback("recursive() can only be called inside an effect or computed signal.", 2))
+		warn(debug.traceback("recursive() can only be called inside a reactive node.", 2))
 	end
 end
 
@@ -900,8 +911,8 @@ end
 	@return A cleanup function that disposes scopes for all keys
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
-local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> ...(() -> ())?): () -> ()
-	local innerScopes: { [K]: () -> () } = {}
+local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> ...Cleanup?): Cleanup
+	local innerScopes: { [K]: Cleanup } = {}
 	local disposed = false
 
 	local function updateScopes(data: { [K]: V })
@@ -930,9 +941,6 @@ local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> 
 
 	return effectScope(function()
 		effect(function()
-			-- Allow recursive updates in case the callback creates or removes
-			-- items in the observed table.
-			recursive()
 			-- Batch so that side effects run after all scopes are created.
 			-- This ensures that a scope creating or removing items doesn't
 			-- interfere with the current update cycle.
@@ -940,9 +948,6 @@ local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> 
 		end)
 
 		return function()
-			if disposed then
-				return
-			end
 			disposed = true
 			for key, dispose in innerScopes do
 				innerScopes[key] = nil
