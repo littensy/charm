@@ -1,4 +1,5 @@
 local Charm = require("../Charm")
+local DeepCharm = require("../../deep-charm/src")
 local client = require("../src/client")
 local test = require("../../../tests/test")
 
@@ -38,7 +39,7 @@ test("should merge patch", function()
 end)
 
 test("should merge patch (reactive)", function()
-	local a = Charm.reactive({ b = 1, c = 2 })
+	local a = DeepCharm.reactive({ b = 1, c = 2 })
 	local runs = 0
 
 	Charm.effect(function()

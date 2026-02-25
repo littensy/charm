@@ -1,0 +1,6 @@
+{
+	"name": "deep-charm",
+	"tree": {
+		"$path": "src"
+	}
+}

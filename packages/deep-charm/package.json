@@ -1,7 +1,7 @@
 {
-	"name": "@rbxts/react-charm",
-	"version": "0.4.0-rc.3",
-	"description": "React bindings for Charm state management",
+	"name": "@rbxts/deep-charm",
+	"version": "0.1.0-rc.1",
+	"description": "Use Charm with plain Luau tables",
 	"license": "MIT",
 	"main": "src/init.luau",
 	"types": "src/index.d.ts",
@@ -23,8 +23,5 @@
 	},
 	"dependencies": {
 		"@rbxts/charm": "workspace:^"
-	},
-	"peerDependencies": {
-		"@rbxts/react": ">=17.0.0"
 	}
 }

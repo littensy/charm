@@ -2,7 +2,7 @@
 /.pesde
 /build
 /packages/**/wally.lock
-/packages/**/LICENSE.md
+/packages/**/LICENSE*
 /packages/**/README.md
 /sourcemap.json
 node_modules

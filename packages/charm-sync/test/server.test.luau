@@ -1,4 +1,5 @@
 local Charm = require("../Charm")
+local DeepCharm = require("../../deep-charm/src")
 local config = require("../src/config")
 local patch = require("../src/patch")
 local server = require("../src/server")
@@ -66,7 +67,7 @@ end)
 
 test("should replicate partial state patches (reactive)", function()
 	local client = {}
-	local a = Charm.reactive({ x = { y = 0 }, z = 0 :: number? })
+	local a = DeepCharm.reactive({ x = { y = 0 }, z = 0 :: number? })
 	local target, payloads
 
 	server.addSignalsToClient(client, { a = a })
@@ -99,7 +100,7 @@ end)
 
 test("should handle nested proxies", function()
 	local client = {}
-	local src = Charm.reactive({ (Charm.reactive({})) })
+	local src = DeepCharm.reactive({ (DeepCharm.reactive({})) })
 	local payloads: {}? = nil
 
 	server.addSignalsToClient(client, { src = src })
@@ -288,9 +289,9 @@ test.describe("historical", function()
 
 	test("should replicate granular state changes (reactive)", function()
 		local client = {}
-		local a = Charm.reactive({ value = 0 })
-		local b = Charm.reactive({ value = 0 })
-		local c = Charm.reactive({ value = 0 })
+		local a = DeepCharm.reactive({ value = 0 })
+		local b = DeepCharm.reactive({ value = 0 })
+		local c = DeepCharm.reactive({ value = 0 })
 		local target, payloads
 
 		server.addSignalsToClient(client, { a = a, b = b, c = c })

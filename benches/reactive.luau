@@ -1,8 +1,9 @@
 local Charm = require("../packages/charm/src")
+local DeepCharm = require("../packages/deep-charm/src")
 local bench = require("./bench")
 
 local effect = Charm.effect
-local reactive = Charm.reactive
+local reactive = DeepCharm.reactive
 
 do
 	local value = reactive({ a = 1 })

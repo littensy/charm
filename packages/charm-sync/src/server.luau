@@ -4,8 +4,6 @@ local patch = require("./patch")
 local types = require("./types")
 local utils = require("./utils")
 
-type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
-
 type SyncPayload = types.SyncPayload
 
 type SyncStatus = number
@@ -36,9 +34,21 @@ local clients: { [any]: ClientKeys } = {}
 local connection: RBXScriptConnection?
 local syncCallback: ((client: any, payloads: { SyncPayload }) -> ())?
 
+--[[
+	Manually converts a reactive proxy to its raw representation to potentially
+	support custom implementations of reactive proxies.
+]]
+local function toRaw<T>(value: T): T
+	if type(value) == "table" and type(value.__target) == "table" and type(value.__track) == "function" then
+		value.__track()
+		return toRaw(value.__target)
+	end
+	return value
+end
+
 local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 	if trackedStates[key] then
-		-- Ignore duplicates, but warn against name collisions
+		-- Warn against name collisions with conflicting signals or proxies
 		if trackedStates[key].identifier ~= identifier then
 			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
@@ -47,12 +57,12 @@ local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 
 	local trackedState: TrackedState<T>
 	local initialValue = getter()
-	local rawInitialValue = Charm.toRaw(initialValue)
+	local rawInitialValue = toRaw(initialValue)
 	local snapshot = if initialValue ~= rawInitialValue then utils.deepCopy(rawInitialValue) else initialValue
 
 	local dispose = Charm.effect(function()
 		local newValue = getter()
-		local rawValue = Charm.toRaw(newValue)
+		local rawValue = toRaw(newValue)
 		local isReactive = newValue ~= rawValue
 
 		if not trackedState then

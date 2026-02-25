@@ -65,6 +65,12 @@ importers:
         specifier: workspace:^
         version: link:../charm
 
+  packages/deep-charm:
+    dependencies:
+      '@rbxts/charm':
+        specifier: workspace:^
+        version: link:../charm
+
   packages/react-charm:
     dependencies:
       '@rbxts/charm':

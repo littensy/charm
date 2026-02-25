@@ -1,9 +1,10 @@
-local Charm = require("../src")
+local Charm = require("../Charm")
+local DeepCharm = require("../src")
 local test = require("../../../tests/test")
 
 local effect = Charm.effect
-local reactive = Charm.reactive
-local toRaw = Charm.toRaw
+local reactive = DeepCharm.reactive
+local toRaw = DeepCharm.toRaw
 
 test("should track nested properties", function()
 	local src, setSrc = reactive({ a = { b = { c = 0 } } })

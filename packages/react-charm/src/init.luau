@@ -51,8 +51,8 @@ local function useSignalBinding<T>(getter: () -> T, dependencies: { any }?)
 	return binding
 end
 
-return {
+return table.freeze({
 	useSignalState = useSignalState,
 	useSignalBinding = useSignalBinding,
 	useAtom = useSignalState,
-}
+})

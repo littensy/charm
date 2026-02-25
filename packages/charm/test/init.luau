@@ -9,7 +9,6 @@ local tests = {
 	"mapped",
 	"observe",
 	"peek",
-	"reactive",
 	"signal",
 	"subscribe",
 	"topology",

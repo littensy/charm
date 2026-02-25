@@ -21,7 +21,7 @@ jobs:
         run: lute run check
 
       - name: Run tests
-        run: lute run test
+        run: lute run tests
 
       - name: Build models
         run: lute run build

@@ -1,4 +1,5 @@
 local Charm = require("../Charm")
+local DeepCharm = require("../../deep-charm/src")
 local client = require("../src/client")
 local config = require("../src/config")
 local server = require("../src/server")
@@ -13,9 +14,9 @@ end)
 test("should replicate server state to client", function()
 	local target = {}
 	local serverA = Charm.atom({ count = 0 })
-	local serverB = Charm.reactive({ count = 0 })
+	local serverB = DeepCharm.reactive({ count = 0 })
 	local clientA = Charm.atom({ count = -1 })
-	local clientB = Charm.reactive({ count = -1 })
+	local clientB = DeepCharm.reactive({ count = -1 })
 
 	client.addSignals({ a = clientA, b = clientB })
 	server.addSignalsToClient(target, { a = serverA, b = serverB })
@@ -50,9 +51,9 @@ end)
 test("should replicate historical server state to client", function()
 	local target = {}
 	local serverA = Charm.atom({ count = 0 })
-	local serverB = Charm.reactive({ count = 0 })
+	local serverB = DeepCharm.reactive({ count = 0 })
 	local clientA = Charm.atom({ count = -1 })
-	local clientB = Charm.reactive({ count = -1 })
+	local clientB = DeepCharm.reactive({ count = -1 })
 
 	config.preserveHistory = true
 

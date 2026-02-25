@@ -2,8 +2,8 @@ local Charm = require("../Charm")
 local patch = require("./patch")
 local types = require("./types")
 
-type ReactiveProxy<T = {}> = Charm.ReactiveProxy<T>
 type SyncPayload = types.SyncPayload
+type ReactiveProxy<T = {}> = types.ReactiveProxy<T>
 
 local trackedSignals: { [string]: (any) -> any } = {}
 local trackedReactives: { [string]: ReactiveProxy } = {}

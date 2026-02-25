@@ -4,6 +4,7 @@
 		"$className": "Folder",
 		"Charm": { "$path": "packages/charm/src" },
 		"CharmSync": { "$path": "packages/charm-sync/src" },
+		"DeepCharm": { "$path": "packages/deep-charm/src" },
 		"ReactCharm": { "$path": "packages/react-charm/src" },
 		"VideCharm": { "$path": "packages/vide-charm/src" }
 	}

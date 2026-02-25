@@ -14,7 +14,7 @@
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/littensy/charm/ci.yml?style=for-the-badge&branch=main&logo=github)
 [![NPM Version](https://img.shields.io/npm/v/@rbxts/charm.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/@rbxts/charm)
-[![GitHub License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE.md)
+[![GitHub License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE)
 
 </div>
 
@@ -54,7 +54,6 @@ Charm is a state management library that brings the [fine-grained reactivity](ht
     - [`batch(callback)`](#batchcallback)
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
-    - [`reactive(initialValue)`](#reactiveinitialvalue)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
     - [`trigger(callback)`](#triggercallback)
     - [`flags`](#flags)
@@ -64,6 +63,12 @@ Charm is a state management library that brings the [fine-grained reactivity](ht
     - [Server API](#config)
     - [Client API](#clientaddsignalssetters)
     - [Sync Caveats](#sync-caveats)
+- [Deep Reactivity](#deep-reactivity)
+    - [Installation](#installation-2)
+    - [`reactive(initialValue)`](#reactiveinitialvalue)
+    - [Mutation vs. update function](#mutation-vs-update-function)
+    - [`toRaw(value)`](#torawvalue)
+    - [`isReactive(value)`](#isreactivevalue)
 - [Migration](#migration)
 - [Examples](#examples)
 
@@ -539,45 +544,6 @@ dispose() -- Cleaned up
 
 ---
 
-### `reactive(initialValue)`
-
-By default, Charm's signals are _shallowly reactive_, meaning only the value itself is reactive, and table properties are not tracked. Signal values must also be **immutable** in order to track changes in tables.
-
-You can opt-in to deep reactivity with **reactive proxies**. The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and table values will also be wrapped in a reactive proxy.
-
-```luau
-local users, setUsers = reactive({
-	{ name = "John", surname = "Doe" },
-})
-
-effect(function()
-	print(`{users[1].name} {users[1].surname}`)
-end) -- Output: John Doe
-
-setUsers(function(state)
-	state[1].name = "Jane"
-	state[1].surname = "Smith"
-	table.insert(state, { name = "Steve", surname = "Doe" })
-end) -- Output: Jane Smith
-
--- You can also mutate the reactive proxy directly:
-users[1].name = "John" -- John Smith
-```
-
-> [!WARNING]
-> Because reactive proxies use metatables for reading and writing, functions like `table.insert` will not work on the proxy. Table functions should only be called on the raw table value.
-
-If you need to access the raw table through the reactive proxy, use the `toRaw()` function:
-
-```luau
-local raw = {}
-local proxy = reactive(raw)
-
-print(toRaw(proxy) == raw) -- true
-```
-
----
-
 ### `atom(initialValue, equals?)`
 
 The `atom` function creates a new reactive signal and returns a single function that acts as both a getter and setter.
@@ -654,11 +620,11 @@ print(total()) -- 2
 
 Charm exposes the following global flags to customize behavior:
 
-| Flag              | Default        | Description                                                                                                                                            |
-| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| strict            | `true`/`false` | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                              |
-| frozen            | `true`/`false` | Enforces data immutability by deep-freezing tables passed to signals.                                                                                  |
-| trackInnerEffects | `true`         | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
+| Flag              | Default            | Description                                                                                                                                            |
+| ----------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| strict            | `true` if not `O2` | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                              |
+| frozen            | `true` if not `O2` | Enforces data immutability by deep-freezing tables passed to signals, excluding objects with metatables.                                               |
+| trackInnerEffects | `true`             | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
 
 The `strict` and `frozen` flags are automatically enabled in Roblox Studio. More accurately, they are enabled for the Luau optimization levels `O1` and lower.
 
@@ -736,7 +702,7 @@ To sync the client with the server's state, call `client.addSignals` with a tabl
 After the client receives updates from the server, call `client.patch` to patch the client's signals with the incoming state updates.
 
 ```luau
--- Add signal setters, atoms, or reactive objects
+-- Add signal setters, atoms, or reactive proxies
 client.addSignals({
 	name = nameStore.setName,
 	surname = nameStore.setSurname,
@@ -931,6 +897,87 @@ This means nilable values may be replaced with `None` in patches, and code worki
 
 ---
 
+## Deep Reactivity
+
+By default, Charm's signals are not deeply reactive. This means that only the value itself is tracked, and table properties are not checked for changes. As a result, signal values must be **immutable** in order to detect changes in tables.
+
+With deep reactivity, you can mutate tables directly and detect changes in nested properties without cloning tables. In Charm, this is done by wrapping your tables in proxy tables that handle reactivity for you.
+
+You can opt-in to deep reactivity with **reactive proxies**:
+
+### Installation
+
+```sh
+npm install @rbxts/deep-charm
+yarn add @rbxts/deep-charm
+pnpm add @rbxts/deep-charm
+```
+
+```toml
+[dependencies]
+DeepCharm = "littensy/deep-charm@VERSION"
+```
+
+---
+
+### `reactive(initialValue)`
+
+The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and table values will also be wrapped in a reactive proxy.
+
+```luau
+local users, updateUsers = reactive({
+	{ name = "John", surname = "Doe" },
+})
+
+effect(function()
+	print(`{users[1].name} {users[1].surname}`)
+end) -- Output: John Doe
+
+updateUsers(function(state)
+	state[1].name = "Jane"
+	state[1].surname = "Smith"
+	table.insert(state, { name = "Steve", surname = "Doe" })
+end) -- Output: Jane Smith
+
+-- You can also mutate the reactive proxy directly:
+users[1].name = "John" -- John Smith
+```
+
+### Mutation vs. update function
+
+Because reactive proxies use metatables for reading and writing, functions like `table.insert` will not work on the proxy. Table functions should only be called on the raw table value, which you can access through the update function returned by `reactive()`.
+
+This update function (`updateUsers()` in the example above) passes the raw table for you to mutate. Once your callback is done executing, the updater will manually notify subscriptions to the reactive proxy and its nested properties. This process does not use metatables, so you should use this for table operations or batching updates.
+
+---
+
+### `toRaw(value)`
+
+If you need to access the raw table through the reactive proxy, use the `toRaw()` function:
+
+```luau
+local raw = {}
+local proxy = reactive(raw)
+
+print(toRaw(proxy) == raw) -- true
+```
+
+---
+
+### `isReactive(value)`
+
+The `isReactive()` function returns `true` if the given value is a reactive proxy by checking its metatable.
+
+```lua
+local raw = {}
+local proxy = reactive(raw)
+
+print(isReactive(proxy)) -- true
+print(isReactive(raw)) -- false
+```
+
+---
+
 ## Migration
 
 Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that might help you migrate from an older version.
@@ -1028,11 +1075,11 @@ end
 ---
 
 <p align="center">
-Charm is released under the <a href="LICENSE.md">MIT License</a>.
+Charm is released under the <a href="LICENSE">MIT License</a>.
 </p>
 
 <div align="center">
 
-[![MIT License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE.md)
+[![MIT License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE)
 
 </div>

@@ -11,14 +11,14 @@
 		"!wally.toml",
 		"!wally.lock",
 		"!default.project.json",
-		"!**/__tests__"
+		"!test"
 	],
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/littensy/charm.git"
 	},
 	"scripts": {
-		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
+		"prepare": "cp ../../LICENSE . && cp ../../README.md .",
 		"publish:wally": "wally publish"
 	}
 }

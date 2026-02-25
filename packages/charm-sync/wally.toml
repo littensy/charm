@@ -5,7 +5,7 @@ registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 exclude = [
 	"node_modules",
-	"__tests__",
+	"test",
 	"src/index.d.ts",
 	"package.json",
 	"Charm.luau",

@@ -1,1 +1,0 @@
-(require)("../tests/run.server")

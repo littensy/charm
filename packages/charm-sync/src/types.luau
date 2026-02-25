@@ -18,4 +18,13 @@ export type SyncPayload =
 ]]
 export type None = { __none: "__none" }
 
+export type ReactiveProxy<T = any> = typeof(setmetatable(
+	{} :: {
+		__track: () -> (),
+		__target: T,
+		__signals: { [unknown]: () -> unknown },
+	},
+	{} :: { __index: T }
+))
+
 return {}
