@@ -18,13 +18,13 @@
 
 </div>
 
-Charm is a state management library that brings the [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf) approach — used in libraries like Vue, Preact, and Solid — to your Luau projects.
+Charm is a state management library based on an approach to reactive programming called [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf). Store your game's state in signals, and your code will stay in sync with the data it depends on.
 
-**Build complex game state from simple building blocks:**
+**Build complex state from three reactive primitives:**
 
-- Store state in [reactive signals](#signalinitialvalue-equals): state containers that hold a value
-- React to state changes with [effects](#effectcallback): run code whenever a dependency updates
-- Derive new values with [computed signals](#computedgetter): memoize a function with automatic dependency tracking
+- Store state in [signals](#signalinitialvalue-equals): state containers that hold a value
+- React to state changes with [effects](#effectcallback): run code whenever a signal updates
+- Derive new values with [computed signals](#computedgetter): memoized functions with automatic dependency tracking
 
 **Want to learn more about signals?**
 
@@ -33,7 +33,7 @@ Charm is a state management library that brings the [fine-grained reactivity](ht
 - https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
 - https://angular.dev/guide/signals
 
-[Migrating from an older version?](#migration)
+[Migrating from an older version of Charm?](#migration)
 
 <details>
 <summary><b>Table of Contents</b></summary>
@@ -77,19 +77,19 @@ Charm is a state management library that brings the [fine-grained reactivity](ht
 ## At a Glance
 
 ```luau
-local getTodos, setTodos = signal({} :: { [number]: string })
+local getTodos, setTodos = signal({} :: { string })
 local getQuery, setQuery = signal("")
 
-observe(getTodos, function(todo, index)
+observe(getTodos, function(todo: string, index: number)
 	local instance = Instance.new("TextLabel")
 
-	local getText = computed(function(prevText)
-		return getTodos()[index] or prevText
+	local getText = computed(function()
+		return getTodos()[index] or ""
 	end)
 
 	effect(function()
 		instance.Text = getText()
-		instance.Visible = getText():match(getQuery()) ~= nil
+		instance.Visible = string.match(getText(), getQuery()) ~= nil
 	end)
 
 	instance.LayoutOrder = index
@@ -102,30 +102,31 @@ observe(getTodos, function(todo, index)
 end)
 
 setTodos({ "Buy milk", "Buy eggs", "Play Roblox" })
-setQuery("^Buy")
+setQuery("Buy")
 ```
 
 <details>
 <summary>Explain code</summary>
 
 ```luau
-local getTodos, setTodos = signal({} :: { [number]: string })
+-- Declare state for a todo list and a search query
+local getTodos, setTodos = signal({} :: { string })
 local getQuery, setQuery = signal("")
 
 -- Create a text label when an item is added to the list
 observe(getTodos, function(todo, index)
 	local instance = Instance.new("TextLabel")
 
-	-- Create a computed signal that stores the current text, or the previous
-	-- value if the item was removed
-	local getText = computed(function(prevText)
-		return getTodos()[index] or prevText
+	-- Create a memoized function that only re-runs effects when the todo list
+	-- updates or the function returns new text
+	local getText = computed(function()
+		return getTodos()[index] or ""
 	end)
 
-	-- Set properties when the text or query updates
+	-- Update instance properties when the text or query updates
 	effect(function()
 		instance.Text = getText()
-		instance.Visible = getText():match(getQuery()) ~= nil
+		instance.Visible = string.match(getText(), getQuery()) ~= nil
 	end)
 
 	instance.LayoutOrder = index
@@ -140,8 +141,8 @@ end)
 
 -- Add items to the todo list
 setTodos({ "Buy milk", "Buy eggs", "Play Roblox" })
--- Filter for items starting with "Buy"
-setQuery("^Buy")
+-- Filter for items containing "Buy"
+setQuery("Buy")
 ```
 
 </details>
@@ -232,24 +233,24 @@ dispose() -- Cleanup 1
 Effects can be nested inside other effects. When the outer effect re-runs, inner effects from the previous run are automatically cleaned up, and new inner effects are created if needed. The system ensures proper execution order; outer effects always run before their inner effects:
 
 ```luau
-local getShow, setShow = signal(true)
+local getPrintCount, setPrintCount = signal(true)
 local getCount, setCount = signal(1)
 
 effect(function()
-	if getShow() then
-		-- This inner effect is created when show() is true
+	if getPrintCount() then
+		-- This inner effect is created when getPrintCount() is true
 		effect(function()
-			print(`Count is: {getCount()}`)
+			print(`Count is {getCount()}`)
 		end)
 	end
-end) -- Output: Count is: 1
+end) -- Count is 1
 
-setCount(2) -- Count is: 2
+setCount(2) -- Count is 2
 
--- When show becomes false, the inner effect is cleaned up
-setShow(false) -- No output
+-- This re-runs the outer effect and cleans up old inner effects
+setPrintCount(false)
 
-setCount(3) -- No output (inner effect no longer exists)
+setCount(3) -- No output
 ```
 
 Nested effect cleanup also applies to every reaction API (`subscribe()`, `listen()`, `observe()`) because they are built upon effects.
@@ -261,9 +262,7 @@ Nested effect cleanup also applies to every reaction API (`subscribe()`, `listen
 
 ### `computed(getter)`
 
-The `computed` function creates a new signal with a value derived from multiple signals. The computed signal can be reacted to like a normal signal, and it returns the getter function's last return value.
-
-The computed signal will subscribe to signals accessed by the getter and track them as dependencies. Changes to these dependencies will re-execute the getter, and if it returns a new value, then the computed signal is updated to that value.
+The `computed` function creates a read-only signal whose value is derived from other signals. The computed signal caches the getter function's last result, and the value is only re-computed if a dependency has updated since the last computation.
 
 ```luau
 local getName, setName = signal("John")
@@ -277,7 +276,7 @@ setName("Jane")
 print(getFullName()) -- "Jane Doe"
 ```
 
-The getter function also receives the previous state (or `nil` if running for the first time). You can use this for more complex state:
+The getter function also receives the previous result (or `nil` during the initial run). You can use this for computed signals that depend on the previous result:
 
 ```luau
 local getCounter, setCounter = signal(10)
@@ -290,13 +289,11 @@ setCounter(5)
 print(getMax()) -- 10
 ```
 
-Computed signals are updated lazily, meaning the getter will only re-execute once the computed signal is called _and_ if a dependency updated since the last call.
-
 ---
 
 ### `effectScope(callback)`
 
-Scopes allow you to dispose multiple effects at once. The `effectScope` function creates a scope that tracks inner effects, so effects created inside the callback clean up when the scope disposes.
+Scopes allow you to dispose multiple effects at once. The `effectScope` function creates a scope that tracks inner effects, so effects created during the execution of the callback will clean up when the scope disposes.
 
 ```luau
 local getCounter, setCounter = signal(0)
@@ -328,10 +325,9 @@ The callback also receives the previous value, or `nil` when running for the fir
 ```luau
 local getCounter, setCounter = signal(0)
 
--- Output: Count is 0 (was nil)
 listen(getCounter, function(count, prevCount)
 	print(`Count is {count} (was {prevCount})`)
-end)
+end) -- Count is 0 (was nil)
 
 setCounter(1) -- Count is 1 (was 0)
 ```
@@ -349,10 +345,9 @@ local function floorCounter()
 	return math.floor(getCounter())
 end
 
--- Output: Floor of count is 0 (was nil)
 listen(floorCounter, function(count, prevCount)
 	print(`Floor of count is {count} (was {prevCount})`)
-end)
+end) -- Floor of count is 0 (was nil)
 
 setCounter(0.5) -- Doesn't print anything, floor is still 0
 setCounter(1) -- Floor of count is 1 (was 0)
@@ -367,13 +362,12 @@ setCounter(1) -- Floor of count is 1 (was 0)
 ```luau
 local getItems, setItems = signal({ a = 0, b = 0 })
 
--- Added a, Added b
 observe(getItems, function(value, key)
 	print(`Added {key}`)
 	return function()
 		print(`Removed {key}`)
 	end
-end)
+end) -- Added a, Added b
 
 setItems({ a = 0, c = 0 }) -- Removed b, Added c
 ```
@@ -431,7 +425,7 @@ local getUntracked, setUntracked = signal(0)
 
 effect(function()
 	print(`Tracked: {getTracked()}, Untracked: {untracked(getUntracked)}`)
-end) -- Output: Tracked: 0, Untracked: 0
+end) -- Tracked: 0, Untracked: 0
 
 setTracked(1) -- Tracked: 1, Untracked: 0
 setUntracked(1) -- No output
@@ -467,7 +461,7 @@ local getCounter, setCounter = signal(0)
 
 local disposeOuter = effect(function()
 	print(`Count is {peek(getCounter)}`)
-end) -- Output: Count is 0
+end) -- Count is 0
 
 setCounter(1) -- No output; count was accessed in peek()
 ```
@@ -530,7 +524,7 @@ print(getSwapped()) -- { a = 1, b = 2, c = 3 }
 
 The `onCleanup` function binds the callback to the currently running effect or effect scope. Multiple cleanup functions can be bound to the same effect.
 
-If there is no active effect, a warning is logged, unless `failSilently` is set to `true`.
+Unless `failSilently` is set to `true`, this function will emit a warning if there is no active effect or scope.
 
 ```luau
 local dispose = effectScope(function()
@@ -620,13 +614,13 @@ print(total()) -- 2
 
 Charm exposes the following global flags to customize behavior:
 
-| Flag              | Default            | Description                                                                                                                                            |
-| ----------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| strict            | `true` if not `O2` | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                              |
-| frozen            | `true` if not `O2` | Enforces data immutability by deep-freezing tables passed to signals, excluding objects with metatables.                                               |
-| trackInnerEffects | `true`             | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
+| Flag              | Default  | Description                                                                                                                                            |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| strict            | `true`\* | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                              |
+| frozen            | `true`\* | Enforces data immutability by deep-freezing tables passed to signals, excluding objects with metatables.                                               |
+| trackInnerEffects | `true`   | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
 
-The `strict` and `frozen` flags are automatically enabled in Roblox Studio. More accurately, they are enabled for the Luau optimization levels `O1` and lower.
+The `strict` and `frozen` flags are automatically enabled in Roblox Studio and other development environments where the Luau optimization level is `O1` or lower.
 
 ---
 
@@ -746,7 +740,7 @@ Players.PlayerAdded:Connect(function(player)
 end)
 ```
 
-You're also allowed to create new signals to sync to specific players, as long as the key is also unique to that player:
+You're also allowed to create new signals to sync to specific players, as long as the key is unique to that player:
 
 ```luau
 server.addSignalsToClient(player, {
@@ -899,11 +893,11 @@ This means nilable values may be replaced with `None` in patches, and code worki
 
 ## Deep Reactivity
 
-By default, Charm's signals are not deeply reactive. This means that only the value itself is tracked, and table properties are not checked for changes. As a result, signal values must be **immutable** in order to detect changes in tables.
+Charm's reactivity system is _shallow_ by default: only the top-level value is reactive, so table properties are not checked when determining whether a signal has updated. As a result, tables in Charm should be immutable (copied before writing) in order to signal that a table's properties have changed.
 
-With deep reactivity, you can mutate tables directly and detect changes in nested properties without cloning tables. In Charm, this is done by wrapping your tables in proxy tables that handle reactivity for you.
+Deep reactivity, on the other hand, uses proxy tables to perform dependency tracking on properties. You can subscribe to a property by indexing the proxy table, and setting a property will notify its subscribers. This approach to reactivity lets you work with mutable data, making state management more intuitive at the cost of added overhead.
 
-You can opt-in to deep reactivity with **reactive proxies**:
+You can opt-in to deep reactivity with the Deep Charm library:
 
 ### Installation
 
@@ -922,7 +916,7 @@ DeepCharm = "littensy/deep-charm@VERSION"
 
 ### `reactive(initialValue)`
 
-The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and table values will also be wrapped in a reactive proxy.
+The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and nested tables will also be wrapped in a reactive proxy.
 
 ```luau
 local users, updateUsers = reactive({
@@ -933,10 +927,10 @@ effect(function()
 	print(`{users[1].name} {users[1].surname}`)
 end) -- Output: John Doe
 
-updateUsers(function(state)
-	state[1].name = "Jane"
-	state[1].surname = "Smith"
-	table.insert(state, { name = "Steve", surname = "Doe" })
+updateUsers(function(raw)
+	raw[1].name = "Jane"
+	raw[1].surname = "Smith"
+	table.insert(raw, { name = "Steve", surname = "Doe" })
 end) -- Output: Jane Smith
 
 -- You can also mutate the reactive proxy directly:
@@ -1019,11 +1013,10 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 > This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
 
 5. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
-    - [`reactive()`](#reactiveinitialvalue): make mutable tables deeply reactive
-    - [`signal()`](#signalinitialvalue-equals): make reads and writes more explicit
-    - [`listen()`](#listengetter-callback): create a subscription that runs once immediately
+    - [`signal()`](#signalinitialvalue-equals): make atom reads and writes more explicit
+    - [`listen()`](#listengetter-callback): create a subscription that also runs once immediately
     - [`effectScope()`](#effectscopecallback): collect and clean up multiple effects at once
-    - [`onCleanup()`](#oncleanupcallback-failsilently): bind a cleanup function to the active effect
+    - [`onCleanup()`](#oncleanupcallback-failsilently): bind a cleanup function to the active effect or scope
     - [`trigger()`](#triggercallback): trigger updates for table mutations
 
 ---
@@ -1035,10 +1028,14 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
 ### React Counter
 
 ```luau
-local getCounter, setCounter = signal(0)
+local Charm = require("@packages/charm")
+local ReactCharm = require("@packages/react-charm")
+local React = require("@packages/react")
+
+local getCounter, setCounter = Charm.signal(0)
 
 local function Counter()
-	local count = useSignalState(getCounter)
+	local count = ReactCharm.useSignalState(getCounter)
 
 	return React.createElement("TextButton", {
 		[React.Event.Activated] = function()
@@ -1053,10 +1050,16 @@ end
 ### Vide Counter
 
 ```luau
-local getCounter, setCounter = signal(0)
+local Charm = require("@packages/charm")
+local VideCharm = require("@packages/vide-charm")
+local Vide = require("@packages/vide")
+
+local create = Vide.create
+
+local getCounter, setCounter = Charm.signal(0)
 
 local function Counter()
-	local count = useSignalState(getCounter)
+	local count = VideCharm.useSignalState(getCounter)
 
 	return create "TextButton" {
 		Activated = function()
