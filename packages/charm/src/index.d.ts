@@ -1,4 +1,5 @@
 type Key = string | number | symbol;
+
 type Cleanup = () => void;
 
 export enum ReactiveFlags {
@@ -31,11 +32,15 @@ export interface Link {
 }
 
 export interface Atom<T> {
-	(newValue: T | ((currentValue: T) => T)): T;
+	(update: Update<T>): T;
 	(): T;
 }
 
-export type Setter<T> = (newValue: T | ((currentValue: T) => T)) => T;
+export type Getter<T> = () => T;
+
+export type Setter<T> = (update: Update<T>) => T;
+
+export type Update<T> = ((currentValue: T) => T) | T;
 
 export type Equals<T> = (current: T, incoming: T) => boolean;
 
@@ -71,16 +76,8 @@ export const flags: {
  * @returns A tuple containing the getter and setter functions for the signal.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
  */
-export function signal<T>(
-	initialValue: T,
-	equals?: Equals<T>,
-): LuaTuple<[getter: () => T, setter: (newValue: T | ((currentValue: T) => T)) => T]>;
-export function signal<T>(): LuaTuple<
-	[
-		getter: () => T | undefined,
-		setter: (newValue: T | undefined | ((currentValue?: T) => T | undefined)) => T | undefined,
-	]
->;
+export function signal<T>(initialValue: T, equals?: Equals<T>): LuaTuple<[getter: Getter<T>, setter: Setter<T>]>;
+export function signal<T>(): LuaTuple<[getter: Getter<T | undefined>, setter: Setter<T | undefined>]>;
 
 /**
  * Creates a reactive atom that acts as both a signal getter and setter.
@@ -102,7 +99,7 @@ export function atom<T>(): Atom<T | undefined>;
  * @param getter A function that produces the next value.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
  */
-export function computed<T>(getter: (previousValue?: T) => T): () => T;
+export function computed<T>(getter: (previousValue?: T) => T): Getter<T>;
 
 /**
  * Creates an effect that runs a callback in response to signal state changes.
@@ -205,7 +202,7 @@ export function batch<Args extends any[], Result>(fn: (...args: Args) => Result,
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
  */
-export function listen<T>(getter: () => T, fn: (value: T, previousValue: T | undefined) => void): Cleanup;
+export function listen<T>(getter: Getter<T>, fn: (value: T, previousValue: T | undefined) => void): Cleanup;
 
 /**
  * Creates an effect that only runs the callback when the value returned by the
@@ -220,7 +217,7 @@ export function listen<T>(getter: () => T, fn: (value: T, previousValue: T | und
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
  */
-export function subscribe<T>(getter: () => T, fn: (value: T, previousValue: T) => void): Cleanup;
+export function subscribe<T>(getter: Getter<T>, fn: (value: T, previousValue: T) => void): Cleanup;
 
 /**
  * Creates a new read-only signal that is computed by mapping over the entries
@@ -232,19 +229,19 @@ export function subscribe<T>(getter: () => T, fn: (value: T, previousValue: T) =
  * @see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
  */
 export function mapped<VI, KI, VO, KO = KI>(
-	getter: () => Map<KI, VI> | ReadonlyMap<KI, VI>,
+	getter: Getter<Map<KI, VI> | ReadonlyMap<KI, VI>>,
 	mapper: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
-): () => ReadonlyMap<KO, VO>;
+): Getter<ReadonlyMap<KO, VO>>;
 // Overload for arrays
 export function mapped<VI, VO, K extends Key = number>(
-	getter: () => readonly VI[],
+	getter: Getter<readonly VI[]>,
 	mapper: (value: VI, key: number) => LuaTuple<[VO, K]> | VO,
-): () => K extends number ? readonly VO[] : { readonly [P in K]: VO };
+): Getter<K extends number ? readonly VO[] : { readonly [P in K]: VO }>;
 // Overload for objects
 export function mapped<VI, KI extends Key, VO, KO extends Key = KI>(
-	getter: () => { readonly [K in KI]: VI },
+	getter: Getter<{ readonly [K in KI]: VI }>,
 	mapper: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
-): () => { readonly [K in KO]: VO };
+): Getter<{ readonly [K in KO]: VO }>;
 
 /**
  * Calls the callback function for each unique key in the table returned by the
@@ -263,12 +260,12 @@ export function mapped<VI, KI extends Key, VO, KO extends Key = KI>(
  * @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
  */
 export function observe<V, K = number>(
-	getter: () => Map<K, V> | ReadonlyMap<K, V> | readonly V[],
+	getter: Getter<Map<K, V> | ReadonlyMap<K, V> | readonly V[]>,
 	fn: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 // Overload for objects
 export function observe<V, K extends Key>(
-	getter: () => { readonly [K in Key]: V },
+	getter: Getter<{ readonly [K in Key]: V }>,
 	fn: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 

@@ -16,9 +16,12 @@ local checkDirty = system.checkDirty
 local shallowPropagate = system.shallowPropagate
 local createReactiveSystem = system.createReactiveSystem
 
-type Cleanup = () -> ()
-
-export type Atom<T = any> = (...((T) -> T) | T) -> T
+export type Getter<T> = () -> T
+export type Setter<T> = (update: Update<T>) -> T
+export type Atom<T = any> = (...Update<T>) -> T
+export type Update<T> = ((current: T) -> T) | T
+export type Equals<T> = (current: T, incoming: T) -> boolean
+export type Cleanup = () -> ()
 
 type EffectScopeNode = ReactiveNode & {
 	cleanups: { Cleanup },
@@ -412,10 +415,7 @@ end
 	@return Setter function to update the signal value
 	@see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
 ]]
-local function signal<T>(
-	initialValue: T,
-	equals: ((current: T, incoming: T) -> boolean)?
-): (() -> T, (((T) -> T) | T) -> T)
+local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Setter<T>)
 	local this: SignalNode = {
 		currentValue = initialValue,
 		pendingValue = initialValue,
@@ -426,7 +426,7 @@ local function signal<T>(
 		deepFreeze(initialValue)
 	end
 
-	local function writeSignal(update: ((T) -> T) | T): T
+	local function writeSignal(update: Update<T>): T
 		local value: T
 
 		-- Determine the new value based on whether the update is a function or
@@ -505,7 +505,7 @@ end
 	@param equals Optional comparator function to check for value changes
 	@see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
 ]]
-local function atom<T>(initialValue: T, equals: ((current: T, incoming: T) -> boolean)?): Atom<T>
+local function atom<T>(initialValue: T, equals: Equals<T>?): Atom<T>
 	local get, set = signal(initialValue, equals)
 	local function atomOper(...)
 		return if select("#", ...) == 0 then get() else set((...))
@@ -522,7 +522,7 @@ end
 	@return A function that returns the cached value
 	@see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
 ]]
-local function computed<T>(getter: (previousValue: T?) -> T): () -> T
+local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 	local this: ComputedNode = {
 		flags = NONE,
 		getter = noYield(getter),
@@ -784,7 +784,7 @@ end
 	@param fn A signal or function that accesses signals
 	@return `fn` wrapped in a computed signal if needed
 ]]
-local function toComputed<T>(fn: () -> T): () -> T
+local function toComputed<T>(fn: Getter<T>): Getter<T>
 	local name = debug.info(fn, "n")
 	return if name == "readSignal" or name == "readComputed" or name == "atomOper" then fn else computed(fn)
 end
@@ -802,7 +802,7 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
-local function listen<T>(getter: () -> T, fn: (state: T, previous: T?) -> ()): Cleanup
+local function listen<T>(getter: Getter<T>, fn: (state: T, lastState: T?) -> ()): Cleanup
 	local tracked = toComputed(getter)
 	local current: T
 
@@ -826,7 +826,7 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
-local function subscribe<T>(getter: () -> T, fn: (state: T, lastState: T) -> ()): Cleanup
+local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> ()): Cleanup
 	local tracked = toComputed(getter)
 	local current: T
 	local firstRun = true
@@ -851,12 +851,12 @@ end
 	key is removed or the `observe()` effect is disposed. Effects created
 	during the callback will also be bound to the lifetime of the key.
 
-	@param getter Function that returns a table
+	@param getter A signal or function that returns a table
 	@param fn Function that is called for each key added to the table
 	@return A cleanup function that disposes scopes for all keys
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
-local function observe<K, V>(getter: () -> { [K]: V }, fn: (item: V, key: K) -> ...Cleanup?): Cleanup
+local function observe<K, V>(getter: Getter<{ [K]: V }>, fn: (item: V, key: K) -> ...Cleanup?): Cleanup
 	local innerScopes: { [K]: Cleanup } = {}
 	local disposed = false
 
@@ -907,11 +907,11 @@ end
 	of an existing atom. If the key is omitted from the mapper's return value,
 	the original key is preserved.
 
-	@param getter Function that returns a table
+	@param getter A signal or function that returns a table
 	@param mapper Function that maps each entry from the source to a new entry in the mapped table
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
 ]]
-local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, mapper: (item: VI, key: KI) -> (VO, KO)): () -> { [KO]: VO }
+local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
 	local currentInput: { [KI]: VI } = {}
 	local keyCache: { [KI]: KO } = {}
 
@@ -984,9 +984,9 @@ return {
 	listen = listen,
 	observe = observe,
 	mapped = mapped :: (<KI, VI, KO, VO>(
-		getter: () -> { [KI]: VI },
-		mapper: (item: VI, key: KI) -> (VO, KO)
-	) -> () -> { [KO]: VO }) & (<K, VI, VO>(getter: () -> { [K]: VI }, mapper: (item: VI, key: K) -> VO) -> () -> { [K]: VO }),
+		getter: Getter<{ [KI]: VI }>,
+		mapper: (VI, KI) -> (VO, KO)
+	) -> Getter<{ [KO]: VO }>) & (<K, VI, VO>(getter: Getter<{ [K]: VI }>, mapper: (VI, K) -> VO) -> Getter<{ [K]: VO }>),
 	onCleanup = onCleanup,
 	getActiveSub = getActiveSub,
 	setActiveSub = setActiveSub,
