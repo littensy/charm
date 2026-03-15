@@ -18,13 +18,13 @@
 
 </div>
 
-Charm is a state management library based on an approach to reactive programming called [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf). Store your game's state in signals, and your code will stay in sync with the data it depends on.
+Charm is a state management library that brings the concept of [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf) to Roblox. Connect behavior to data with reactive signals, ensuring games stay up-to-date with their underlying data while eliminating the need for manual updates.
 
-**Build complex state from three reactive primitives:**
+**Build game state from simple building blocks:**
 
 - Store state in [signals](#signalinitialvalue-equals): state containers that hold a value
-- React to state changes with [effects](#effectcallback): run code whenever a signal updates
-- Derive new values with [computed signals](#computedgetter): memoized functions with automatic dependency tracking
+- React to state changes with [effects](#effectcallback): re-run code when a dependency updates
+- Derive values from state with [computed signals](#computedgetter): memoized functions with dependency tracking
 
 **Want to learn more about signals?**
 
@@ -172,11 +172,11 @@ Signals are the core of reactivity in Charm. The `signal` function creates a rea
 ```luau
 local getCounter, setCounter = signal(0)
 
-print(getCounter()) -- 0
 setCounter(1)
 setCounter(function(count)
 	return count + 1
 end)
+print(getCounter()) -- 2
 ```
 
 Accessing the signal's value in an effect or computed signal will subscribe to it as a dependency. Changing the value will immediately notify every effect and computed signal that depends on the signal, ensuring all of your state is correct and up-to-date.
