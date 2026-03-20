@@ -17,10 +17,7 @@ local function useSignalState<T>(getter: () -> T, dependencies: { any }?): T
 	local value, setValue = React.useState(getter)
 
 	React.useLayoutEffect(function()
-		return Charm.effect(function()
-			-- Wrap in untracked to avoid tracking inner effect and atom calls
-			Charm.untracked(setValue, getter())
-		end)
+		return Charm.listen(getter, setValue)
 	end, dependencies or {})
 
 	return value
@@ -42,10 +39,7 @@ local function useSignalBinding<T>(getter: () -> T, dependencies: { any }?)
 	local binding, setBinding = React.useBinding(initialValue)
 
 	React.useLayoutEffect(function()
-		return Charm.effect(function()
-			-- Wrap in untracked to avoid tracking inner effect and atom calls
-			Charm.untracked(setBinding, getter())
-		end)
+		return Charm.listen(getter, setBinding)
 	end, dependencies or {})
 
 	return binding

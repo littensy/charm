@@ -809,7 +809,7 @@ local function listen<T>(getter: Getter<T>, fn: (state: T, lastState: T?) -> ())
 	return effect(function()
 		local previous = current
 		current = tracked()
-		peek(fn, current, previous)
+		untracked(fn, current, previous)
 	end)
 end
 
@@ -837,7 +837,7 @@ local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> (
 		if firstRun then
 			firstRun = false
 		else
-			peek(fn, current, previous)
+			untracked(fn, current, previous)
 		end
 	end)
 end

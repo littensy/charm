@@ -18,7 +18,7 @@
 
 </div>
 
-Charm is a state management library that brings the concept of [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf) to Roblox. Connect behavior to data with reactive signals, ensuring games stay up-to-date with their underlying data while eliminating the need for manual updates.
+Charm is a state management library based on [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf). Connect behavior to data with reactive signals, ensuring games stay up-to-date with their underlying data while eliminating the need for manual updates.
 
 **Build game state from simple building blocks:**
 
@@ -230,7 +230,7 @@ dispose() -- Cleanup 1
 
 ### Nested Effects
 
-Effects can be nested inside other effects. When the outer effect re-runs, inner effects from the previous run are automatically cleaned up, and new inner effects are created if needed. The system ensures proper execution order; outer effects always run before their inner effects:
+An effect is _nested_ if it was created during the execution of another effect. In Charm, when an effect with nested effects re-runs or gets cleaned up, the nested effects from the previous run are automatically cleaned up and re-created if needed. This prevents memory leaks and ensures that outer effects always run before their inner effects:
 
 ```luau
 local getPrintCount, setPrintCount = signal(true)
@@ -252,8 +252,6 @@ setPrintCount(false)
 
 setCount(3) -- No output
 ```
-
-Nested effect cleanup also applies to every reaction API (`subscribe()`, `listen()`, `observe()`) because they are built upon effects.
 
 > [!NOTE]
 > To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `flags.trackInnerEffects` flag to assist with debugging.
@@ -332,11 +330,11 @@ end) -- Count is 0 (was nil)
 setCounter(1) -- Count is 1 (was 0)
 ```
 
-Note that nested effects can be created inside `listen`, and they will clean up automatically when the listener re-runs or gets disposed.
+Note that the listener callback runs in `untracked()`, so nested effects are not cleaned up.
 
 ### Getter functions
 
-Reaction APIs like `listen()`, `subscribe()`, and `observe()` aren't only restricted to signals. You can listen to "getter" functions that call one or more signals, and they will automatically be memoized:
+In most Charm APIs, you can also subscribe to getter functions that call one or more signals, and they will automatically be tracked:
 
 ```luau
 local getCounter, setCounter = signal(0)
@@ -375,7 +373,7 @@ setItems({ a = 0, c = 0 }) -- Removed b, Added c
 The callback runs in an effect scope, so effects created in the callback will be disposed when the key is removed:
 
 ```luau
-local getItems, setItems = signal({ a = 0, b = 0 })
+local getItems, setItems = signal({})
 
 local dispose = observe(getItems, function(value, key)
 	local getValue = computed(function(prevValue)
@@ -384,14 +382,15 @@ local dispose = observe(getItems, function(value, key)
 
 	effect(function()
 		local value = getValue()
-		print(`{key} = {value}`)
+		print(`Set {key} = {value}`)
 		return function()
 			print(`Cleanup {key} = {value}`)
 		end
 	end)
 end)
 
-setItems({ a = 1, b = 0 }) -- Cleanup a = 0, a = 1
+setItems({ a = 0, b = 0 }) -- Set a = 0, Set b = 0
+setItems({ a = 1, b = 0 }) -- Cleanup a = 0, Set a = 1
 setItems({ a = 1 }) -- Cleanup b = 0
 dispose() -- Cleanup a = 1
 ```
@@ -400,7 +399,7 @@ dispose() -- Cleanup a = 1
 
 ### `subscribe(getter, callback)`
 
-The `subscribe` function is identical to `listen()`, but the effect callback skips the initial run. The callback only runs when the value returned by the getter function changes.
+The `subscribe` function is identical to `listen()`, but the callback does not run initially. The callback only runs when the value returned by the getter function changes.
 
 ```luau
 local getCounter, setCounter = signal(0)
@@ -974,23 +973,15 @@ print(isReactive(raw)) -- false
 
 ## Migration
 
-Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that might help you migrate from an older version.
+Charm v0.11 introduces several breaking changes, so this section should help you migrate from an older version.
 
-<details>
-<summary><b>Terminology</b></summary>
-
-- Signal: A state container with one function to get the state, and another to update it
-- Atom: A signal with the getter and setter combined into one function
-- Effect: Main way to react to state changes
-- `subscribe(getter, callback)`: Creates an effect that only subscribes to signals accessed in the getter
-
-</details>
+For reference, a signal is a state container with a separated getter and setter function. Atoms are a signal with a single function for getting and setting the state.
 
 **What to look out for:**
 
 1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
     - The second arguments of `atom()` changed from an `options` table to an equality function
-    - Removed the second argument of `computed()` (you can do your own equality checks now)
+    - Removed the second argument of `computed()` (you can do your own equality checks since the computed callback now receives the previous value)
     - Removed the cleanup argument in effect callbacks (`effect(function(cleanup) end)`)
 
 2. If you use Charm Sync, you'll have to rewrite a lot of your sync code. Fortunately, most of the changes should make your code _less_ complicated:
@@ -1003,14 +994,9 @@ Charm v0.11 introduces _a lot_ of breaking changes, so below are some tips that 
     - `frozen`: Tables passed to signals are deeply frozen to strictly enforce data immutability and prevent accidental mutations
 
 4. Nested effects automatically clean up when the parent effect re-runs or gets disposed. In other words, all effects created during the execution of another effect will be added as a "child" and clean up with the parent effect. This might cause issues in code that relied on the old behavior, where effects were detached from the parent.
-    - This feature applies to all reaction APIs, including the listener function in `subscribe()` and the observer function in `observe()`.
+    - This feature applies to the observer function in `observe()`, which also automatically cleans up inner effects to prevent memory leaks. However, this does not apply to `subscribe()` or `listen()`.
     - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
-    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can disable this feature by setting [`flags.trackInnerEffects`](#flags) to `false`.
-
-> [!NOTE]
-> An example of nested effects causing a bug is an old implementation of [`VideCharm.useAtom`](./packages/vide-charm/src/init.luau) that did not wrap the source update in `untracked()`. Because Vide effects run immediately after a source updates, Vide will notify components during the execution of the Charm effect in `useAtom`.
->
-> This meant effects created as a side effect of a source update would implicitly get added as a child of the `useAtom` effect, and they could get disposed at the wrong time and desync UI.
+    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can temporarily disable this feature by setting [`flags.trackInnerEffects`](#flags) to `false`.
 
 5. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
     - [`signal()`](#signalinitialvalue-equals): make atom reads and writes more explicit

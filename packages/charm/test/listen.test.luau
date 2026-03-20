@@ -3,7 +3,6 @@ local test = require("../../../tests/test")
 
 local signal = Charm.signal
 local listen = Charm.listen
-local effect = Charm.effect
 
 test("should listen to selector", function()
 	local source, setSource = signal(0)
@@ -26,32 +25,23 @@ test("should listen to selector", function()
 	assert(current == 2 and previous == 1, "should not run after unsub")
 end)
 
-test("should run in peek", function()
+test("should run in untracked", function()
 	local runs = 0
-	local cleanups = 0
 	local a, setA = signal(0)
 	local b, setB = signal(0)
 
 	listen(a, function()
 		runs += 1
 		b()
-		effect(function()
-			return function()
-				cleanups += 1
-			end
-		end)
 	end)
 
 	assert(runs == 1, "should run once on init")
-	assert(cleanups == 0, "should not cleanup yet")
-
 	setA(1)
-	assert(runs == 2, "should run on a change")
-	assert(cleanups == 1, "should cleanup first call")
-
+	assert(runs == 2, "should run once on change")
 	setB(1)
 	assert(runs == 2, "should not run on b change")
-	assert(cleanups == 1, "should not cleanup second call")
+	setA(2)
+	assert(runs == 3, "should run on a change")
 end)
 
 test("should run if first value is nil", function()
@@ -65,36 +55,6 @@ test("should run if first value is nil", function()
 	assert(runs == 1, "should run once on init")
 	setSource(1)
 	assert(runs == 2, "should run once on change")
-end)
-
-test("should track inner subs", function()
-	local order = {}
-	local a, setA = signal(1)
-
-	local unsub = listen(a, function()
-		table.insert(order, 1)
-		listen(a, function()
-			table.insert(order, 2)
-		end)
-		listen(a, function()
-			table.insert(order, 3)
-		end)
-	end)
-
-	assert(table.concat(order) == "123", `bad mount order: {table.concat(order)}`)
-
-	table.clear(order)
-	setA(a() + 1)
-	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
-
-	table.clear(order)
-	setA(a() + 1)
-	assert(table.concat(order) == "123", `bad order: {table.concat(order)}`)
-
-	table.clear(order)
-	unsub()
-	setA(a() + 1)
-	assert(table.concat(order) == "", `bad order: {table.concat(order)}`)
 end)
 
 test("should skip redundant updates", function()
