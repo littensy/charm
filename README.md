@@ -963,6 +963,7 @@ For reference, a signal is a state container with a separated getter and setter 
 **What to look out for:**
 
 1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
+    - `peek()` was changed to `untracked()` for parity with other state managers
     - The second arguments of `atom()` changed from an `options` table to an equality function
     - Removed the second argument of `computed()` (you can do your own equality checks since the computed callback now receives the previous value)
     - Removed the cleanup argument in effect callbacks (`effect(function(cleanup) end)`)
