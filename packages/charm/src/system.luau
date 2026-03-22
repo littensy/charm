@@ -28,14 +28,13 @@ type Stack<T> = {
 
 export type ReactiveFlags = number
 
-local NONE = 0b0000000
-local MUTABLE = 0b0000001
-local WATCHING = 0b0000010
-local RECURSED_CHECK = 0b0000100
-local RECURSED = 0b0001000
-local DIRTY = 0b0010000
-local PENDING = 0b0100000
-local PEEKING = 0b1000000
+local NONE = 0b000000
+local MUTABLE = 0b000001
+local WATCHING = 0b000010
+local RECURSED_CHECK = 0b000100
+local RECURSED = 0b001000
+local DIRTY = 0b010000
+local PENDING = 0b100000
 
 local ReactiveFlags = table.freeze({
 	None = NONE,
@@ -45,7 +44,6 @@ local ReactiveFlags = table.freeze({
 	Recursed = RECURSED,
 	Dirty = DIRTY,
 	Pending = PENDING,
-	Peeking = PEEKING,
 })
 
 local update: (sub: ReactiveNode) -> boolean
@@ -64,10 +62,6 @@ local function isValidLink(checkLink: Link, sub: ReactiveNode): boolean
 end
 
 local function link(dep: ReactiveNode, sub: ReactiveNode, version: number)
-	-- DEVIATION: Do not link signals to peeking subscribers
-	if bit32.btest(sub.flags, PEEKING) and bit32.btest(dep.flags, MUTABLE) then
-		return
-	end
 	local prevDep = sub.depsTail
 	if prevDep and prevDep.dep == dep then
 		return

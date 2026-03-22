@@ -1,25 +1,51 @@
 local test = require("../../tests/test")
 
-local tests = {
-	"computed",
-	"effect",
-	"effectScope",
-	"gc",
-	"listen",
-	"mapped",
-	"observe",
-	"peek",
-	"signal",
-	"subscribe",
-	"topology",
-	"trigger",
-	"untracked",
-}
+test.describe("computed", function()
+	require("@self/computed.test")
+end)
 
-for _, name in tests do
-	test.describe(name, function()
-		(require)(`@self/{name}.test`)
-	end)
-end
+test.describe("effect", function()
+	require("@self/effect.test")
+end)
+
+test.describe("effectScope", function()
+	require("@self/effectScope.test")
+end)
+
+test.describe("gc", function()
+	require("@self/gc.test")
+end)
+
+test.describe("listen", function()
+	require("@self/listen.test")
+end)
+
+test.describe("mapped", function()
+	require("@self/mapped.test")
+end)
+
+test.describe("observe", function()
+	require("@self/observe.test")
+end)
+
+test.describe("signal", function()
+	require("@self/signal.test")
+end)
+
+test.describe("subscribe", function()
+	require("@self/subscribe.test")
+end)
+
+test.describe("topology", function()
+	require("@self/topology.test")
+end)
+
+test.describe("trigger", function()
+	require("@self/trigger.test")
+end)
+
+test.describe("untracked", function()
+	require("@self/untracked.test")
+end)
 
 return {}

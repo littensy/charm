@@ -50,7 +50,6 @@ Charm is a state management library based on [fine-grained reactivity](https://d
     - [`observe(getter, callback)`](#observegetter-callback)
     - [`subscribe(getter, callback)`](#subscribegetter-callback)
     - [`untracked(callback)`](#untrackedcallback)
-    - [`peek(callback)`](#peekcallback)
     - [`batch(callback)`](#batchcallback)
     - [`mapped(getter, mapper)`](#mappedgetter-mapper)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
@@ -447,22 +446,6 @@ end)
 
 stopScope() -- No output, the scope did not track the effect
 stopEffect() -- Cleaned up untracked effect
-```
-
----
-
-### `peek(callback)`
-
-Similar to `untracked()`, but does not prevent the parent effect from tracking nested effects created in the callback. If your callback reads a signal and creates effects, only the signals get untracked.
-
-```luau
-local getCounter, setCounter = signal(0)
-
-local disposeOuter = effect(function()
-	print(`Count is {peek(getCounter)}`)
-end) -- Count is 0
-
-setCounter(1) -- No output; count was accessed in peek()
 ```
 
 ---

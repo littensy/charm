@@ -44,13 +44,12 @@ type SignalNode<T = any> = ReactiveNode & {
 
 -- Bitmask flags for tracking the state of reactive nodes. Flags are combined
 -- and checked using bitwise operations for efficiency.
-local NONE = 0b0000000 -- Default state
-local MUTABLE = 0b0000001 -- Can be changed (signal or computed)
-local WATCHING = 0b0000010 -- Watching for changes (effects)
-local RECURSED_CHECK = 0b0000100 -- Being checked for circular dependencies
-local DIRTY = 0b0010000 -- Value has changed and needs updating
-local PENDING = 0b0100000 -- Might be dirty, pending verification
-local PEEKING = 0b1000000 -- Blocking dependency tracking
+local NONE = 0b000000 -- Default state
+local MUTABLE = 0b000001 -- Can be changed (signal or computed)
+local WATCHING = 0b000010 -- Watching for changes (effects)
+local RECURSED_CHECK = 0b000100 -- Being checked for circular dependencies
+local DIRTY = 0b010000 -- Value has changed and needs updating
+local PENDING = 0b100000 -- Might be dirty, pending verification
 
 -- Global version counter for dependency link deduplication. Incremented at the
 -- start of each effect/computed run to ensure links created in the same cycle
@@ -703,7 +702,8 @@ end
 	current effect or scope from tracking inner effects created within the
 	function.
 
-	For an alternative that allows nested effect cleanup, use `peek` instead.
+	To avoid tracking signals while still allowing inner effects to be tracked
+	by parent effects/scopes, use `effectScope()` instead.
 
 	@param fn A signal or function that accesses signals
 	@param ...args Arguments to pass to the function
@@ -715,39 +715,6 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 		local prevSub = setActiveSub(nil)
 		local results: { any } = { pcall(noYield(fn), ...) }
 		activeSub = prevSub
-		if not results[1] then
-			error(results[2])
-		end
-		return unpack(results, 2)
-	else
-		return fn(...)
-	end
-end
-
---[[
-	Runs the function without subscribing to signal updates, but still allows
-	inner effects to be tracked by parent effects/scopes.
-
-	This is useful for cases where you want to access the current value of a
-	signal without creating a dependency, but still want any effects created
-	within the function to be cleaned up properly.
-
-	To avoid capturing inner effects, use `untracked` instead.
-
-	@param fn A signal or function that accesses signals
-	@param ...args Arguments to pass to the function
-	@return Values returned by the function
-	@see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
-]]
-local function peek<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
-	if
-		activeSub
-		and bit32.band(activeSub.flags, PEEKING) == 0
-		and bit32.btest(activeSub.flags, bit32.bor(WATCHING, MUTABLE))
-	then
-		activeSub.flags = bit32.bor(activeSub.flags, PEEKING)
-		local results: { any } = { pcall(noYield(fn), ...) }
-		activeSub.flags = bit32.band(activeSub.flags, bit32.bnot(PEEKING))
 		if not results[1] then
 			error(results[2])
 		end
@@ -978,7 +945,6 @@ return {
 	effectScope = effectScope,
 	trigger = trigger,
 	untracked = untracked,
-	peek = peek,
 	batch = batch,
 	subscribe = subscribe,
 	listen = listen,

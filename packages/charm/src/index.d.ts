@@ -3,14 +3,13 @@ type Key = string | number | symbol;
 type Cleanup = () => void;
 
 export enum ReactiveFlags {
-	None = 0b0000000,
-	Mutable = 0b0000001,
-	Watching = 0b0000010,
-	RecursedCheck = 0b0000100,
-	Recursed = 0b0001000,
-	Dirty = 0b0010000,
-	Pending = 0b0100000,
-	Peeking = 0b1000000,
+	None = 0b000000,
+	Mutable = 0b000001,
+	Watching = 0b000010,
+	RecursedCheck = 0b000100,
+	Recursed = 0b001000,
+	Dirty = 0b010000,
+	Pending = 0b100000,
 }
 
 export interface ReactiveNode {
@@ -154,7 +153,8 @@ export function onCleanup(fn: Cleanup, failSilently?: boolean): void;
  * current effect or scope from tracking inner effects created within the
  * function.
  *
- * For an alternative that allows nested effect cleanup, use `peek` instead.
+ * To avoid tracking signals while still allowing inner effects to be tracked
+ * by parent effects/scopes, use `effectScope()` instead.
  *
  * @param fn A function that may read signals or create effects.
  * @param args Arguments to pass to the function.
@@ -162,21 +162,6 @@ export function onCleanup(fn: Cleanup, failSilently?: boolean): void;
  * @see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
  */
 export function untracked<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
-
-/**
- * Runs the function without subscribing to signal updates, but still allows
- * inner effects to be tracked by parent effects/scopes.
- *
- * This is useful for cases where you want to access the current value of a
- * signal without creating a dependency, but still want any effects created
- * within the function to be cleaned up properly.
- *
- * @param fn A function that may read signals.
- * @param args Arguments to pass to the function.
- * @returns The return value of the function.
- * @see https://github.com/littensy/charm?tab=readme-ov-file#peekcallback
- */
-export function peek<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
 
 /**
  * Combines multiple updates into a single "commit" that runs effects and
