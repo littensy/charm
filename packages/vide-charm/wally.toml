@@ -13,5 +13,5 @@ exclude = [
 ]
 
 [dependencies]
-Charm = "littensy/charm@^0.11.0-rc.3"
+Charm = "littensy/charm@^0.11.0-rc.5"
 Vide = "centau/vide@^0.4"
