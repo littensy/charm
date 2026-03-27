@@ -874,62 +874,76 @@ end
 	of an existing atom. If the key is omitted from the mapper's return value,
 	the original key is preserved.
 
+	This function is optimized to minimize unnecessary updates by only calling
+	the mapper for entries that have changed since the last run.
+
 	@param getter A signal or function that returns a table
 	@param mapper Function that maps each entry from the source to a new entry in the mapped table
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
 ]]
 local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
-	local currentInput: { [KI]: VI } = {}
-	local keyCache: { [KI]: KO } = {}
+	local nextInput: { [KI]: VI } = {}
+	local keyMap: { [KI]: KO } = {}
 
-	local function map(value: VI, key: KI): (VO, KO)
+	local function callMapper(value: VI, key: KI): (VO, KO)
 		local prevSub = setActiveSub(nil)
 		local success, valueOut, keyOut = pcall(mapper, value, key)
 		activeSub = prevSub
 		if not success then
 			error(`mapped() transform function failed: {valueOut}`)
 		end
-		return valueOut, if keyOut == nil then key else keyOut :: any
+		return valueOut, if keyOut == nil then key :: any else keyOut
 	end
 
-	return computed(function(previousOutput)
-		local currentOutput: { [KO]: VO } = previousOutput or {}
-		local previousInput = currentInput
-		currentInput = getter()
+	return computed(function(lastOutput)
+		local nextOutput = lastOutput or {}
+		local prevInput = nextInput
+		nextInput = getter()
 
-		for keyIn in previousInput do
-			if currentInput[keyIn] ~= nil then
-				continue
-			end
-
-			local prevKeyOut = keyCache[keyIn]
-
-			if prevKeyOut then
-				if currentOutput == previousOutput then
-					currentOutput = table.clone(currentOutput)
+		-- For keys that were removed from the input, remove the corresponding
+		-- keys from the output.
+		for prevKeyIn in prevInput do
+			if nextInput[prevKeyIn] == nil then
+				local prevKeyOut = keyMap[prevKeyIn]
+				if prevKeyOut ~= nil then
+					if nextOutput == lastOutput then
+						nextOutput = table.clone(nextOutput)
+					end
+					nextOutput[prevKeyOut] = nil
+					keyMap[prevKeyIn] = nil
 				end
-				currentOutput[prevKeyOut] = nil
-				keyCache[keyIn] = nil
 			end
 		end
 
-		for keyIn, valueIn in currentInput do
-			if valueIn == previousInput[keyIn] then
+		-- For keys that are new or changed, pass it to the mapper and update
+		-- the output. If the mapper returns a new key that is different from
+		-- the previous call, the old mapped key should be removed from the
+		-- output.
+		for nextKeyIn, nextValueIn in nextInput do
+			if nextValueIn == prevInput[nextKeyIn] then
 				continue
 			end
 
-			local valueOut, keyOut = map(valueIn, keyIn)
+			local nextValueOut, nextKeyOut = callMapper(nextValueIn, nextKeyIn)
+			local prevKeyOut = keyMap[nextKeyIn]
 
-			if currentOutput[keyOut] ~= valueOut then
-				if currentOutput == previousOutput then
-					currentOutput = table.clone(currentOutput)
+			if prevKeyOut ~= nil and prevKeyOut ~= nextKeyOut then
+				if nextOutput == lastOutput then
+					nextOutput = table.clone(nextOutput)
 				end
-				currentOutput[keyOut] = valueOut
-				keyCache[keyIn] = keyOut
+				nextOutput[prevKeyOut] = nil
+				nextOutput[nextKeyOut] = nextValueOut
+				keyMap[nextKeyIn] = nextKeyOut
+			elseif nextOutput[nextKeyOut] ~= nextValueOut then
+				if nextOutput == lastOutput then
+					nextOutput = table.clone(nextOutput)
+				end
+				nextOutput[nextKeyOut] = nextValueOut
+				keyMap[nextKeyIn] = nextKeyOut
 			end
 		end
 
-		return currentOutput
+		return nextOutput
 	end)
 end
 

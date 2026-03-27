@@ -104,4 +104,25 @@ test("should map keys", function()
 	assert(state.D == 4, "should add d")
 end)
 
+test("should remove old key if mapper returns a new key", function()
+	local src, setSrc = signal({ 1 })
+	local map = mapped(src, function(value: number, index: number)
+		return true, `{index}={value}`
+	end)
+
+	local state = map()
+	assert(state["1=1"], "should have mapped first element to key 1=1")
+
+	setSrc({ 2 })
+	state = map()
+	assert(state["1=1"] == nil, "should have removed old key 1=1")
+	assert(state["1=2"], "should have remapped element to key 1=2")
+
+	setSrc({ 3, 1 })
+	state = map()
+	assert(state["1=2"] == nil, "should have removed old key 1=2")
+	assert(state["1=3"], "should have remapped element to key 1=3")
+	assert(state["2=1"], "should have mapped second element to key 2=1")
+end)
+
 return {}
