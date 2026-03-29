@@ -103,18 +103,18 @@ local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args.
 		return fn
 	end
 
-	local function resultHandler(thread: thread, ok: boolean, ...)
+	local function noYieldHandler(thread: thread, ok: boolean, ...)
 		if not ok then
-			error(debug.traceback(thread, tostring((...))))
+			error(debug.traceback(thread, tostring((...))), 0)
 		elseif coroutine.status(thread) ~= "dead" then
-			error(debug.traceback(thread, "Yielding is not allowed in strict mode"))
+			error(debug.traceback(thread, "Attempt to yield in an effect or computed signal"), 0)
 		end
 		return ...
 	end
 
 	return function(...)
 		local thread = coroutine.create(fn)
-		return resultHandler(thread, coroutine.resume(thread, ...))
+		return noYieldHandler(thread, coroutine.resume(thread, ...))
 	end
 end
 
@@ -178,12 +178,15 @@ end
 ]]
 local function runCleanups(cleanups: { Cleanup })
 	for key, cleanup in cleanups do
-		local prevSub = setActiveSub(nil)
 		cleanups[key] = nil
-		xpcall(cleanup, function(err)
-			warn("Error occurred during effect cleanup:", debug.traceback(tostring(err), 2))
-		end)
+
+		local prevSub = setActiveSub(nil)
+		local success, result: any = pcall(cleanup)
 		activeSub = prevSub
+
+		if not success then
+			warn("Error occurred during effect cleanup:", result)
+		end
 	end
 end
 
@@ -210,7 +213,7 @@ local function run(effect: EffectNode)
 		purgeDeps(effect)
 
 		if not success then
-			error(result)
+			error(result, 0)
 		elseif result then
 			table.insert(effect.cleanups, noYield(result))
 		end
@@ -278,7 +281,7 @@ local function updateComputed(computed: ComputedNode): boolean
 		computed.value = newValue
 		return oldValue ~= newValue
 	else
-		error(newValue)
+		error(newValue, 0)
 	end
 end
 
@@ -438,7 +441,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 			if success then
 				value = result
 			else
-				error(result)
+				error(result, 0)
 			end
 		else
 			value = update
@@ -468,7 +471,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 	end
 
 	local function readSignal(): T
-		-- Check if the signal needs to be updated (for signals within effects)
+		-- Check if the signal has a pending update that needs to be applied
 		if bit32.btest(this.flags, DIRTY) then
 			if updateSignal(this) then
 				local subs = this.subs
@@ -478,7 +481,8 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 			end
 		end
 
-		-- Register this signal as a dependency of the active subscriber
+		-- Register this signal as a dependency of the first subscriber in the
+		-- chain that is a computed signal or an effect
 		local sub = activeSub
 		while sub do
 			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
@@ -527,7 +531,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 		getter = noYield(getter),
 	}
 
-	local function readComputed(): T
+	local function computedOper(): T
 		local flags = this.flags
 
 		if
@@ -554,7 +558,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 			if success then
 				this.value = result
 			else
-				error(result)
+				error(result, 0)
 			end
 		end
 
@@ -565,7 +569,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 		return this.value :: T
 	end
 
-	return readComputed
+	return computedOper
 end
 
 --[[
@@ -599,7 +603,7 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	activeSub = prevSub
 
 	if not success then
-		error(result)
+		error(result, 0)
 	elseif result then
 		table.insert(this.cleanups, noYield(result))
 	end
@@ -633,7 +637,7 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	activeSub = prevSub
 
 	if not success then
-		error(result)
+		error(result, 0)
 	elseif result then
 		table.insert(this.cleanups, noYield(result))
 	end
@@ -660,7 +664,7 @@ local function trigger(fn: () -> ())
 	activeSub = prevSub
 
 	if not success then
-		error(result)
+		error(result, 0)
 	end
 
 	local link = sub.deps
@@ -715,9 +719,11 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 		local prevSub = setActiveSub(nil)
 		local results: { any } = { pcall(noYield(fn), ...) }
 		activeSub = prevSub
+
 		if not results[1] then
-			error(results[2])
+			error(results[2], 0)
 		end
+
 		return unpack(results, 2)
 	else
 		return fn(...)
@@ -737,32 +743,31 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 	startBatch()
 	local results: { any } = { pcall(noYield(fn), ...) }
 	endBatch()
+
 	if not results[1] then
-		error(results[2])
+		error(results[2], 0)
 	end
+
 	return unpack(results, 2)
 end
 
 --[[
-	Wraps a function in a computed signal if it is not already a reactive
-	signal. Useful for memoizing a getter function without creating unnecessary
-	nested signals.
+	Returns true if the given function is a signal getter, computed signal, or
+	atom function. Used for determining whether a function should be wrapped in
+	a computed signal so that it can be memoized in `listen()` and `subscribe()`.
 
-	@param fn A signal or function that accesses signals
-	@return `fn` wrapped in a computed signal if needed
+	@param fn Function to check
+	@return `true` if `fn` is a signal getter, computed signal, or atom function, `false` otherwise
 ]]
-local function toComputed<T>(fn: Getter<T>): Getter<T>
+local function isSignalOrComputed(fn: Getter<any>): boolean
 	local name = debug.info(fn, "n")
-	return if name == "readSignal" or name == "readComputed" or name == "atomOper" then fn else computed(fn)
+	return name == "readSignal" or name == "computedOper" or name == "atomOper"
 end
 
 --[[
-	Creates an effect that runs the callback one immediately, and then again
+	Creates an effect that runs the callback once immediately, and then again
 	when the value returned by the getter changes. The callback receives the
 	new value and the previous value as arguments.
-
-	Effects created within the callback are cleaned up when the listener runs
-	or the listener is disposed.
 
 	@param getter A signal or function that accesses signals
 	@param fn Function to run when the value changes
@@ -770,7 +775,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
 local function listen<T>(getter: Getter<T>, fn: (state: T, lastState: T?) -> ()): Cleanup
-	local tracked = toComputed(getter)
+	local tracked: Getter<T> = if isSignalOrComputed(getter) then getter else computed(getter)
 	local current: T
 
 	return effect(function()
@@ -785,16 +790,13 @@ end
 	the getter changes. The callback receives the new value and the previous
 	value as arguments.
 
-	Effects created within the callback are cleaned up when the listener runs
-	or the listener is disposed.
-
 	@param getter A signal or function that accesses signals
 	@param fn Function to run when the value changes
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
 local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> ()): Cleanup
-	local tracked = toComputed(getter)
+	local tracked: Getter<T> = if isSignalOrComputed(getter) then getter else computed(getter)
 	local current: T
 	local firstRun = true
 
@@ -824,29 +826,30 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
 local function observe<K, V>(getter: Getter<{ [K]: V }>, fn: (item: V, key: K) -> ...Cleanup?): Cleanup
-	local innerScopes: { [K]: Cleanup } = {}
-	local disposed = false
+	local scopes: { [K]: Cleanup } = {}
+	local stopObserving = false
 
 	local function updateScopes(data: { [K]: V })
-		for key, dispose in innerScopes do
+		for key, dispose in scopes do
 			if data[key] == nil then
-				innerScopes[key] = nil
+				scopes[key] = nil
 				dispose()
-				if disposed then
+				if stopObserving then
 					return
 				end
 			end
 		end
 
 		for key, value in data do
-			if innerScopes[key] == nil then
-				local disposeScope = effectScope(function()
+			if scopes[key] == nil then
+				local dispose = effectScope(function()
 					return fn(value, key)
 				end, true)
-				if disposed then
-					return disposeScope()
+				if stopObserving then
+					dispose()
+					return
 				end
-				innerScopes[key] = disposeScope
+				scopes[key] = dispose
 			end
 		end
 	end
@@ -860,9 +863,9 @@ local function observe<K, V>(getter: Getter<{ [K]: V }>, fn: (item: V, key: K) -
 		end)
 
 		return function()
-			disposed = true
-			for key, dispose in innerScopes do
-				innerScopes[key] = nil
+			stopObserving = true
+			for key, dispose in scopes do
+				scopes[key] = nil
 				dispose()
 			end
 		end
@@ -882,16 +885,19 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
 ]]
 local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
+	local map = noYield(mapper)
 	local nextInput: { [KI]: VI } = {}
 	local keyMap: { [KI]: KO } = {}
 
-	local function callMapper(value: VI, key: KI): (VO, KO)
+	local function mapUntracked(value: VI, key: KI): (VO, KO)
 		local prevSub = setActiveSub(nil)
-		local success, valueOut, keyOut = pcall(mapper, value, key)
+		local success, valueOut, keyOut = pcall(map, value, key)
 		activeSub = prevSub
+
 		if not success then
-			error(`mapped() transform function failed: {valueOut}`)
+			error(`mapped() transform function failed: {valueOut}`, 0)
 		end
+
 		return valueOut, if keyOut == nil then key :: any else keyOut
 	end
 
@@ -903,15 +909,18 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 		-- For keys that were removed from the input, remove the corresponding
 		-- keys from the output.
 		for prevKeyIn in prevInput do
-			if nextInput[prevKeyIn] == nil then
-				local prevKeyOut = keyMap[prevKeyIn]
-				if prevKeyOut ~= nil then
-					if nextOutput == lastOutput then
-						nextOutput = table.clone(nextOutput)
-					end
-					nextOutput[prevKeyOut] = nil
-					keyMap[prevKeyIn] = nil
+			if nextInput[prevKeyIn] ~= nil then
+				continue
+			end
+
+			local prevKeyOut = keyMap[prevKeyIn]
+
+			if prevKeyOut ~= nil then
+				if nextOutput == lastOutput then
+					nextOutput = table.clone(nextOutput)
 				end
+				nextOutput[prevKeyOut] = nil
+				keyMap[prevKeyIn] = nil
 			end
 		end
 
@@ -924,7 +933,7 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 				continue
 			end
 
-			local nextValueOut, nextKeyOut = callMapper(nextValueIn, nextKeyIn)
+			local nextValueOut, nextKeyOut = mapUntracked(nextValueIn, nextKeyIn)
 			local prevKeyOut = keyMap[nextKeyIn]
 
 			if prevKeyOut ~= nil and prevKeyOut ~= nextKeyOut then

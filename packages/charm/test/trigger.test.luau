@@ -3,6 +3,7 @@ local test = require("../../../tests/test")
 
 local computed = Charm.computed
 local effect = Charm.effect
+local listen = Charm.listen
 local signal = Charm.signal
 local subscribe = Charm.subscribe
 local trigger = Charm.trigger
@@ -67,7 +68,7 @@ test("should trigger effect once", function()
 end)
 
 test("should not notify the trigger function sub", function()
-	local src1 = signal({})
+	local src1 = signal({} :: { number })
 	local src2 = computed(function()
 		return src1()
 	end)
@@ -90,9 +91,21 @@ test("should trigger updates for subscribe", function()
 		triggers += 1
 	end)
 
-	table.insert(src(), 1)
 	trigger(src)
 	assert(triggers == 1, "subscribe callback should run after trigger")
+end)
+
+test("should trigger updates for listen", function()
+	local src = signal({} :: { number })
+	local triggers = 0
+
+	listen(src, function()
+		triggers += 1
+	end)
+	assert(triggers == 1, "listen callback should run once initially")
+
+	trigger(src)
+	assert(triggers == 2, "listen callback should run after trigger")
 end)
 
 return {}

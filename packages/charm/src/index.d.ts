@@ -179,9 +179,6 @@ export function batch<Args extends any[], Result>(fn: (...args: Args) => Result,
  * when the value returned by the getter changes. The callback receives the new
  * value and the previous value as arguments.
  *
- * Effects created within the callback are cleaned up when the listener runs
- * or the listener is disposed.
- *
  * @param getter A function that returns the value to watch.
  * @param fn The function to run when the value changes.
  * @returns A function for disposing the effect.
@@ -193,9 +190,6 @@ export function listen<T>(getter: Getter<T>, fn: (value: T, previousValue: T | u
  * Creates an effect that only runs the callback when the value returned by the
  * getter changes. The callback receives the new value and the previous value
  * as arguments.
- *
- * Effects created within the callback are cleaned up when the listener runs
- * or the listener is disposed.
  *
  * @param getter A function that returns the value to watch.
  * @param fn The function to run when the value changes.
