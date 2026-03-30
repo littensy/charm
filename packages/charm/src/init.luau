@@ -441,7 +441,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 			if success then
 				value = result
 			else
-				error(result, 0)
+				error(result, 2)
 			end
 		else
 			value = update
@@ -558,7 +558,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 			if success then
 				this.value = result
 			else
-				error(result, 0)
+				error(result, 2)
 			end
 		end
 
@@ -603,7 +603,7 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	activeSub = prevSub
 
 	if not success then
-		error(result, 0)
+		error(result, 2)
 	elseif result then
 		table.insert(this.cleanups, noYield(result))
 	end
@@ -637,7 +637,7 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	activeSub = prevSub
 
 	if not success then
-		error(result, 0)
+		error(result, 2)
 	elseif result then
 		table.insert(this.cleanups, noYield(result))
 	end
@@ -664,7 +664,7 @@ local function trigger(fn: () -> ())
 	activeSub = prevSub
 
 	if not success then
-		error(result, 0)
+		error(result, 2)
 	end
 
 	local link = sub.deps
@@ -721,7 +721,7 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 		activeSub = prevSub
 
 		if not results[1] then
-			error(results[2], 0)
+			error(results[2], 2)
 		end
 
 		return unpack(results, 2)
@@ -745,7 +745,7 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 	endBatch()
 
 	if not results[1] then
-		error(results[2], 0)
+		error(results[2], 2)
 	end
 
 	return unpack(results, 2)
