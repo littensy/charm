@@ -375,4 +375,80 @@ test("infinite recursion should eventually throw", function()
 	assert(not success, "should have thrown")
 end)
 
+test("should not retrigger the effect if the cleanup modifies one of the dependencies", function()
+	local a, setA = signal(0)
+	local calls = {}
+
+	effect(function()
+		table.insert(calls, a())
+		return function()
+			setA(2)
+		end
+	end)
+	assert(#calls == 1, "should have run once initially")
+	table.clear(calls)
+
+	setA(1)
+	assert(#calls == 1, "should run once after an update")
+	assert(calls[1] == 2, `bad call: {calls[1]}`)
+end)
+
+test("should run the cleanup if the effect disposes itself", function()
+	local a, setA = signal(0)
+	local calls = 0
+	local dispose
+
+	dispose = effect(function()
+		if a() > 0 then
+			dispose()
+			return function()
+				calls += 1
+			end
+		end
+	end)
+	assert(calls == 0, "should not have called cleanup initially")
+	setA(1)
+	assert(calls == 1, "should have called cleanup once after first update")
+	setA(2)
+	assert(calls == 1, "should not call cleanup again after second update")
+end)
+
+test("should not run the effect if the cleanup function disposes it", function()
+	local a, setA = signal(0)
+	local calls = 0
+	local dispose
+
+	dispose = effect(function()
+		a()
+		calls += 1
+		return function()
+			dispose()
+		end
+	end)
+	assert(calls == 1, "should have run effect once initially")
+	setA(1)
+	assert(calls == 1, "should not run effect again after update")
+end)
+
+test("should reset the cleanup if the effect throws", function()
+	local a, setA = signal(0)
+	local calls = 0
+
+	effect(function()
+		if a() == 0 then
+			return function()
+				calls += 1
+			end
+		else
+			error("hello")
+		end
+	end)
+	assert(calls == 0, "should not have called cleanup initially")
+	local success, err = pcall(setA, 1)
+	assert(not success and string.find(tostring(err), "hello"), `bad error: {err}`)
+	assert(calls == 1, "should have called cleanup once after throwing")
+	setA(0)
+	assert(calls == 1, "should not call cleanup again after resetting value")
+end)
+
 return {}

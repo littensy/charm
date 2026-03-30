@@ -202,6 +202,10 @@ local function run(effect: EffectNode)
 	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(effect.deps :: Link, effect)) then
 		runCleanups(effect.cleanups)
 
+		if effect.flags == NONE then
+			return
+		end
+
 		cycle += 1
 		effect.depsTail = nil
 		effect.flags = WATCHING
@@ -216,6 +220,10 @@ local function run(effect: EffectNode)
 			error(result, 0)
 		elseif result then
 			table.insert(effect.cleanups, noYield(result))
+		end
+
+		if effect.flags == NONE then
+			runCleanups(effect.cleanups)
 		end
 	else
 		effect.flags = WATCHING
