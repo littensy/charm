@@ -3,55 +3,56 @@ local bench = require("./bench")
 
 local computed = Charm.computed
 local mapped = Charm.mapped
-local setActiveSub = Charm.setActiveSub
 local signal = Charm.signal
 
-type Entry = { number }
+type Key = number
+type Value = number
 
 local count = 512
-local initialState: { Entry } = table.create(count)
+local initialState: { [Key]: Value } = table.create(count, 0)
 
-for i = 1, count do
-	initialState[i] = table.create(64, i)
+local function expensiveOperation()
+	for _ = 1, 100 do
+		continue
+	end
 end
 
-local function mapper(value: Entry, key: number): (Entry, number)
-	return table.clone(value), key + 1
-end
-
-local function simpleMapped(source: () -> { Entry }, mapper: (Entry, number) -> (Entry, number)): () -> { Entry }
+local function simpleMapped(
+	source: () -> { [Key]: Value },
+	mapper: (Value, Key) -> (Value, Key?)
+): () -> { [Key]: Value }
 	return computed(function()
 		local state = source()
 		local nextState = {}
 
-		for index, value in state do
-			local currentSub = setActiveSub(nil)
-			local success, valueOut, keyOut = pcall(mapper, value, index)
-			setActiveSub(currentSub)
-
-			if success then
-				nextState[keyOut] = valueOut
-			end
+		for keyIn, valueIn in state do
+			local valueOut, keyOut = mapper(valueIn, keyIn)
+			nextState[if keyOut == nil then keyIn else keyOut] = valueOut
 		end
 
-		return state
+		return nextState
 	end)
 end
 
-local function updatePercentage(percent: number): ({ Entry }) -> { Entry }
+local function updateRandomly(updateChance: number): ({ [Key]: Value }) -> { [Key]: Value }
 	return function(state)
 		local nextState = table.clone(state)
-		for index, value in state do
-			if math.random() < percent then
-				nextState[index] = table.clone(value)
+		for key in state do
+			if math.random() < updateChance then
+				nextState[key] += 1
 			end
 		end
 		return nextState
 	end
 end
 
-for _, percent in { 0.1, 0.5, 1 } do
-	bench.run(`mapped {percent}`, function()
+for _, updateChance in { 0.1, 0.5, 1 } do
+	local function mapper(value: Value, key: Key): (Value, Key?)
+		expensiveOperation()
+		return value + 1, key + 1
+	end
+
+	bench.run(`mapped {updateChance}`, function()
 		local src, setSrc = signal(initialState)
 		local out = mapped(src, mapper)
 
@@ -59,14 +60,14 @@ for _, percent in { 0.1, 0.5, 1 } do
 		out()
 		bench.profileend()
 
-		setSrc(updatePercentage(percent))
+		setSrc(updateRandomly(updateChance))
 
 		bench.profilebegin("update")
 		out()
 		bench.profileend()
 	end)
 
-	bench.run(`control {percent}`, function()
+	bench.run(`control {updateChance}`, function()
 		local src, setSrc = signal(initialState)
 		local out = simpleMapped(src, mapper)
 
@@ -74,7 +75,7 @@ for _, percent in { 0.1, 0.5, 1 } do
 		out()
 		bench.profileend()
 
-		setSrc(updatePercentage(percent))
+		setSrc(updateRandomly(updateChance))
 
 		bench.profilebegin("update")
 		out()

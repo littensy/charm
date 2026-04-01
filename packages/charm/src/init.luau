@@ -914,21 +914,8 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
 ]]
 local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
-	local map = noYield(mapper)
 	local nextInput: { [KI]: VI } = {}
 	local keyMap: { [KI]: KO } = {}
-
-	local function mapUntracked(value: VI, key: KI): (VO, KO)
-		local prevSub = setActiveSub(nil)
-		local success, valueOut, keyOut = pcall(map, value, key)
-		activeSub = prevSub
-
-		if not success then
-			error(`mapped() transform function failed: {valueOut}`, 0)
-		end
-
-		return valueOut, if keyOut == nil then key :: any else keyOut
-	end
 
 	return computed(function(lastOutput: { [KO]: VO }?): { [KO]: VO }
 		local nextOutput: { [KO]: VO } = lastOutput or {}
@@ -937,19 +924,19 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 
 		-- For keys that were removed from the input, remove the corresponding
 		-- keys from the output.
-		for prevKeyIn in prevInput do
-			if nextInput[prevKeyIn] ~= nil then
+		for keyIn in prevInput do
+			if nextInput[keyIn] ~= nil then
 				continue
 			end
 
-			local prevKeyOut = keyMap[prevKeyIn]
+			local keyOut = keyMap[keyIn]
 
-			if prevKeyOut ~= nil then
+			if keyOut ~= nil then
 				if nextOutput == lastOutput then
 					nextOutput = table.clone(nextOutput)
 				end
-				nextOutput[prevKeyOut] = nil
-				keyMap[prevKeyIn] = nil
+				nextOutput[keyOut] = nil
+				keyMap[keyIn] = nil
 			end
 		end
 
@@ -957,13 +944,14 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 		-- the output. If the mapper returns a new key that is different from
 		-- the previous call, the old mapped key should be removed from the
 		-- output.
-		for nextKeyIn, nextValueIn in nextInput do
-			if nextValueIn == prevInput[nextKeyIn] then
+		for keyIn, nextValueIn in nextInput do
+			if nextValueIn == prevInput[keyIn] then
 				continue
 			end
 
-			local nextValueOut, nextKeyOut = mapUntracked(nextValueIn, nextKeyIn)
-			local prevKeyOut = keyMap[nextKeyIn]
+			local nextValueOut, keyOutOrNil = mapper(nextValueIn, keyIn)
+			local nextKeyOut: KO = if keyOutOrNil ~= nil then keyOutOrNil else keyIn :: any
+			local prevKeyOut = keyMap[keyIn]
 
 			if prevKeyOut ~= nil and prevKeyOut ~= nextKeyOut then
 				if nextOutput == lastOutput then
@@ -971,13 +959,13 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 				end
 				nextOutput[prevKeyOut] = nil
 				nextOutput[nextKeyOut] = nextValueOut
-				keyMap[nextKeyIn] = nextKeyOut
+				keyMap[keyIn] = nextKeyOut
 			elseif nextOutput[nextKeyOut] ~= nextValueOut then
 				if nextOutput == lastOutput then
 					nextOutput = table.clone(nextOutput)
 				end
 				nextOutput[nextKeyOut] = nextValueOut
-				keyMap[nextKeyIn] = nextKeyOut
+				keyMap[keyIn] = nextKeyOut
 			end
 		end
 
