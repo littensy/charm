@@ -178,8 +178,8 @@ end
 	@param cleanups List of cleanup functions
 ]]
 local function runCleanups(cleanups: { Cleanup })
-	for key, cleanup in cleanups do
-		cleanups[key] = nil
+	for index, cleanup in cleanups do
+		cleanups[index] = nil
 
 		local prevSub = setActiveSub(nil)
 		local success, result: any = pcall(cleanup)
@@ -418,10 +418,11 @@ end
 	Called when a node is not being watched by any subscribers. Cleans up the
 	node's dependencies and performs the necessary cleanup operations:
 
-	- Computed signals: Unlink dependencies and mark as dirty for potential future updates
+	- Computed signals: Unlink dependencies and mark as dirty for potential
+	future updates
 	- Effects/scopes: Perform full cleanup to free resources
 
-	@param node Reactive node (computed or effect/scope)
+	@param node Reactive node (computed, effect, or effect scope)
 ]]
 local function unwatched(node: ReactiveNode)
 	if bit32.band(node.flags, MUTABLE) == 0 then
@@ -649,7 +650,7 @@ end
 	signals created within it so that they can be disposed together.
 
 	@param fn Function that creates effects within the scope
-	@param detached If true, the scope will not be tracked by the parent effect/scope
+	@param detached If true, the scope will not be tracked by the parent effect or scope
 	@return A cleanup function that stops all effects in the scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
 ]]
@@ -719,7 +720,7 @@ end
 	set to `true`.
 
 	@param fn Function to run during cleanup
-	@param failSilently If true, silences the warning when called outside an effect/scope
+	@param failSilently If true, silences the warning when called outside an effect or scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
 ]]
 local function onCleanup(fn: Cleanup, failSilently: boolean?)
@@ -788,7 +789,7 @@ end
 	@param fn Function to check
 	@return `true` if `fn` is a signal getter, computed signal, or atom function, `false` otherwise
 ]]
-local function isSignalOrComputed(fn: Getter<any>): boolean
+local function isSignal(fn: Getter<any>): boolean
 	local name = debug.info(fn, "n")
 	return name == "readSignal" or name == "computedOper" or name == "atomOper"
 end
@@ -804,7 +805,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
 local function listen<T>(getter: Getter<T>, fn: (state: T, lastState: T?) -> ()): Cleanup
-	local tracked: Getter<T> = if isSignalOrComputed(getter) then getter else computed(getter)
+	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter)
 	local current: T
 
 	return effect(function()
@@ -825,7 +826,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
 local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> ()): Cleanup
-	local tracked: Getter<T> = if isSignalOrComputed(getter) then getter else computed(getter)
+	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter)
 	local current: T
 	local firstRun = true
 
@@ -841,9 +842,9 @@ local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> (
 end
 
 --[[
-	Calls the callback function for each unique key in the table returned by the
-	getter. The callback is called once for each key, and again when a new key
-	is added.
+	Calls the callback function for each unique key in the table returned by
+	the getter. The callback is called once for each key, and again when a new
+	key is added.
 
 	The callback may return a cleanup function, which will be called when the
 	key is removed or the `observe()` effect is disposed. Effects created
@@ -885,10 +886,9 @@ local function observe<K, V>(getter: Getter<{ [K]: V }>, fn: (item: V, key: K) -
 
 	return effectScope(function()
 		effect(function()
-			-- Batch so that side effects run after all scopes are created.
-			-- This ensures that a scope creating or removing items doesn't
-			-- interfere with the current update cycle.
-			batch(updateScopes, getter())
+			-- Wrap in untracked so that calling fn inside updateScopes does
+			-- not register dependencies to this effect
+			untracked(updateScopes, getter())
 		end)
 
 		return function()
@@ -930,8 +930,8 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 		return valueOut, if keyOut == nil then key :: any else keyOut
 	end
 
-	return computed(function(lastOutput)
-		local nextOutput = lastOutput or {}
+	return computed(function(lastOutput: { [KO]: VO }?): { [KO]: VO }
+		local nextOutput: { [KO]: VO } = lastOutput or {}
 		local prevInput = nextInput
 		nextInput = getter()
 
