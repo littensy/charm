@@ -20,6 +20,11 @@ jobs:
       - name: Check code quality
         run: lute run check
 
+      - name: Run ESLint and Prettier
+        run: |
+          pnpm eslint packages
+          pnpm prettier --check packages
+
       - name: Run tests
         run: lute run tests
 
