@@ -48,6 +48,7 @@ local NONE = 0b000000 -- Default state
 local MUTABLE = 0b000001 -- Can be changed (signal or computed)
 local WATCHING = 0b000010 -- Watching for changes (effects)
 local RECURSED_CHECK = 0b000100 -- Being checked for circular dependencies
+local RECURSED = 0b001000 -- Has been visited in a recursion check
 local DIRTY = 0b010000 -- Value has changed and needs updating
 local PENDING = 0b100000 -- Might be dirty, pending verification
 
@@ -235,15 +236,34 @@ end
 	queued, ensuring that all updates are processed.
 ]]
 local function flush()
+	-- Bail out early if a flush is already in progress to allow effects to
+	-- complete before the next effect runs
+	if batchDepth ~= 0 or notifyIndex ~= 0 then
+		return
+	end
+
+	local success, result = pcall(function()
+		while notifyIndex < queuedLength do
+			local effect = queued[notifyIndex] :: EffectNode
+			queued[notifyIndex] = nil
+			notifyIndex += 1
+			run(effect)
+		end
+	end)
+
 	while notifyIndex < queuedLength do
 		local effect = queued[notifyIndex] :: EffectNode
 		queued[notifyIndex] = nil
 		notifyIndex += 1
-		run(effect)
+		effect.flags = bit32.bor(effect.flags, bit32.bor(WATCHING, RECURSED))
 	end
 
 	notifyIndex = 0
 	queuedLength = 0
+
+	if not success then
+		error(result, 0)
+	end
 end
 
 --[[
@@ -260,9 +280,7 @@ end
 ]]
 local function endBatch()
 	batchDepth -= 1
-	if batchDepth == 0 then
-		flush()
-	end
+	flush()
 end
 
 --[[
@@ -467,9 +485,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 			local subs = this.subs
 			if subs then
 				propagate(subs)
-				if batchDepth == 0 then
-					flush()
-				end
+				flush()
 			end
 
 			return value
@@ -606,15 +622,22 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 		link(this, activeSub, 0)
 	end
 
+	-- Start a batch so that any signal updates triggered during the effect
+	-- execution are queued after the effect registers a cleanup function
+	startBatch()
+
 	local prevSub = setActiveSub(this)
 	local success, result = pcall(this.fn)
 	activeSub = prevSub
 
 	if not success then
+		endBatch()
 		error(result, 2)
 	elseif result then
 		table.insert(this.cleanups, noYield(result))
 	end
+
+	endBatch()
 
 	return function()
 		stopEffect(this)
@@ -687,9 +710,7 @@ local function trigger(fn: () -> ())
 		end
 	end
 
-	if batchDepth == 0 then
-		flush()
-	end
+	flush()
 end
 
 --[[

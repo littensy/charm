@@ -70,10 +70,32 @@ test("should run indirect effect cleanup", function()
 	assert(cleanups == 2, "should not cleanup after update")
 end)
 
+test("should dispose inner effects if created in an effect", function()
+	local source, setSource = signal(1)
+	local triggers = 0
+	local dispose
+
+	effect(function()
+		dispose = effectScope(function()
+			effect(function()
+				source()
+				triggers += 1
+			end)
+		end)
+		assert(triggers == 1, "did not run initially")
+	end)
+
+	setSource(2)
+	assert(triggers == 2, "did not run after update")
+	dispose()
+	setSource(3)
+	assert(triggers == 2, "ran after dispose")
+end)
+
 test("should disallow yielding", function()
 	local success = pcall(function()
 		effectScope(function()
-			(if task then task.wait else coroutine.yield :: never)()
+			coroutine.yield()
 		end)
 	end)
 	assert(not success, "should error on yield")

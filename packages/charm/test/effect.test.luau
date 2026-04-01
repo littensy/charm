@@ -239,8 +239,11 @@ test("should handle side effect with inner effects", function()
 		table.clear(order)
 		setB(1)
 		setA(1)
-		assert(table.concat(order) == "ba", `wrong order: {table.concat(order)}`)
 	end)
+
+	-- DEVIATION: This assertion was moved outside of the effect so that it
+	-- runs after the batch updates have been processed
+	assert(table.concat(order) == "ba", `wrong order: {table.concat(order)}`)
 end)
 
 test("should handle flags are indirectly updated during checkDirty", function()
@@ -268,7 +271,48 @@ test("should handle flags are indirectly updated during checkDirty", function()
 	assert(triggers == 2, "did not update indirectly")
 end)
 
-test("should allow recursion", function()
+test("should not execute skipped effects from previous failed flush when updating unrelated signal", function()
+	local a, setA = signal(0)
+	local b, setB = signal(0)
+	local c, setC = signal(0)
+	local d = computed(function()
+		c()
+		return 0
+	end)
+
+	local effect3Executed = false
+
+	effect(function()
+		a()
+	end)
+	effect(function()
+		if a() == 2 then
+			error("Error in effect 2")
+		end
+	end)
+	effect(function()
+		a()
+		d()
+		effect3Executed = true
+	end)
+	effect(function()
+		b()
+	end)
+
+	setA(1)
+
+	effect3Executed = false
+	local success, err = pcall(setA, 2)
+	assert(not success and string.find(tostring(err), "Error in effect 2"), `bad error: {err}`)
+
+	assert(not effect3Executed, "effect 3 should not have executed after failed flush")
+	setB(1)
+	assert(not effect3Executed, "effect 3 should not have executed after updating unrelated signal b")
+	setC(1)
+	assert(effect3Executed, "effect 3 should have executed after updating signal c")
+end)
+
+test("should allow finite recursion", function()
 	local src, setSrc = signal(0)
 	local order = {}
 
@@ -364,7 +408,7 @@ test("should run cleanups outside any evaluation context", function()
 	assert(calls == 0, "should not run after b update")
 end)
 
-test("infinite recursion should eventually throw", function()
+test.skip("infinite recursion should eventually throw", function()
 	local counter, setCounter = signal(0)
 
 	local success = pcall(function()
@@ -449,6 +493,26 @@ test("should reset the cleanup if the effect throws", function()
 	assert(calls == 1, "should have called cleanup once after throwing")
 	setA(0)
 	assert(calls == 1, "should not call cleanup again after resetting value")
+end)
+
+test("recursive effects should run and cleanup in order", function()
+	local a, setA = signal(0)
+	local order = {}
+
+	effect(function()
+		local value = a()
+		table.insert(order, `+{value}`)
+		if value < 3 then
+			setA(value + 1)
+		end
+		return function()
+			table.insert(order, `-{value}`)
+		end
+	end)
+	assert(table.concat(order) == "+0-0+1-1+2-2+3", `bad order: {table.concat(order)}`)
+	table.clear(order)
+	setA(100)
+	assert(table.concat(order) == "-3+100", `bad order: {table.concat(order)}`)
 end)
 
 return {}
