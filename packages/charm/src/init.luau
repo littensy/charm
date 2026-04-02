@@ -178,6 +178,9 @@ end
 	@param cleanups List of cleanup functions
 ]]
 local function runCleanups(cleanups: { Cleanup })
+	local hasErrors = false
+	local errors = {}
+
 	for index, cleanup in cleanups do
 		cleanups[index] = nil
 
@@ -186,8 +189,13 @@ local function runCleanups(cleanups: { Cleanup })
 		activeSub = prevSub
 
 		if not success then
-			warn("Error occurred during effect cleanup:", result)
+			hasErrors = true
+			table.insert(errors, tostring(result))
 		end
+	end
+
+	if hasErrors then
+		error(`Errors occurred during effect cleanup:\n\n${table.concat(errors, "\n\n")}`, 0)
 	end
 end
 
@@ -404,14 +412,14 @@ local function notify(effect: ReactiveNode)
 	queuedLength = insertIndex
 
 	-- Reverse the collected effects to ensure outer effects run first
-	while true do
+	repeat
 		insertIndex -= 1
 		if firstInsertedIndex >= insertIndex then
 			break
 		end
 		queued[firstInsertedIndex], queued[insertIndex] = queued[insertIndex], queued[firstInsertedIndex]
 		firstInsertedIndex += 1
-	end
+	until false
 end
 
 --[[
