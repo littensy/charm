@@ -96,12 +96,12 @@ local flags = {
 	Wraps a function to prevent yielding when in strict mode. If the function
 	attempts to yield, an error is thrown.
 
-	@param fn The function to wrap.
+	@param callback The function to wrap.
 	@return A wrapped function that cannot yield in strict mode.
 ]]
-local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args...) -> Results...
+local function noYield<Args..., Results...>(callback: (Args...) -> Results...): (Args...) -> Results...
 	if not flags.strict then
-		return fn
+		return callback
 	end
 
 	local function noYieldHandler(thread: thread, ok: boolean, ...)
@@ -114,7 +114,7 @@ local function noYield<Args..., Results...>(fn: (Args...) -> Results...): (Args.
 	end
 
 	return function(...)
-		local thread = coroutine.create(fn)
+		local thread = coroutine.create(callback)
 		return noYieldHandler(thread, coroutine.resume(thread, ...))
 	end
 end
@@ -195,7 +195,7 @@ local function runCleanups(cleanups: { Cleanup })
 	end
 
 	if hasErrors then
-		error(`Errors occurred during effect cleanup:\n\n${table.concat(errors, "\n\n")}`, 0)
+		error(`Errors occurred during effect cleanup:\n\n{table.concat(errors, "\n\n")}`, 0)
 	end
 end
 
@@ -206,9 +206,12 @@ end
 	@param effect Effect node to run
 ]]
 local function run(effect: EffectNode)
-	local flags = effect.flags
+	local effectFlags = effect.flags
 
-	if bit32.btest(flags, DIRTY) or (bit32.btest(flags, PENDING) and checkDirty(effect.deps :: Link, effect)) then
+	if
+		bit32.btest(effectFlags, DIRTY)
+		or (bit32.btest(effectFlags, PENDING) and checkDirty(effect.deps :: Link, effect))
+	then
 		runCleanups(effect.cleanups)
 
 		if effect.flags == NONE then
@@ -342,10 +345,10 @@ end
 	inline the operation.
 
 	@param sub Effect or computed node
-	@param flags Subscriber's current flags
+	@param subFlags Subscriber's current flags
 ]]
-local function clearPending(sub: ReactiveNode, flags: ReactiveFlags)
-	sub.flags = bit32.band(flags, bit32.bnot(PENDING))
+local function clearPending(sub: ReactiveNode, subFlags: ReactiveFlags)
+	sub.flags = bit32.band(subFlags, bit32.bnot(PENDING))
 end
 
 --[[
@@ -463,14 +466,14 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		deepFreeze(initialValue)
 	end
 
-	local function writeSignal(update: Update<T>): T
+	local function writeSignal(newValue: Update<T>): T
 		local value: T
 
 		-- Determine the new value based on whether the update is a function or
 		-- a direct value
-		if type(update) == "function" then
+		if type(newValue) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result = pcall(noYield(update), this.pendingValue)
+			local success, result = pcall(noYield(newValue), this.pendingValue)
 			activeSub = prevSub
 
 			if success then
@@ -479,7 +482,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 				error(result, 2)
 			end
 		else
-			value = update
+			value = newValue
 		end
 
 		-- Check if the new value is different from the pending value
@@ -565,11 +568,14 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 	}
 
 	local function computedOper(): T
-		local flags = this.flags
+		local computedFlags = this.flags
 
 		if
-			bit32.btest(flags, DIRTY)
-			or (bit32.btest(flags, PENDING) and (checkDirty(this.deps :: Link, this) or clearPending(this, flags)))
+			bit32.btest(computedFlags, DIRTY)
+			or (
+				bit32.btest(computedFlags, PENDING)
+				and (checkDirty(this.deps :: Link, this) or clearPending(this, computedFlags))
+			)
 		then
 			if updateComputed(this) then
 				-- Notify subscribers if the value changed
@@ -578,7 +584,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 					shallowPropagate(subs)
 				end
 			end
-		elseif flags == NONE then
+		elseif computedFlags == NONE then
 			-- First access should initialize the computed value
 			this.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 
@@ -694,7 +700,7 @@ end
 	@param fn A signal or function that accesses signals
 	@see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
 ]]
-local function trigger(fn: () -> ())
+local function trigger(fn: () -> ...any)
 	local sub: ReactiveNode = {
 		flags = WATCHING,
 	}
@@ -707,10 +713,10 @@ local function trigger(fn: () -> ())
 		error(result, 2)
 	end
 
-	local link = sub.deps
-	while link do
-		local dep = link.dep
-		link = unlink(link, sub)
+	local currentLink = sub.deps
+	while currentLink do
+		local dep = currentLink.dep
+		currentLink = unlink(currentLink, sub)
 		local subs = dep.subs
 		if subs then
 			sub.flags = NONE
@@ -808,18 +814,18 @@ end
 	new value and the previous value as arguments.
 
 	@param getter A signal or function that accesses signals
-	@param fn Function to run when the value changes
+	@param callback Function to run when the value changes
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
-local function listen<T>(getter: Getter<T>, fn: (state: T, lastState: T?) -> ()): Cleanup
-	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter)
+local function listen<T>(getter: Getter<T>, callback: (state: T, lastState: T?) -> ()): Cleanup
+	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
 	local current: T
 
 	return effect(function()
 		local previous = current
 		current = tracked()
-		untracked(fn, current, previous)
+		untracked(callback, current, previous)
 	end)
 end
 
@@ -829,12 +835,12 @@ end
 	value as arguments.
 
 	@param getter A signal or function that accesses signals
-	@param fn Function to run when the value changes
+	@param callback Function to run when the value changes
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
-local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> ()): Cleanup
-	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter)
+local function subscribe<T>(getter: Getter<T>, callback: (state: T, lastState: T) -> ()): Cleanup
+	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
 	local current: T
 	local firstRun = true
 
@@ -844,7 +850,7 @@ local function subscribe<T>(getter: Getter<T>, fn: (state: T, lastState: T) -> (
 		if firstRun then
 			firstRun = false
 		else
-			untracked(fn, current, previous)
+			untracked(callback, current, previous)
 		end
 	end)
 end
@@ -859,11 +865,11 @@ end
 	during the callback will also be bound to the lifetime of the key.
 
 	@param getter A signal or function that returns a table
-	@param fn Function that is called for each key added to the table
+	@param callback Function that is called for each key added to the table
 	@return A cleanup function that disposes scopes for all keys
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
-local function observe<K, V>(getter: Getter<{ [K]: V }>, fn: (item: V, key: K) -> ...Cleanup?): Cleanup
+local function observe<K, V>(getter: Getter<{ [K]: V }>, callback: (item: V, key: K) -> ...Cleanup?): Cleanup
 	local scopes: { [K]: Cleanup } = {}
 	local stopObserving = false
 
@@ -881,7 +887,7 @@ local function observe<K, V>(getter: Getter<{ [K]: V }>, fn: (item: V, key: K) -
 		for key, value in data do
 			if scopes[key] == nil then
 				local dispose = effectScope(function()
-					return fn(value, key)
+					return callback(value, key)
 				end, true)
 				if stopObserving then
 					dispose()
@@ -911,17 +917,17 @@ end
 
 --[[
 	Creates a new read-only signal that is computed by mapping over the entries
-	of an existing atom. If the key is omitted from the mapper's return value,
-	the original key is preserved.
+	of the source table. If the key is omitted from the transform function's
+	return value, the original key is preserved.
 
 	This function is optimized to minimize unnecessary updates by only calling
-	the mapper for entries that have changed since the last run.
+	the transform function for entries that have changed since the last run.
 
 	@param getter A signal or function that returns a table
-	@param mapper Function that maps each entry from the source to a new entry in the mapped table
-	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
+	@param transform Function that maps each entry from the source to a new entry in the mapped table
+	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-transform
 ]]
-local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
+local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, transform: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
 	local nextInput: { [KI]: VI } = {}
 	local keyMap: { [KI]: KO } = {}
 
@@ -957,7 +963,7 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, mapper: (VI,
 				continue
 			end
 
-			local nextValueOut, keyOutOrNil = mapper(nextValueIn, keyIn)
+			local nextValueOut, keyOutOrNil = transform(nextValueIn, keyIn)
 			local nextKeyOut: KO = if keyOutOrNil ~= nil then keyOutOrNil else keyIn :: any
 			local prevKeyOut = keyMap[keyIn]
 
@@ -999,8 +1005,8 @@ return {
 	observe = observe,
 	mapped = mapped :: (<KI, VI, KO, VO>(
 		getter: Getter<{ [KI]: VI }>,
-		mapper: (VI, KI) -> (VO, KO)
-	) -> Getter<{ [KO]: VO }>) & (<K, VI, VO>(getter: Getter<{ [K]: VI }>, mapper: (VI, K) -> VO) -> Getter<{ [K]: VO }>),
+		transform: (VI, KI) -> (VO, KO)
+	) -> Getter<{ [KO]: VO }>) & (<K, VI, VO>(getter: Getter<{ [K]: VI }>, transform: (VI, K) -> VO) -> Getter<{ [K]: VO }>),
 	onCleanup = onCleanup,
 	getActiveSub = getActiveSub,
 	setActiveSub = setActiveSub,

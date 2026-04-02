@@ -6,7 +6,7 @@ local effect = Charm.effect
 
 test("should accept equality function", function()
 	local calls = {}
-	local src, setSrc = signal(0, function(current, incoming)
+	local src, setSrc = signal(0, function(current: number, incoming: number)
 		return current == incoming or incoming % 2 == 1
 	end)
 

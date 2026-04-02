@@ -2,6 +2,4 @@ std = "roblox"
 exclude = ["*/node_modules/*"]
 
 [lints]
-global_usage = "allow"
 shadowing = "allow"
-incorrect_standard_library_use = "allow"

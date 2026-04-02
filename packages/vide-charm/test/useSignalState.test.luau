@@ -5,7 +5,7 @@ local test = require("../../../tests/test")
 
 test("tracks signal state", function()
 	local getState, setState = Charm.signal(0)
-	local source
+	local source: () -> number
 	local cleanup = Vide.root(function()
 		source = VideCharm.useSignalState(getState)
 	end)
@@ -17,7 +17,7 @@ end)
 
 test("accepts a selector", function()
 	local getState, setState = Charm.signal(0)
-	local source
+	local source: () -> number
 	local cleanup = Vide.root(function()
 		source = VideCharm.useSignalState(function()
 			return 2 * getState()

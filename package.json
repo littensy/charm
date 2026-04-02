@@ -1,7 +1,7 @@
 {
 	"private": true,
 	"scripts": {
-		"test": "lute run tests",
+		"test": "lute run test",
 		"build": "lute run build",
 		"check": "lute run check",
 		"publish:npm": "pnpm publish -r --access public",

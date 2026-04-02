@@ -3,7 +3,7 @@ local patch = require("./patch")
 local types = require("./types")
 
 type SyncPayload = types.SyncPayload
-type ReactiveProxy<T = {}> = types.ReactiveProxy<T>
+type ReactiveProxy<T = { [any]: any }> = types.ReactiveProxy<T>
 
 local trackedSignals: { [string]: (any) -> any } = {}
 local trackedReactives: { [string]: ReactiveProxy } = {}

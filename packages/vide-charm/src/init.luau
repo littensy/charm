@@ -11,7 +11,7 @@ local Vide = require("./Vide")
 local function useSignalState<State>(getter: () -> State): () -> State
 	local state = Vide.source(getter())
 
-	Vide.cleanup(Charm.listen(getter, state))
+	Vide.cleanup(Charm.listen(getter, state :: (State, State?) -> ()))
 
 	return state
 end

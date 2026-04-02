@@ -440,7 +440,7 @@ end)
 test("should run the cleanup if the effect disposes itself", function()
 	local a, setA = signal(0)
 	local calls = 0
-	local dispose
+	local dispose: () -> ()
 
 	dispose = effect(function()
 		if a() > 0 then
@@ -460,7 +460,7 @@ end)
 test("should not run the effect if the cleanup function disposes it", function()
 	local a, setA = signal(0)
 	local calls = 0
-	local dispose
+	local dispose: () -> ()
 
 	dispose = effect(function()
 		a()

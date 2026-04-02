@@ -4,6 +4,7 @@ local config = require("../src/config")
 local patch = require("../src/patch")
 local server = require("../src/server")
 local test = require("../../../tests/test")
+local types = require("../src/types")
 
 test.afterEach(function()
 	server.reset()
@@ -14,7 +15,7 @@ test("should replicate state changes", function()
 	local a = Charm.atom(0)
 	local b = Charm.atom(0)
 	local c = Charm.atom(0)
-	local target, payloads
+	local target: unknown, payloads: { types.SyncPayload }
 
 	server.addSignalsToClient(client, { a = a, b = b, c = c })
 	server.connect(function(...)
@@ -41,7 +42,7 @@ test("should replicate partial state patches", function()
 	local client = {}
 	local a = Charm.atom({ x = 0, y = 0 })
 	local b = Charm.atom(0 :: number?)
-	local target, payloads
+	local target: unknown, payloads: { types.SyncPayload }
 
 	server.addSignalsToClient(client, { a = a, b = b })
 	server.connect(function(...)
@@ -68,7 +69,7 @@ end)
 test("should replicate partial state patches (reactive)", function()
 	local client = {}
 	local a = DeepCharm.reactive({ x = { y = 0 }, z = 0 :: number? })
-	local target, payloads
+	local target: unknown, payloads: { types.SyncPayload }
 
 	server.addSignalsToClient(client, { a = a })
 	server.connect(function(...)
@@ -118,7 +119,7 @@ test("should init new clients", function()
 	local clientA = {}
 	local clientB = {}
 	local a = Charm.atom(0)
-	local payloadsA, payloadsB
+	local payloadsA: { types.SyncPayload }, payloadsB: { types.SyncPayload }
 
 	server.addSignalsToClient(clientA, { a = a })
 	server.connect(function(target, payloads)
@@ -147,7 +148,7 @@ test("should init new atoms", function()
 	local client = {}
 	local a = Charm.atom(0)
 	local b = Charm.atom(0)
-	local target, payloads
+	local target: unknown, payloads: { types.SyncPayload }
 
 	server.addSignalsToClient(client, { a = a })
 	server.connect(function(...)
@@ -172,7 +173,7 @@ test("should only replicate to synced clients", function()
 	local clientB = {}
 	local a = Charm.atom(0)
 	local b = Charm.atom(0)
-	local payloadsA, payloadsB
+	local payloadsA: { types.SyncPayload }, payloadsB: { types.SyncPayload }
 
 	server.addSignalsToClient(clientA, { a = a })
 	server.addSignalsToClient(clientB, { b = b })
@@ -214,7 +215,7 @@ end)
 test("should serialize state", function()
 	local client = {}
 	local a = Charm.atom({ 1, 2, 3, 4, 5 })
-	local payloads
+	local payloads: { types.SyncPayload }
 
 	server.addSignalsToClient(client, { a = a })
 	server.connect(function(_, p)
@@ -231,7 +232,7 @@ end)
 test("should not send unchanged state", function()
 	local client = {}
 	local a = Charm.atom(0)
-	local payloads
+	local payloads: { types.SyncPayload }
 
 	server.addSignalsToClient(client, { a = a })
 	server.connect(function(_, p)
@@ -262,7 +263,7 @@ test.describe("historical", function()
 		local a = Charm.atom(0)
 		local b = Charm.atom(0)
 		local c = Charm.atom(0)
-		local target, payloads
+		local target: unknown, payloads: { types.SyncPayload }
 
 		server.addSignalsToClient(client, { a = a, b = b, c = c })
 		server.connect(function(...)
@@ -292,7 +293,7 @@ test.describe("historical", function()
 		local a = DeepCharm.reactive({ value = 0 })
 		local b = DeepCharm.reactive({ value = 0 })
 		local c = DeepCharm.reactive({ value = 0 })
-		local target, payloads
+		local target: unknown, payloads: { types.SyncPayload }
 
 		server.addSignalsToClient(client, { a = a, b = b, c = c })
 		server.connect(function(...)
@@ -321,7 +322,7 @@ test.describe("historical", function()
 		local clientA = {}
 		local clientB = {}
 		local a = Charm.atom(0)
-		local payloadsA, payloadsB
+		local payloadsA: { types.SyncPayload }, payloadsB: { types.SyncPayload }
 
 		server.addSignalsToClient(clientA, { a = a })
 		server.connect(function(target, payloads)
@@ -357,7 +358,7 @@ test.describe("historical", function()
 		local client = {}
 		local a = Charm.atom(0)
 		local b = Charm.atom(0)
-		local payloads
+		local payloads: { types.SyncPayload }
 
 		server.addSignalsToClient(client, { a = a })
 		server.connect(function(_, ...)
@@ -386,7 +387,7 @@ test.describe("historical", function()
 	test("should not send unchanged state", function()
 		local client = {}
 		local a = Charm.atom(0)
-		local payloads
+		local payloads: { types.SyncPayload }
 
 		server.addSignalsToClient(client, { a = a })
 		server.connect(function(_, p)

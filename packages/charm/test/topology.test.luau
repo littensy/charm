@@ -442,18 +442,16 @@ end)
 test.describe("error handling", function()
 	test("should keep graph consistent on errors during activation", function()
 		local a = atom(0)
-		local b = computed(function()
+		local b = computed(function(): nil
 			error("fail")
 		end)
 		local c = computed(function()
 			return a()
 		end)
 
-		local success, result = pcall(function()
-			b()
-		end)
+		local success, result = pcall(b)
 		assert(not success, "should throw")
-		assert(string.match(result, "fail"), "should throw fail")
+		assert(string.match(tostring(result), "fail"), "should throw fail")
 
 		a(1)
 		assert(c() == 1, "c should recover and return 1")
@@ -461,7 +459,7 @@ test.describe("error handling", function()
 
 	test("should keep graph consistent on errors in computeds", function()
 		local a = atom(0)
-		local b = computed(function()
+		local b = computed(function(): number
 			if a() == 1 then
 				error("fail")
 			end
@@ -474,11 +472,9 @@ test.describe("error handling", function()
 		assert(c() == 0, "c should be 0")
 
 		a(1)
-		local success, result = pcall(function()
-			b()
-		end)
+		local success, result = pcall(b)
 		assert(not success, "should throw")
-		assert(string.match(result, "fail"), "should throw fail")
+		assert(string.match(tostring(result), "fail"), "should throw fail")
 
 		a(2)
 		assert(c() == 2, "c should recover and return 2")

@@ -31,8 +31,8 @@ end)
 
 test("should run indirect scope cleanup", function()
 	local cleanups = 0
+	local cleanup: () -> ()
 
-	local cleanup
 	local stopScope = effectScope(function()
 		cleanup = effectScope(function()
 			onCleanup(function()
@@ -50,8 +50,8 @@ end)
 
 test("should run indirect effect cleanup", function()
 	local cleanups = 0
-
 	local a, setA = signal(false)
+
 	local stopScope = effectScope(function()
 		effect(function()
 			a()
@@ -73,7 +73,7 @@ end)
 test("should dispose inner effects if created in an effect", function()
 	local source, setSource = signal(1)
 	local triggers = 0
-	local dispose
+	local dispose: () -> ()
 
 	effect(function()
 		dispose = effectScope(function()

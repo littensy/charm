@@ -1,4 +1,4 @@
-local function isTableUnsafe(object: {})
+local function isTableUnsafe(object: { [any]: any })
 	local key = next(object)
 
 	if key == nil then
@@ -31,9 +31,8 @@ end
 	with remote argument limitations, such as sparse arrays or mixed tables.
 
 	@param value The table value.
-	@param key The key of the value.
 ]]
-local function validate(value: {})
+local function validate(value: { [any]: any })
 	if isTableUnsafe(value) then
 		warn(
 			`Cannot sync tables unsupported by remote events! See the table below for more info.\n\n`

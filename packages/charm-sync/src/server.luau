@@ -39,8 +39,9 @@ local syncCallback: ((client: any, payloads: { SyncPayload }) -> ())?
 	support custom implementations of reactive proxies.
 ]]
 local function toRaw<T>(value: T): T
+	local value: any = value
 	if type(value) == "table" and type(value.__target) == "table" and type(value.__track) == "function" then
-		value.__track()
+		(value.__track :: () -> ())()
 		return toRaw(value.__target)
 	end
 	return value
@@ -153,15 +154,17 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 		local status = clientKeys[key]
 
 		if status == LISTENING_FOR_CHANGES then
-			table.insert(payloads, {
+			local payload: SyncPayload = {
 				type = "patch",
 				data = { [key] = patchData },
-			})
+			}
+			table.insert(payloads, payload)
 		elseif status == PENDING_INITIAL_STATE then
-			table.insert(payloads, {
+			local payload: SyncPayload = {
 				type = "init",
 				data = { [key] = update.newValue },
-			})
+			}
+			table.insert(payloads, payload)
 			clientKeys[key] = LISTENING_FOR_CHANGES
 		end
 	end
@@ -228,11 +231,19 @@ local function selectFromGlobalPatch(client: any, globalPatch: { [string]: any }
 	end
 
 	if next(initData) ~= nil then
-		table.insert(payloads, { type = "init", data = initData })
+		local payload: SyncPayload = {
+			type = "init",
+			data = initData,
+		}
+		table.insert(payloads, payload)
 	end
 
 	if next(patchData) ~= nil then
-		table.insert(payloads, { type = "patch", data = patchData })
+		local payload: SyncPayload = {
+			type = "patch",
+			data = patchData,
+		}
+		table.insert(payloads, payload)
 	end
 
 	return payloads

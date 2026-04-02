@@ -49,10 +49,10 @@ test("should unwrap proxy assignments", function()
 	end)
 
 	src.a, src.b = src.a, src.b
-	assert(runs == 1, runs)
+	assert(runs == 1, `bad runs: {runs}`)
 
 	src.a, src.b = src.b, src.a
-	assert(runs == 3, runs)
+	assert(runs == 3, `bad runs: {runs}`)
 end)
 
 test("should track iteration", function()
@@ -125,10 +125,10 @@ test("should not track unread properties", function()
 		local _ = src.value.a
 		calls += 1
 	end)
-	assert(calls == 1, calls)
+	assert(calls == 1, `bad calls: {calls}`)
 
 	src.value.b = 3
-	assert(calls == 1, calls)
+	assert(calls == 1, `bad calls: {calls}`)
 end)
 
 test("should overwrite with table passed to setter", function()
@@ -159,10 +159,10 @@ test("should unwrap proxy", function()
 
 	assert(toRaw(src) == raw, "unwrap did not return the original table")
 	assert(toRaw(raw) == raw, "unwrap modified a non-proxy value")
-	assert(runs == 1, runs)
+	assert(runs == 1, `bad runs: {runs}`)
 
 	src.x = 1
-	assert(runs == 2, runs)
+	assert(runs == 2, `bad runs: {runs}`)
 end)
 
 test("should unwrap nested proxy", function()
@@ -177,13 +177,13 @@ test("should unwrap nested proxy", function()
 	end)
 
 	assert(toRaw(src) == raw, "unwrap did not return the original table")
-	assert(runs == 1, runs)
+	assert(runs == 1, `bad runs: {runs}`)
 
 	inner.x = 1
-	assert(runs == 2, runs)
+	assert(runs == 2, `bad runs: {runs}`)
 
 	src.y = 2
-	assert(runs == 3, runs)
+	assert(runs == 3, `bad runs: {runs}`)
 end)
 
 return {}

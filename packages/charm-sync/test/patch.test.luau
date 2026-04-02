@@ -2,7 +2,7 @@ local config = require("../src/config")
 local patch = require("../src/patch")
 local test = require("../../../tests/test")
 
-local function mockArraySerdes(object: {}): {}
+local function mockArraySerdes(object: { [any]: any }): { [any]: any }
 	if object[1] then
 		local copy = {}
 		for index = 1, #object do

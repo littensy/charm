@@ -38,7 +38,7 @@ end)
 
 test("should run detached from effect scope", function()
 	local effects = 0
-	local stopEffect
+	local stopEffect: () -> ()
 
 	local stopScope = effectScope(function()
 		untracked(function()

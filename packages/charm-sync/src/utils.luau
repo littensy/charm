@@ -2,10 +2,6 @@ local Charm = require("../Charm")
 
 type Atom<T> = Charm.Atom<T>
 
-type NestedTable = {
-	[any]: NestedTable | any,
-}
-
 --[[
 	Flattens a nested table into a single table with slash-separated keys.
 	Useful for recursively collecting atoms returned by modules.
@@ -13,15 +9,15 @@ type NestedTable = {
 	@param input A nested table.
 	@return A flattened table with slash-separated keys.
 ]]
-local function flatten<Flattened>(input: {}): Flattened
+local function flatten<Flattened>(input: { [any]: any }): Flattened
 	local result = {}
 
-	local function visit(node: {}, path: string)
+	local function visit(node: { [any]: any }, path: string)
 		for key, value in node do
 			local location = if path == "" then tostring(key) else path .. "/" .. tostring(key)
 
 			if type(value) == "table" then
-				visit(value :: {}, location)
+				visit(value, location)
 			else
 				result[location] = value
 			end

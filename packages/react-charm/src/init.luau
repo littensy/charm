@@ -13,12 +13,12 @@ local React = require("./React")
 	@param dependencies An array of values used to memoize the getter.
 	@return The current state.
 ]]
-local function useSignalState<T>(getter: () -> T, dependencies: { any }?): T
+local function useSignalState<T>(getter: () -> T, dependencies: {}?): T
 	local value, setValue = React.useState(getter)
 
 	React.useLayoutEffect(function()
-		return Charm.listen(getter, setValue)
-	end, dependencies or {})
+		return Charm.listen(getter, setValue :: (T, T?) -> ())
+	end, dependencies :: { any } or {})
 
 	return value
 end
@@ -34,13 +34,13 @@ end
 	@param dependencies An array of values used to memoize the getter.
 	@return A binding that stores the current state.
 ]]
-local function useSignalBinding<T>(getter: () -> T, dependencies: { any }?)
+local function useSignalBinding<T>(getter: () -> T, dependencies: {}?)
 	local initialValue = React.useMemo(getter, {})
 	local binding, setBinding = React.useBinding(initialValue)
 
 	React.useLayoutEffect(function()
-		return Charm.listen(getter, setBinding)
-	end, dependencies or {})
+		return Charm.listen(getter, setBinding :: (T, T?) -> ())
+	end, dependencies :: { any } or {})
 
 	return binding
 end

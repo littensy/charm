@@ -180,11 +180,11 @@ export function batch<Args extends any[], Result>(fn: (...args: Args) => Result,
  * value and the previous value as arguments.
  *
  * @param getter A function that returns the value to watch.
- * @param fn The function to run when the value changes.
+ * @param callback The function to run when the value changes.
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
  */
-export function listen<T>(getter: Getter<T>, fn: (value: T, previousValue: T | undefined) => void): Cleanup;
+export function listen<T>(getter: Getter<T>, callback: (value: T, previousValue: T | undefined) => void): Cleanup;
 
 /**
  * Creates an effect that only runs the callback when the value returned by the
@@ -192,34 +192,37 @@ export function listen<T>(getter: Getter<T>, fn: (value: T, previousValue: T | u
  * as arguments.
  *
  * @param getter A function that returns the value to watch.
- * @param fn The function to run when the value changes.
+ * @param callback The function to run when the value changes.
  * @returns A function for disposing the effect.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
  */
-export function subscribe<T>(getter: Getter<T>, fn: (value: T, previousValue: T) => void): Cleanup;
+export function subscribe<T>(getter: Getter<T>, callback: (value: T, previousValue: T) => void): Cleanup;
 
 /**
  * Creates a new read-only signal that is computed by mapping over the entries
- * of an existing atom. If the key is omitted from the mapper's return value,
- * the original key is preserved.
+ * of the source table. If the key is omitted from the transform function's
+ * return value, the original key is preserved.
  *
- * @param getter Returns the table to map over.
- * @param mapper Transforms each value-key pair from the source into a new value or value-key pair for the resulting table.
- * @see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-mapper
+ * This function is optimized to minimize unnecessary updates by only calling
+ * the transform function for entries that have changed since the last run.
+ *
+ * @param getter A signal or function that returns a table
+ * @param transform Function that maps each entry from the source to a new entry in the mapped table
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-transform
  */
 export function mapped<VI, KI, VO, KO = KI>(
 	getter: Getter<Map<KI, VI> | ReadonlyMap<KI, VI>>,
-	mapper: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
+	transform: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
 ): Getter<ReadonlyMap<KO, VO>>;
 // Overload for arrays
 export function mapped<VI, VO, K extends Key = number>(
 	getter: Getter<readonly VI[]>,
-	mapper: (value: VI, key: number) => LuaTuple<[VO, K]> | VO,
+	transform: (value: VI, key: number) => LuaTuple<[VO, K]> | VO,
 ): Getter<K extends number ? readonly VO[] : { readonly [P in K]: VO }>;
 // Overload for objects
 export function mapped<VI, KI extends Key, VO, KO extends Key = KI>(
 	getter: Getter<{ readonly [K in KI]: VI }>,
-	mapper: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
+	transform: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
 ): Getter<{ readonly [K in KO]: VO }>;
 
 /**
@@ -234,18 +237,18 @@ export function mapped<VI, KI extends Key, VO, KO extends Key = KI>(
  * from the table or when the callback is disposed.
  *
  * @param getter A function that returns the table to observe.
- * @param fn A function that is called for each key in the table.
+ * @param callback A function that is called for each key in the table.
  * @returns A function for disposing the observer.
  * @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
  */
 export function observe<V, K = number>(
 	getter: Getter<Map<K, V> | ReadonlyMap<K, V> | readonly V[]>,
-	fn: (value: V, key: K) => Cleanup | void,
+	callback: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 // Overload for objects
 export function observe<V, K extends Key>(
 	getter: Getter<{ readonly [K in Key]: V }>,
-	fn: (value: V, key: K) => Cleanup | void,
+	callback: (value: V, key: K) => Cleanup | void,
 ): Cleanup;
 
 /**

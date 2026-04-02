@@ -26,7 +26,7 @@ end
 	immediately closing it, causing alien-signals to unlink the computed value
 	from its dependencies and allow it to be garbage collected.
 ]]
-local function unlink(getter: () -> ())
+local function unlink(getter: () -> unknown)
 	effectScope(function()
 		getter()
 	end)()

@@ -1,5 +1,6 @@
 local test = require("../../tests/test")
 
+-- selene: allow(global_usage)
 _G.__ROACT_17_MOCK_SCHEDULER__ = true
 
 test.describe("useSignalState", function()

@@ -8,7 +8,8 @@ test("should flatten functions", function()
 		b = { c = Charm.atom(0) },
 		d = { e = { f = utils.signalToAtom(Charm.signal(0)) } },
 	}
-	local result = utils.flatten(input)
+
+	local result = utils.flatten<<{ [string]: Charm.Atom<number> }>>(input)
 
 	assert(result.a == input.a, "should flatten the first level")
 	assert(result["b/c"] == input.b.c, "should flatten the second level")

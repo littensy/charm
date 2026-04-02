@@ -84,7 +84,7 @@ end)
 test("should receive previous value", function()
 	local calls = {}
 	local src, setSrc = signal(0)
-	local c1 = computed(function(current): number
+	local c1 = computed(function(current: number?): number
 		local incoming = src()
 		return if current == incoming or incoming % 2 == 1 then current or incoming else incoming
 	end)
@@ -192,10 +192,10 @@ test("should trigger effect even computed already dirty", function()
 		table.insert(calls, c2())
 	end)
 	assert(table.concat(calls, ",") == "0foo", table.concat(calls, ","))
-	assert(v() == 1, v())
+	assert(v() == 1, `expected 1 for v(), got {v()}`)
 	v(2)
 	assert(table.concat(calls, ",") == "0foo,2foo", table.concat(calls, ","))
-	assert(v() == 2, v())
+	assert(v() == 2, `expected 2 for v(), got {v()}`)
 end)
 
 return {}

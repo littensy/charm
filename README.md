@@ -51,7 +51,7 @@ Charm is a state management library based on [fine-grained reactivity](https://d
     - [`subscribe(getter, callback)`](#subscribegetter-callback)
     - [`untracked(callback)`](#untrackedcallback)
     - [`batch(callback)`](#batchcallback)
-    - [`mapped(getter, mapper)`](#mappedgetter-mapper)
+    - [`mapped(getter, transform)`](#mappedgetter-transform)
     - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
     - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
     - [`trigger(callback)`](#triggercallback)
@@ -472,11 +472,11 @@ end)
 
 ---
 
-### `mapped(getter, mapper)`
+### `mapped(getter, transform)`
 
-The `mapped` function iterates over every key in a table and uses the mapper to assign them to a new key and value. The result is returned as a read-only signal containing the new keys and values. When a key's value changes, or a new key is added to the table, the mapper is called for that key and its current value.
+The `mapped` function iterates over every key in a table and uses the transform function to assign them to a new key and value. The result is returned as a read-only signal containing the new keys and values. When a key's value changes, or a new key is added to the table, `transform` is called for that key and its current value.
 
-The first value returned by the mapper is used as the new value:
+The first value returned by the transform function is used as the new value:
 
 ```luau
 local getList, setList = signal({ "a", "b", "c" })
@@ -488,7 +488,7 @@ end)
 print(getUppercase()) -- { "A", "B", "C" }
 ```
 
-If the mapper returns two values, the second value is used as the new key:
+If the transform function returns two values, the second value is used as the new key:
 
 ```luau
 local getList, setList = signal({ "a", "b", "c" })

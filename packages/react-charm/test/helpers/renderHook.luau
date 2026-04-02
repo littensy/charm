@@ -13,12 +13,13 @@ local function renderHook<Props, Result>(callback: (Props) -> Result, props: Pro
 
 	local function Component(props: Props)
 		hook.result = callback(props)
+		return nil
 	end
 
 	function hook.rerender(newProps: Props?)
 		props = newProps or props
 		ReactRoblox.act(function()
-			root:render(React.createElement(Component, props))
+			root:render(React.createElement(Component, props) :: any)
 		end)
 	end
 

@@ -95,7 +95,7 @@ test("should handle recursive additions and removals", function()
 
 	observe(items, function(item)
 		if item < 5 then
-			setItems(function(state)
+			setItems(function(state: { number })
 				state = table.clone(state)
 				table.insert(state, item + 1)
 				return state
@@ -117,7 +117,7 @@ test("should handle self removal", function()
 	local edits = {}
 
 	observe(items, function(item, index)
-		setItems(function(state)
+		setItems(function(state: { number })
 			state = table.clone(state)
 			state[index] = nil
 			return state
@@ -134,7 +134,7 @@ end)
 test("should allow disposal during addition", function()
 	local items, setItems = signal({})
 	local edits = {}
-	local dispose
+	local dispose: () -> ()
 
 	dispose = observe(items, function(item)
 		if item == 1 then
@@ -153,7 +153,7 @@ end)
 test("should allow disposal during removal", function()
 	local items, setItems = signal({ 1, 2, 3, 4 })
 	local edits = {}
-	local dispose
+	local dispose: () -> ()
 
 	dispose = observe(items, function(item)
 		table.insert(edits, `+{item}`)
