@@ -16,7 +16,7 @@ local analyze = process.run({
 	"--ignore=**/node_modules/**",
 	"--base-luaurc=.luaurc",
 	"--definitions=roblox.d.luau",
-	"--flag:LuauSolverV2=true",
+	-- "--flag:LuauSolverV2=true",
 	"packages",
 	"tests",
 	"benches",
