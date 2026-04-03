@@ -640,25 +640,19 @@ return {
 }
 ```
 
-When a player joins on the server, call `server.addSignalsToClient` with the keyed signals that the client should receive updates for. Once they leave, call `server.removeClient` to unsubscribe them from all updates.
+When a player notifies the server that they're ready to start syncing, call `server.addSignalsToClient` with the signals that the client should receive updates for. Once they leave, call `server.removeClient` to unsubscribe them from all updates.
 
-Then, use `server.connect` to specify how state updates should be sent to each client. Pass a callback function that fires a remote with the given target player and the state updates they subscribed to.
+Then, use `server.connect` to specify how state updates should be sent to each client. Pass a callback function that fires a remote with the given target player and the state updates they subscribed to:
 
 ```luau
-local function onPlayerAdded(player: Player)
-	-- Add signal getters, computed signals, atoms, or reactive objects
+playerReadyEvent.OnServerEvent:Connect(function(player)
+	-- Sync signal getters, computed signals, atoms, or reactive proxies
 	server.addSignalsToClient(player, {
 		name = nameStore.getName,
 		surname = nameStore.getSurname,
 		age = nameStore.ageAtom,
 	})
-end
-
-for _, player in Players:GetPlayers() do
-	onPlayerAdded(player)
-end
-
-Players.PlayerAdded:Connect(onPlayerAdded)
+end)
 
 Players.PlayerRemoving:Connect(function(player)
 	server.removeClient(player)
@@ -671,7 +665,7 @@ end)
 ```
 
 > [!NOTE]
-> On the server, make sure each key corresponds to the same signal across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
+> On the server, make sure each key corresponds to the same data across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
 
 To sync the client with the server's state, call `client.addSignals` with a table of writable signals (setter functions or atoms) whose keys match their server counterparts.
 
@@ -701,8 +695,8 @@ A configuration table that customizes the behavior of Charm Sync on the server.
 | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | interval        | `0`     | The frequency at which the server will send patches to the client, in seconds. A value of `0` sends updates on the next frame. Set to a negative value to disable the interval.                                                                                       |
 | preserveHistory | `false` | Whether to preserve a full history of state changes since the last sync, at the cost of performance. This is useful if you need to replicate each individual change that occurs between sync events.                                                                  |
-| fixArrays       | `true`  | When `true`, Charm will attempt to work around Roblox remote event limitations regarding array patches. Disable this if your networking library serializes remote arguments (Zap, ByteNet, etc.).                                                                     |
-| validatePatches | `true`  | When `true`, and both `fixArrays` and strict mode are enabled, synced values containing unsafe sparse arrays or mixed tables will throw an error. See the [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations). |
+| fixArrays       | `true`  | When `true`, Charm will attempt to work around remote event limitations that cause data loss in array patches. Disable this if your networking library serializes remote arguments (Zap, ByteNet, etc.).                                                              |
+| validatePatches | `true`  | When `true`, and both `fixArrays` and strict mode are enabled, synced values containing unsafe sparse arrays or mixed tables will emit a warning. See the [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations). |
 
 ---
 
@@ -713,7 +707,7 @@ The `addSignalsToClient` function subscribes a client to updates in the given si
 You can pass signal getter functions, computed signals, atoms, and [reactive objects](#reactiveinitialvalue) in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
 
 ```luau
-Players.PlayerAdded:Connect(function(player)
+playerReadyEvent.OnServerEvent:Connect(function(player)
 	server.addSignalsToClient(player, {
 		name = nameStore.getName,
 		surname = nameStore.getSurname,
@@ -722,14 +716,22 @@ Players.PlayerAdded:Connect(function(player)
 end)
 ```
 
-You're also allowed to create new signals to sync to specific players, as long as the key is unique to that player:
+You're also allowed to create new signals to sync to specific players, as long as the key is unique to that data:
 
 ```luau
-server.addSignalsToClient(player, {
-	[`data-{player.UserId}`] = computed(function()
-		return getPlayerData(player.UserId)
-	end),
-})
+playerReadyEvent.OnServerEvent:Connect(function(player)
+	server.addSignalsToClient(player, {
+		-- 🟢 Good: Player-specific data is synced with a unique key
+		[`data-{player.UserId}`] = computed(function()
+			return getPlayerData(player.UserId)
+		end),
+
+		-- 🔴 Bad: Syncing different data with the same keys does not work
+		playerData = computed(function()
+			return getPlayerData(player.UserId)
+		end),
+	})
+end)
 ```
 
 ---
@@ -754,7 +756,7 @@ server.removeSignalsFromClient(player, "surname")
 The `removeClient` function unsubscribes a client from receiving all state updates from the server. You should call this function when a player leaves the game.
 
 ```luau
-Players.PlayerAdded:Connect(function(player)
+playerReadyEvent.OnServerEvent:Connect(function(player)
 	server.addSignalsToClient(player, signals)
 end)
 

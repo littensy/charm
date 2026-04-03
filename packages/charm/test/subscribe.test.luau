@@ -46,7 +46,7 @@ test("should run in untracked", function()
 end)
 
 test("should ensure correct execution order", function()
-	local order = {}
+	local order: { number } = {}
 	local n1, setN1 = signal(0)
 	local n2, setN2 = signal(0)
 	local sum = computed(function()
@@ -72,7 +72,7 @@ test("should ensure correct execution order", function()
 end)
 
 test("should skip redundant updates", function()
-	local order = {}
+	local order: { "even" | "odd" } = {}
 	local a, setA = signal(0)
 
 	subscribe(function(): "even" | "odd"

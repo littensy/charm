@@ -497,7 +497,7 @@ end)
 
 test("recursive effects should run and cleanup in order", function()
 	local a, setA = signal(0)
-	local order = {}
+	local order: { string } = {}
 
 	effect(function()
 		local value = a()

@@ -91,7 +91,7 @@ end)
 
 test("should handle recursive additions and removals", function()
 	local items, setItems = signal({ 1 })
-	local edits = {}
+	local edits: { string } = {}
 
 	observe(items, function(item)
 		if item < 5 then
@@ -114,7 +114,7 @@ end)
 
 test("should handle self removal", function()
 	local items, setItems = signal({ 1, 2, 3, 4 })
-	local edits = {}
+	local edits: { string } = {}
 
 	observe(items, function(item, index)
 		setItems(function(state: { number })
