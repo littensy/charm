@@ -45,11 +45,11 @@ type SignalNode<T = any> = ReactiveNode & {
 -- Bitmask flags for tracking the state of reactive nodes. Flags are combined
 -- and checked using bitwise operations for efficiency.
 local NONE = 0b000000 -- Default state
-local MUTABLE = 0b000001 -- Can be changed (signal or computed)
-local WATCHING = 0b000010 -- Watching for changes (effects)
+local MUTABLE = 0b000001 -- Can be written to (signal or computed)
+local WATCHING = 0b000010 -- Notified for changes in dependencies (effects)
 local RECURSED_CHECK = 0b000100 -- Being checked for circular dependencies
 local RECURSED = 0b001000 -- Has been visited in a recursion check
-local DIRTY = 0b010000 -- Value has changed and needs updating
+local DIRTY = 0b010000 -- Value is outdated and needs recomputation
 local PENDING = 0b100000 -- Might be dirty, pending verification
 
 -- Global version counter for dependency link deduplication. Incremented at the
@@ -104,21 +104,20 @@ local function noYield<Args..., Results...>(callback: (Args...) -> Results...): 
 		return callback
 	end
 
-	local function packResults<Args...>(callback: (Args...) -> ...any, ...: Args...): { any }
-		return { callback(...) }
-	end
-
-	local function noYieldCallback(...): Results...
+	return function(...: Args...): Results...
 		if coroutine.isyieldable() then
-			for results in packResults, callback, ... do
+			for results in
+				function(...)
+					return { callback(...) }
+				end,
+				...
+			do
 				return unpack(results)
 			end
 		else
 			return callback(...)
 		end
 	end
-
-	return noYieldCallback
 end
 
 --[[
@@ -264,6 +263,7 @@ local function flush()
 		end
 	end)
 
+	-- Skip over any remaining queued effects that were not run due to an error
 	while notifyIndex < queuedLength do
 		local effect = queued[notifyIndex] :: EffectNode
 		queued[notifyIndex] = nil
@@ -354,27 +354,24 @@ local function clearPending(sub: ReactiveNode, subFlags: ReactiveFlags)
 end
 
 --[[
-	Performs a thorough cleanup of the given effect or effect scope:
+	Clears all dependencies and subscribers from the effect node. After calling
+	this, the node will no longer be subscribed to any dependencies and will be
+	inactive, with all cleanup functions run and resources released.
 
-	1. Removes all dependency links
-	2. Unlinks from parent effects/scopes
-	3. Clears state flags to mark the effect as inactive
-	4. Runs all registered cleanup functions
-
-	@param this Effect node
+	@param node Effect node
 ]]
-local function stopEffect(this: EffectScopeNode)
-	this.depsTail = nil
-	this.flags = NONE
+local function stopEffect(node: EffectScopeNode)
+	node.depsTail = nil
+	node.flags = NONE
 
-	purgeDeps(this)
+	purgeDeps(node)
 
-	local sub = this.subs
+	local sub = node.subs
 	if sub then
-		unlink(sub, this)
+		unlink(sub, node)
 	end
 
-	runCleanups(this.cleanups)
+	runCleanups(node.cleanups)
 end
 
 --[[
@@ -458,7 +455,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
 ]]
 local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Setter<T>)
-	local this: SignalNode = {
+	local node: SignalNode = {
 		currentValue = initialValue,
 		pendingValue = initialValue,
 		flags = MUTABLE,
@@ -475,7 +472,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		-- a direct value
 		if type(newValue) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result = xpcall(noYield(newValue), debug.traceback, this.pendingValue)
+			local success, result = xpcall(noYield(newValue), debug.traceback, node.pendingValue)
 			activeSub = prevSub
 
 			if success then
@@ -488,15 +485,15 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		end
 
 		-- Check if the new value is different from the pending value
-		if if equals then not equals(this.pendingValue, value) else this.pendingValue ~= value then
+		if if equals then not equals(node.pendingValue, value) else node.pendingValue ~= value then
 			if flags.frozen then
 				deepFreeze(value)
 			end
 
-			this.pendingValue = value
-			this.flags = bit32.bor(MUTABLE, DIRTY)
+			node.pendingValue = value
+			node.flags = bit32.bor(MUTABLE, DIRTY)
 
-			local subs = this.subs
+			local subs = node.subs
 			if subs then
 				propagate(subs)
 				flush()
@@ -505,14 +502,14 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 			return value
 		end
 
-		return this.currentValue
+		return node.currentValue
 	end
 
 	local function readSignal(): T
 		-- Check if the signal has a pending update that needs to be applied
-		if bit32.btest(this.flags, DIRTY) then
-			if updateSignal(this) then
-				local subs = this.subs
+		if bit32.btest(node.flags, DIRTY) then
+			if updateSignal(node) then
+				local subs = node.subs
 				if subs then
 					shallowPropagate(subs)
 				end
@@ -524,14 +521,14 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		local sub = activeSub
 		while sub do
 			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
-				link(this, sub, cycle)
+				link(node, sub, cycle)
 				break
 			end
 			local subs = sub.subs
 			sub = if subs then subs.sub else nil
 		end
 
-		return this.currentValue
+		return node.currentValue
 	end
 
 	return readSignal, writeSignal
@@ -564,50 +561,50 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
 ]]
 local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
-	local this: ComputedNode = {
+	local node: ComputedNode = {
 		flags = NONE,
 		getter = noYield(getter),
 	}
 
 	local function computedOper(): T
-		local computedFlags = this.flags
+		local nodeFlags = node.flags
 
 		if
-			bit32.btest(computedFlags, DIRTY)
+			bit32.btest(nodeFlags, DIRTY)
 			or (
-				bit32.btest(computedFlags, PENDING)
-				and (checkDirty(this.deps :: Link, this) or clearPending(this, computedFlags))
+				bit32.btest(nodeFlags, PENDING)
+				and (checkDirty(node.deps :: Link, node) or clearPending(node, nodeFlags))
 			)
 		then
-			if updateComputed(this) then
+			if updateComputed(node) then
 				-- Notify subscribers if the value changed
-				local subs = this.subs
+				local subs = node.subs
 				if subs then
 					shallowPropagate(subs)
 				end
 			end
-		elseif computedFlags == NONE then
+		elseif nodeFlags == NONE then
 			-- First access should initialize the computed value
-			this.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
+			node.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 
-			local prevSub = setActiveSub(this)
-			local success, result = xpcall(this.getter, debug.traceback)
+			local prevSub = setActiveSub(node)
+			local success, result = xpcall(node.getter, debug.traceback)
 			activeSub = prevSub
 
-			this.flags = bit32.band(this.flags, bit32.bnot(RECURSED_CHECK))
+			node.flags = bit32.band(node.flags, bit32.bnot(RECURSED_CHECK))
 
 			if success then
-				this.value = result
+				node.value = result
 			else
 				error(result, 2)
 			end
 		end
 
 		if activeSub then
-			link(this, activeSub, cycle)
+			link(node, activeSub, cycle)
 		end
 
-		return this.value :: T
+		return node.value :: T
 	end
 
 	return computedOper
@@ -629,35 +626,35 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
 ]]
 local function effect(fn: () -> ...Cleanup?): Cleanup
-	local this: EffectNode = {
+	local node: EffectNode = {
 		fn = noYield(fn),
 		flags = WATCHING,
 		cleanups = {},
 	}
 
 	if activeSub and (flags.trackInnerEffects or activeSub.flags == NONE) then
-		link(this, activeSub, 0)
+		link(node, activeSub, 0)
 	end
 
 	-- Start a batch so that any signal updates triggered during the effect
 	-- execution are queued after the effect registers a cleanup function
 	startBatch()
 
-	local prevSub = setActiveSub(this)
-	local success, result = xpcall(this.fn, debug.traceback)
+	local prevSub = setActiveSub(node)
+	local success, result = xpcall(node.fn, debug.traceback)
 	activeSub = prevSub
 
 	if not success then
 		endBatch()
 		error(result, 2)
 	elseif result then
-		table.insert(this.cleanups, noYield(result))
+		table.insert(node.cleanups, noYield(result))
 	end
 
 	endBatch()
 
 	return function()
-		stopEffect(this)
+		stopEffect(node)
 	end
 end
 
@@ -671,27 +668,27 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
 ]]
 local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
-	local this: EffectScopeNode = {
+	local node: EffectScopeNode = {
 		flags = NONE,
 		cleanups = {},
 	}
 
 	if activeSub and not detached then
-		link(this, activeSub, 0)
+		link(node, activeSub, 0)
 	end
 
-	local prevSub = setActiveSub(this)
+	local prevSub = setActiveSub(node)
 	local success, result = xpcall(noYield(fn), debug.traceback)
 	activeSub = prevSub
 
 	if not success then
 		error(result, 2)
 	elseif result then
-		table.insert(this.cleanups, noYield(result))
+		table.insert(node.cleanups, noYield(result))
 	end
 
 	return function()
-		stopEffect(this)
+		stopEffect(node)
 	end
 end
 

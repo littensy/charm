@@ -18,15 +18,15 @@
 
 </div>
 
-Charm is a state management library based on [fine-grained reactivity](https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf). Connect behavior to data with reactive signals, ensuring games stay up-to-date with their underlying data while eliminating the need for manual updates.
+Charm is a reactive state management library designed for storing data in discrete containers called _signals_. Connect behavior to data with signals, ensuring systems stay up-to-date with their underlying data while reactivity eliminates the need for manual updates.
 
 **Build game state from simple building blocks:**
 
-- Store state in [signals](#signalinitialvalue-equals): state containers that hold a value
-- React to state changes with [effects](#effectcallback): re-run code when a dependency updates
-- Derive values from state with [computed signals](#computedgetter): memoized functions with dependency tracking
+- Store data in [signals](#signalinitialvalue-equals): reactive state containers that hold a value
+- React to state changes with [effects](#effectcallback): re-run code when signals update
+- Derive new values from data with [computed signals](#computedgetter): memoize functions that access signals
 
-**Want to learn more about signals?**
+**Want to learn more about reactivity?**
 
 - https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf
 - https://preactjs.com/blog/introducing-signals
