@@ -408,17 +408,6 @@ test("should run cleanups outside any evaluation context", function()
 	assert(calls == 0, "should not run after b update")
 end)
 
-test.skip("infinite recursion should eventually throw", function()
-	local counter, setCounter = signal(0)
-
-	local success = pcall(function()
-		effect(function()
-			setCounter(counter() + 1)
-		end)
-	end)
-	assert(not success, "should have thrown")
-end)
-
 test("should not retrigger the effect if the cleanup modifies one of the dependencies", function()
 	local a, setA = signal(0)
 	local calls = {}

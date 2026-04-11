@@ -92,13 +92,4 @@ test("should dispose inner effects if created in an effect", function()
 	assert(triggers == 2, "ran after dispose")
 end)
 
-test("should disallow yielding", function()
-	local success = pcall(function()
-		effectScope(function()
-			coroutine.yield()
-		end)
-	end)
-	assert(not success, "should error on yield")
-end)
-
 return {}

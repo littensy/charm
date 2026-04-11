@@ -12,6 +12,10 @@ test.describe("effectScope", function()
 	require("@self/effectScope.test")
 end)
 
+test.describe("error", function()
+	require("@self/errors.test")
+end)
+
 test.describe("gc", function()
 	require("@self/gc.test")
 end)

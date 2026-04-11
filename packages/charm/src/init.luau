@@ -92,32 +92,43 @@ local flags = {
 	trackInnerEffects = true,
 }
 
-local traceback = debug.traceback :: (string?) -> string
-
 --[[
 	Wraps a function to prevent yielding when in strict mode. If the function
-	attempts to yield, an error is thrown.
+	was created by this module, it will be excluded to omit unnecessary Charm
+	internals from stack traces.
 
-	@param callback The function to wrap.
+	@param callback The user-created function to wrap.
 	@return A wrapped function that cannot yield in strict mode.
 ]]
-local function noYield<Args..., Results...>(callback: (Args...) -> Results...): (Args...) -> Results...
+local function wrapUserSpace<Args..., Results...>(callback: (Args...) -> Results...): (Args...) -> Results...
 	if not flags.strict then
 		return callback
 	end
 
-	local iterator = function(...): { any }
-		return { callback(...) }
+	-- If the callback is already wrapped, avoid double-wrapping to simplify
+	-- stack traces
+	if debug.info(1, "s") == debug.info(callback, "s") then
+		return callback
+	end
+
+	local handler = function(thread: thread, ok: boolean, ...: Results...): Results...
+		if not ok then
+			local err = (...)
+			if type(err) == "string" then
+				error(debug.traceback(thread, err), 0)
+			else
+				error(tostring(err), 0)
+			end
+		elseif coroutine.status(thread) ~= "dead" then
+			error(debug.traceback(thread, "Attempted to yield in an effect or scope"), 0)
+		else
+			return ...
+		end
 	end
 
 	return function(...: Args...): Results...
-		if coroutine.isyieldable() then
-			for results in iterator, ... do
-				return unpack(results)
-			end
-		else
-			return callback(...)
-		end
+		local thread = coroutine.create(callback)
+		return handler(thread, coroutine.resume(thread, ...))
 	end
 end
 
@@ -187,7 +198,7 @@ local function runCleanups(cleanups: { Cleanup })
 		cleanups[index] = nil
 
 		local prevSub = setActiveSub(nil)
-		local success, err = xpcall(cleanup :: () -> nil, traceback)
+		local success, err = pcall(cleanup)
 		activeSub = prevSub
 
 		if not success then
@@ -225,7 +236,7 @@ local function run(effect: EffectNode)
 		effect.flags = WATCHING
 
 		local prevSub = setActiveSub(effect)
-		local success, result = xpcall(effect.fn, traceback)
+		local success, result = pcall(effect.fn)
 		activeSub = prevSub
 
 		purgeDeps(effect)
@@ -233,7 +244,7 @@ local function run(effect: EffectNode)
 		if not success then
 			error(result, 0)
 		elseif result then
-			table.insert(effect.cleanups, noYield(result))
+			table.insert(effect.cleanups, wrapUserSpace(result))
 		end
 
 		if effect.flags == NONE then
@@ -311,7 +322,7 @@ local function updateComputed(computed: ComputedNode): boolean
 
 	local prevSub = setActiveSub(computed)
 	local oldValue = computed.value
-	local success, newValue = xpcall(computed.getter, traceback, oldValue)
+	local success, newValue = pcall(computed.getter, oldValue)
 	activeSub = prevSub
 
 	computed.flags = bit32.band(computed.flags, bit32.bnot(RECURSED_CHECK))
@@ -466,14 +477,14 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		deepFreeze(initialValue)
 	end
 
-	local function writeSignal(newValue: Update<T>): T
+	local function signalSetter(update: Update<T>): T
 		local value: T
 
 		-- Determine the new value based on whether the update is a function or
 		-- a direct value
-		if type(newValue) == "function" then
+		if type(update) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result = xpcall(noYield(newValue), traceback, node.pendingValue)
+			local success, result = pcall(wrapUserSpace(update), node.pendingValue)
 			activeSub = prevSub
 
 			if success then
@@ -482,7 +493,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 				error(result, 2)
 			end
 		else
-			value = newValue
+			value = update
 		end
 
 		-- Check if the new value is different from the pending value
@@ -506,7 +517,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		return node.currentValue
 	end
 
-	local function readSignal(): T
+	local function signalGetter(): T
 		-- Check if the signal has a pending update that needs to be applied
 		if bit32.btest(node.flags, DIRTY) then
 			if updateSignal(node) then
@@ -532,7 +543,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		return node.currentValue
 	end
 
-	return readSignal, writeSignal
+	return signalGetter, signalSetter
 end
 
 --[[
@@ -564,7 +575,7 @@ end
 local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 	local node: ComputedNode = {
 		flags = NONE,
-		getter = noYield(getter),
+		getter = wrapUserSpace(getter),
 	}
 
 	local function computedOper(): T
@@ -589,7 +600,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 			node.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 
 			local prevSub = setActiveSub(node)
-			local success, result = xpcall(node.getter, traceback)
+			local success, result = pcall(node.getter)
 			activeSub = prevSub
 
 			node.flags = bit32.band(node.flags, bit32.bnot(RECURSED_CHECK))
@@ -628,7 +639,7 @@ end
 ]]
 local function effect(fn: () -> ...Cleanup?): Cleanup
 	local node: EffectNode = {
-		fn = noYield(fn),
+		fn = wrapUserSpace(fn),
 		flags = WATCHING,
 		cleanups = {},
 	}
@@ -642,14 +653,14 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	startBatch()
 
 	local prevSub = setActiveSub(node)
-	local success, result = xpcall(node.fn, traceback)
+	local success, result = pcall(node.fn)
 	activeSub = prevSub
 
 	if not success then
 		endBatch()
 		error(result, 2)
 	elseif result then
-		table.insert(node.cleanups, noYield(result))
+		table.insert(node.cleanups, wrapUserSpace(result))
 	end
 
 	endBatch()
@@ -679,13 +690,13 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	end
 
 	local prevSub = setActiveSub(node)
-	local success, result = xpcall(noYield(fn), traceback)
+	local success, result = pcall(wrapUserSpace(fn))
 	activeSub = prevSub
 
 	if not success then
 		error(result, 2)
 	elseif result then
-		table.insert(node.cleanups, noYield(result))
+		table.insert(node.cleanups, wrapUserSpace(result))
 	end
 
 	return function()
@@ -706,7 +717,7 @@ local function trigger(fn: () -> ...any)
 	}
 
 	local prevSub = setActiveSub(sub)
-	local success, err = xpcall(noYield(fn), traceback)
+	local success, err = pcall(wrapUserSpace(fn))
 	activeSub = prevSub
 
 	if not success then
@@ -739,7 +750,7 @@ end
 ]]
 local function onCleanup(fn: Cleanup, failSilently: boolean?)
 	if activeSub and (activeSub :: EffectNode).cleanups then
-		table.insert((activeSub :: EffectNode).cleanups, noYield(fn))
+		table.insert((activeSub :: EffectNode).cleanups, wrapUserSpace(fn))
 	elseif not failSilently then
 		warn(debug.traceback("onCleanup() can only be called inside an effect or a scope.", 2))
 	end
@@ -761,7 +772,7 @@ end
 local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	if activeSub then
 		local prevSub = setActiveSub(nil)
-		local results: { any } = { xpcall(noYield(fn), traceback, ...) }
+		local results: { any } = { pcall(wrapUserSpace(fn), ...) }
 		activeSub = prevSub
 
 		if not results[1] then
@@ -785,7 +796,7 @@ end
 ]]
 local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	startBatch()
-	local results: { any } = { xpcall(noYield(fn), traceback, ...) }
+	local results: { any } = { pcall(wrapUserSpace(fn), ...) }
 	endBatch()
 
 	if not results[1] then
@@ -805,7 +816,7 @@ end
 ]]
 local function isSignal(fn: Getter<any>): boolean
 	local name = debug.info(fn, "n")
-	return name == "readSignal" or name == "computedOper" or name == "atomOper"
+	return name == "signalGetter" or name == "computedOper" or name == "atomOper"
 end
 
 --[[
@@ -819,6 +830,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
 local function listen<T>(getter: Getter<T>, callback: (state: T, lastState: T?) -> ()): Cleanup
+	local callback = wrapUserSpace(callback)
 	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
 	local current: T
 
@@ -840,6 +852,7 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
 local function subscribe<T>(getter: Getter<T>, callback: (state: T, lastState: T) -> ()): Cleanup
+	local callback = wrapUserSpace(callback)
 	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
 	local current: T
 	local firstRun = true
@@ -870,6 +883,8 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
 local function observe<K, V>(getter: Getter<{ [K]: V }>, callback: (item: V, key: K) -> ...Cleanup?): Cleanup
+	local getter = wrapUserSpace(getter)
+	local callback = wrapUserSpace(callback)
 	local scopes: { [K]: Cleanup } = {}
 	local stopObserving = false
 
@@ -928,6 +943,8 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-transform
 ]]
 local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, transform: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
+	local getter = wrapUserSpace(getter)
+	local transform = wrapUserSpace(transform)
 	local nextInput: { [KI]: VI } = {}
 	local keyMap: { [KI]: KO } = {}
 

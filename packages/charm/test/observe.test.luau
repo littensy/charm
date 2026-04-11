@@ -167,4 +167,32 @@ test("should allow disposal during removal", function()
 	assert(table.concat(edits) == "+1+2+3+4-1-2-3-4", `bad edits: {table.concat(edits)}`)
 end)
 
+test("should not hang on error after recursive update", function()
+	local items, setItems = signal({})
+
+	observe(items, function()
+		setItems({ {} })
+		error("test error")
+	end)
+
+	local success, err = pcall(function()
+		setItems({ {} })
+	end)
+	assert(not success, "should error")
+	assert(string.find(tostring(err), "test error"), `bad error: {err}`)
+end)
+
+test("should not hang on error after recursive init", function()
+	local items, setItems = signal({ {} })
+
+	local success, err = pcall(function()
+		observe(items, function()
+			setItems({ {} })
+			error("test error")
+		end)
+	end)
+	assert(not success, "should error")
+	assert(string.find(tostring(err), "test error"), `bad error: {err}`)
+end)
+
 return {}
