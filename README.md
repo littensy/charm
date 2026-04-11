@@ -31,7 +31,7 @@ Charm is a reactive state management library designed for storing data in discre
 - https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf
 - https://preactjs.com/blog/introducing-signals
 - https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
-- https://angular.dev/guide/signals
+- https://github.com/roblox/signals
 
 [Migrating from an older version of Charm?](#migration)
 
