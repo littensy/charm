@@ -92,6 +92,8 @@ local flags = {
 	trackInnerEffects = true,
 }
 
+local traceback = debug.traceback :: (string?) -> string
+
 --[[
 	Wraps a function to prevent yielding when in strict mode. If the function
 	attempts to yield, an error is thrown.
@@ -104,14 +106,13 @@ local function noYield<Args..., Results...>(callback: (Args...) -> Results...): 
 		return callback
 	end
 
+	local iterator = function(...): { any }
+		return { callback(...) }
+	end
+
 	return function(...: Args...): Results...
 		if coroutine.isyieldable() then
-			for results in
-				function(...)
-					return { callback(...) }
-				end,
-				...
-			do
+			for results in iterator, ... do
 				return unpack(results)
 			end
 		else
@@ -186,12 +187,12 @@ local function runCleanups(cleanups: { Cleanup })
 		cleanups[index] = nil
 
 		local prevSub = setActiveSub(nil)
-		local success, result = xpcall(cleanup :: () -> nil, debug.traceback)
+		local success, err = xpcall(cleanup :: () -> nil, traceback)
 		activeSub = prevSub
 
 		if not success then
 			hasErrors = true
-			table.insert(errors, tostring(result))
+			table.insert(errors, tostring(err))
 		end
 	end
 
@@ -224,7 +225,7 @@ local function run(effect: EffectNode)
 		effect.flags = WATCHING
 
 		local prevSub = setActiveSub(effect)
-		local success, result = xpcall(effect.fn, debug.traceback)
+		local success, result = xpcall(effect.fn, traceback)
 		activeSub = prevSub
 
 		purgeDeps(effect)
@@ -254,7 +255,7 @@ local function flush()
 		return
 	end
 
-	local success, result = pcall(function()
+	local success, err = pcall(function()
 		while notifyIndex < queuedLength do
 			local effect = queued[notifyIndex] :: EffectNode
 			queued[notifyIndex] = nil
@@ -275,7 +276,7 @@ local function flush()
 	queuedLength = 0
 
 	if not success then
-		error(result, 0)
+		error(err, 0)
 	end
 end
 
@@ -310,7 +311,7 @@ local function updateComputed(computed: ComputedNode): boolean
 
 	local prevSub = setActiveSub(computed)
 	local oldValue = computed.value
-	local success, newValue = xpcall(computed.getter, debug.traceback, oldValue)
+	local success, newValue = xpcall(computed.getter, traceback, oldValue)
 	activeSub = prevSub
 
 	computed.flags = bit32.band(computed.flags, bit32.bnot(RECURSED_CHECK))
@@ -472,7 +473,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		-- a direct value
 		if type(newValue) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result = xpcall(noYield(newValue), debug.traceback, node.pendingValue)
+			local success, result = xpcall(noYield(newValue), traceback, node.pendingValue)
 			activeSub = prevSub
 
 			if success then
@@ -588,7 +589,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 			node.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
 
 			local prevSub = setActiveSub(node)
-			local success, result = xpcall(node.getter, debug.traceback)
+			local success, result = xpcall(node.getter, traceback)
 			activeSub = prevSub
 
 			node.flags = bit32.band(node.flags, bit32.bnot(RECURSED_CHECK))
@@ -641,7 +642,7 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	startBatch()
 
 	local prevSub = setActiveSub(node)
-	local success, result = xpcall(node.fn, debug.traceback)
+	local success, result = xpcall(node.fn, traceback)
 	activeSub = prevSub
 
 	if not success then
@@ -678,7 +679,7 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	end
 
 	local prevSub = setActiveSub(node)
-	local success, result = xpcall(noYield(fn), debug.traceback)
+	local success, result = xpcall(noYield(fn), traceback)
 	activeSub = prevSub
 
 	if not success then
@@ -705,11 +706,11 @@ local function trigger(fn: () -> ...any)
 	}
 
 	local prevSub = setActiveSub(sub)
-	local success, result = xpcall(noYield(fn), debug.traceback)
+	local success, err = xpcall(noYield(fn), traceback)
 	activeSub = prevSub
 
 	if not success then
-		error(result, 2)
+		error(err, 2)
 	end
 
 	local currentLink = sub.deps
@@ -760,7 +761,7 @@ end
 local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	if activeSub then
 		local prevSub = setActiveSub(nil)
-		local results: { any } = { xpcall(noYield(fn), debug.traceback, ...) }
+		local results: { any } = { xpcall(noYield(fn), traceback, ...) }
 		activeSub = prevSub
 
 		if not results[1] then
@@ -784,7 +785,7 @@ end
 ]]
 local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
 	startBatch()
-	local results: { any } = { xpcall(noYield(fn), debug.traceback, ...) }
+	local results: { any } = { xpcall(noYield(fn), traceback, ...) }
 	endBatch()
 
 	if not results[1] then

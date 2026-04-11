@@ -7,7 +7,7 @@
 		"publish:npm": "pnpm publish -r --access public",
 		"publish:wally": "pnpm -r --workspace-concurrency 1 publish:wally"
 	},
-	"packageManager": "pnpm@10.30.2",
+	"packageManager": "pnpm@10.33.0",
 	"devDependencies": {
 		"@eslint/js": "^9.39.4",
 		"@rbxts/compiler-types": "3.0.0-types.0",

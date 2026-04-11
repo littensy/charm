@@ -1,7 +1,7 @@
 [tools]
 wally = "UpliftGames/wally@0.3.2"
 rojo = "rojo-rbx/rojo@7.6.1"
-stylua = "johnnymorganz/stylua@2.4.0"
+stylua = "johnnymorganz/stylua@2.4.1"
 selene = "Kampfkarren/selene@0.30.1"
-luau-lsp = "johnnymorganz/luau-lsp@1.64.0"
+luau-lsp = "johnnymorganz/luau-lsp@1.66.0"
 lute = "luau-lang/lute@0.1.0-nightly.20260331"
