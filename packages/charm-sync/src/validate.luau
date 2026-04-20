@@ -1,11 +1,11 @@
 local function isTableUnsafe(object: { [any]: any })
-	local key = next(object)
+	local firstKey = next(object)
 
-	if key == nil then
+	if firstKey == nil then
 		return false
 	end
 
-	local keyType = type(key)
+	local keyType = type(firstKey)
 	local maxKey = 0
 
 	-- Keys must all be the same type
@@ -35,8 +35,7 @@ end
 local function validate(value: { [any]: any })
 	if isTableUnsafe(value) then
 		warn(
-			`Cannot sync tables unsupported by remote events! See the table below for more info.\n\n`
-				.. "This can be for the following reasons:\n"
+			"Cannot sync tables unsupported by remote events! This can be for the following reasons:\n"
 				.. "1. The table is a sparse array with non-sequential indices\n"
 				.. "2. The table is a mixed table (not all keys have the same type)\n\n"
 				.. "Read more: https://create.roblox.com/docs/scripting/events/remote#argument-limitations\n",

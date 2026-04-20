@@ -36,7 +36,7 @@ end
 ]]
 local function toRaw<T>(value: T): T
 	if isReactive(value) then
-		local value = value :: ReactiveProxy<T> & T
+		value = value :: ReactiveProxy<T>
 		value.__track()
 		return toRaw(value.__target)
 	end

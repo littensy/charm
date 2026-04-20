@@ -20,8 +20,8 @@ local function run(name: string, test: () -> ())
 
 	table.insert(results, `{name}: \t{string.format("%.2f", elapsed / iter * 1000 * 1000)} us/iter`)
 
-	for name, elapsed in times do
-		table.insert(results, `{name}: \t{string.format("%.2f", elapsed / iter * 1000 * 1000)} us/iter`)
+	for name, duration in times do
+		table.insert(results, `{name}: \t{string.format("%.2f", duration / iter * 1000 * 1000)} us/iter`)
 	end
 
 	print(table.concat(results, " | "))

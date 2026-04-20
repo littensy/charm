@@ -102,7 +102,7 @@ local function link(dep: ReactiveNode, sub: ReactiveNode, version: number)
 end
 
 local function unlink(link: Link, sub: ReactiveNode?): Link?
-	local sub = sub or link.sub
+	sub = sub or link.sub
 	local dep = link.dep
 	local prevDep = link.prevDep
 	local nextDep = link.nextDep

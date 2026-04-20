@@ -17,10 +17,15 @@ local shallowPropagate = system.shallowPropagate
 local createReactiveSystem = system.createReactiveSystem
 
 export type Getter<T> = () -> T
+
 export type Setter<T> = (update: Update<T>) -> T
+
 export type Atom<T = any> = (...Update<T>) -> T
+
 export type Update<T> = ((current: T) -> T) | T
+
 export type Equals<T> = (current: T, incoming: T) -> boolean
+
 export type Cleanup = () -> ()
 
 type EffectScopeNode = ReactiveNode & {
@@ -93,20 +98,16 @@ local flags = {
 }
 
 --[[
-	Wraps a function to prevent yielding when in strict mode. If the function
-	was created by this module, it will be excluded to omit unnecessary Charm
-	internals from stack traces.
-
-	@param callback The user-created function to wrap.
-	@return A wrapped function that cannot yield in strict mode.
+	Wraps a user-created function to prevent yielding when in strict mode. To
+	shorten error stack traces, only functions created outside of this module
+	are wrapped.
 ]]
 local function wrapUserSpace<Args..., Results...>(callback: (Args...) -> Results...): (Args...) -> Results...
 	if not flags.strict then
 		return callback
 	end
 
-	-- If the callback is already wrapped, avoid double-wrapping to simplify
-	-- stack traces
+	-- If the sources match, the function was created in this module
 	if debug.info(1, "s") == debug.info(callback, "s") then
 		return callback
 	end
@@ -135,8 +136,6 @@ end
 --[[
 	Recursively freezes a table and all nested tables to enforce immutability.
 	Tables with metatables are skipped, as they are assumed to be mutable.
-
-	@param value Table to freeze
 ]]
 local function deepFreeze(value: any)
 	if type(value) == "table" and not table.isfrozen(value) and getmetatable(value) == nil then
@@ -149,8 +148,6 @@ end
 
 --[[
 	Returns the currently active subscriber (effect or computed node).
-
-	@return Current active subscriber or `nil`
 ]]
 local function getActiveSub(): ReactiveNode?
 	return activeSub
@@ -159,9 +156,6 @@ end
 --[[
 	Sets the currently active subscriber (effect or computed node) and returns
 	the previous subscriber.
-
-	@param sub New subscriber to set as active
-	@return Previous active subscriber
 ]]
 local function setActiveSub(sub: ReactiveNode?)
 	local prevSub = activeSub
@@ -173,8 +167,6 @@ end
 	Removes dependencies from the subscriber's dependency list. When called
 	after tracking is complete, this ensures that only currently tracked
 	dependencies remain linked.
-
-	@param sub Effect or computed node
 ]]
 local function purgeDeps(sub: ReactiveNode)
 	local depsTail = sub.depsTail
@@ -186,13 +178,12 @@ end
 
 --[[
 	Runs all cleanup functions registered with the effect node. Any errors
-	thrown during cleanup are caught and logged as warnings.
-
-	@param cleanups List of cleanup functions
+	thrown during cleanup are caught and logged in a single error after all
+	cleanups are complete.
 ]]
 local function runCleanups(cleanups: { Cleanup })
 	local hasErrors = false
-	local errors = {}
+	local errors: { string } = {}
 
 	for index, cleanup in cleanups do
 		cleanups[index] = nil
@@ -215,8 +206,6 @@ end
 --[[
 	Checks if the effect node needs to run based on its flags and dependencies.
 	Effects run if they are marked dirty or pending with dirty dependencies.
-
-	@param effect Effect node to run
 ]]
 local function run(effect: EffectNode)
 	local effectFlags = effect.flags
@@ -311,9 +300,6 @@ end
 --[[
 	Updates a computed signal by re-evaluating its getter function. Returns
 	whether the computed value changed.
-
-	@param computed Computed node to update
-	@return Boolean indicating whether the computed value changed
 ]]
 local function updateComputed(computed: ComputedNode): boolean
 	cycle += 1
@@ -339,9 +325,6 @@ end
 --[[
 	Updates a signal by applying its pending value. Returns whether the
 	signal's value changed.
-
-	@param signal Signal node to update
-	@return Boolean indicating whether the signal's value changed
 ]]
 local function updateSignal(signal: SignalNode): boolean
 	signal.flags = MUTABLE
@@ -369,28 +352,23 @@ end
 	Clears all dependencies and subscribers from the effect node. After calling
 	this, the node will no longer be subscribed to any dependencies and will be
 	inactive, with all cleanup functions run and resources released.
-
-	@param node Effect node
 ]]
-local function stopEffect(node: EffectScopeNode)
-	node.depsTail = nil
-	node.flags = NONE
+local function stopEffect(effect: EffectScopeNode)
+	effect.depsTail = nil
+	effect.flags = NONE
 
-	purgeDeps(node)
+	purgeDeps(effect)
 
-	local sub = node.subs
+	local sub = effect.subs
 	if sub then
-		unlink(sub, node)
+		unlink(sub, effect)
 	end
 
-	runCleanups(node.cleanups)
+	runCleanups(effect.cleanups)
 end
 
 --[[
 	Updates a signal or computed value and returns whether the value changed.
-
-	@param node Signal or computed node
-	@return Boolean indicating whether the value changed
 ]]
 local function update(node: ReactiveNode): boolean
 	if node.depsTail then
@@ -403,8 +381,6 @@ end
 --[[
 	Queues an effect for execution, ensuring inner effects are notified in the
 	correct order.
-
-	@param effect Effect node to notify
 ]]
 local function notify(effect: ReactiveNode)
 	local insertIndex = queuedLength
@@ -443,8 +419,6 @@ end
 	- Computed signals: Unlink dependencies and mark as dirty for potential
 	future updates
 	- Effects/scopes: Perform full cleanup to free resources
-
-	@param node Reactive node (computed, effect, or effect scope)
 ]]
 local function unwatched(node: ReactiveNode)
 	if bit32.band(node.flags, MUTABLE) == 0 then
@@ -719,24 +693,24 @@ local function trigger(fn: () -> ...any)
 	local prevSub = setActiveSub(sub)
 	local success, err = pcall(wrapUserSpace(fn))
 	activeSub = prevSub
-
-	if not success then
-		error(err, 2)
-	end
+	sub.flags = NONE
 
 	local currentLink = sub.deps
 	while currentLink do
 		local dep = currentLink.dep
-		currentLink = unlink(currentLink, sub)
 		local subs = dep.subs
+		currentLink = unlink(currentLink, sub)
 		if subs then
-			sub.flags = NONE
 			propagate(subs)
 			shallowPropagate(subs)
 		end
 	end
 
 	flush()
+
+	if not success then
+		error(err, 2)
+	end
 end
 
 --[[
@@ -774,11 +748,9 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 		local prevSub = setActiveSub(nil)
 		local results: { any } = { pcall(wrapUserSpace(fn), ...) }
 		activeSub = prevSub
-
 		if not results[1] then
 			error(results[2], 2)
 		end
-
 		return unpack(results, 2)
 	else
 		return fn(...)
@@ -798,11 +770,9 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 	startBatch()
 	local results: { any } = { pcall(wrapUserSpace(fn), ...) }
 	endBatch()
-
 	if not results[1] then
 		error(results[2], 2)
 	end
-
 	return unpack(results, 2)
 end
 
@@ -810,9 +780,6 @@ end
 	Returns true if the given function is a signal getter, computed signal, or
 	atom function. Used for determining whether a function should be wrapped in
 	a computed signal so that it can be memoized in `listen()` and `subscribe()`.
-
-	@param fn Function to check
-	@return `true` if `fn` is a signal getter, computed signal, or atom function, `false` otherwise
 ]]
 local function isSignal(fn: Getter<any>): boolean
 	local name = debug.info(fn, "n")
@@ -830,7 +797,6 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
 local function listen<T>(getter: Getter<T>, callback: (state: T, lastState: T?) -> ()): Cleanup
-	local callback = wrapUserSpace(callback)
 	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
 	local current: T
 
@@ -852,7 +818,6 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
 local function subscribe<T>(getter: Getter<T>, callback: (state: T, lastState: T) -> ()): Cleanup
-	local callback = wrapUserSpace(callback)
 	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
 	local current: T
 	local firstRun = true
@@ -883,8 +848,9 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
 local function observe<K, V>(getter: Getter<{ [K]: V }>, callback: (item: V, key: K) -> ...Cleanup?): Cleanup
-	local getter = wrapUserSpace(getter)
-	local callback = wrapUserSpace(callback)
+	getter = wrapUserSpace(getter)
+	callback = wrapUserSpace(callback)
+
 	local scopes: { [K]: Cleanup } = {}
 	local stopObserving = false
 
@@ -943,8 +909,9 @@ end
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-transform
 ]]
 local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, transform: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
-	local getter = wrapUserSpace(getter)
-	local transform = wrapUserSpace(transform)
+	getter = wrapUserSpace(getter)
+	transform = wrapUserSpace(transform)
+
 	local nextInput: { [KI]: VI } = {}
 	local keyMap: { [KI]: KO } = {}
 

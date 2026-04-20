@@ -90,7 +90,7 @@ end
 
 	@param payloads The state updates received from the server.
 ]]
-local function patch(payloads: { SyncPayload })
+local function applyPatches(payloads: { SyncPayload })
 	for _, payload in payloads do
 		if payload.type == "init" then
 			Charm.batch(applyInitPayload, payload.data)
@@ -104,5 +104,5 @@ return {
 	addSignals = addSignals,
 	removeSignals = removeSignals,
 	removeAllSignals = removeAllSignals,
-	patch = patch,
+	patch = applyPatches,
 }

@@ -1,10 +1,10 @@
 local fs = require("@std/fs")
-local net = require("@lute/net")
+local net = require("@std/net")
 local process = require("@lute/process")
 
 process.run({ "rojo", "sourcemap", "--output=sourcemap.json" }, { stdio = "inherit" })
 
-fs.writestringtofile(
+fs.writeStringToFile(
 	"roblox.d.luau",
 	net.request("https://luau-lsp.pages.dev/globalTypes.None.d.luau", { method = "GET" }).body
 )
