@@ -17,15 +17,10 @@ local shallowPropagate = system.shallowPropagate
 local createReactiveSystem = system.createReactiveSystem
 
 export type Getter<T> = () -> T
-
 export type Setter<T> = (update: Update<T>) -> T
-
 export type Atom<T = any> = (...Update<T>) -> T
-
 export type Update<T> = ((current: T) -> T) | T
-
 export type Equals<T> = (current: T, incoming: T) -> boolean
-
 export type Cleanup = () -> ()
 
 type EffectScopeNode = ReactiveNode & {
@@ -63,7 +58,7 @@ local PENDING = 0b100000 -- Might be dirty, pending verification
 local cycle = 0
 -- Effects runs are queued to prevent redundant executions when multiple
 -- signals update in the same batch.
-local queued: { EffectNode? } = {}
+local queued: { EffectNode } = {}
 local queuedLength = 0
 local notifyIndex = 0
 -- Batch operations group multiple updates together, deferring effect runs
@@ -216,6 +211,7 @@ local function run(effect: EffectNode)
 	then
 		runCleanups(effect.cleanups)
 
+		-- Cancel the run if the effect was disposed during cleanup
 		if effect.flags == NONE then
 			return
 		end
@@ -236,6 +232,8 @@ local function run(effect: EffectNode)
 			table.insert(effect.cleanups, wrapUserSpace(result))
 		end
 
+		-- If the effect was disposed during execution but before a cleanup was
+		-- was registered, run the cleanups that would have been missed
 		if effect.flags == NONE then
 			runCleanups(effect.cleanups)
 		end
@@ -257,18 +255,18 @@ local function flush()
 
 	local success, err = pcall(function()
 		while notifyIndex < queuedLength do
+			notifyIndex += 1
 			local effect = queued[notifyIndex] :: EffectNode
 			queued[notifyIndex] = nil
-			notifyIndex += 1
 			run(effect)
 		end
 	end)
 
 	-- Skip over any remaining queued effects that were not run due to an error
 	while notifyIndex < queuedLength do
+		notifyIndex += 1
 		local effect = queued[notifyIndex] :: EffectNode
 		queued[notifyIndex] = nil
-		notifyIndex += 1
 		effect.flags = bit32.bor(effect.flags, bit32.bor(WATCHING, RECURSED))
 	end
 
@@ -338,17 +336,6 @@ local function updateSignal(signal: SignalNode): boolean
 end
 
 --[[
-	Clears the pending flag from a subscriber. Used inside of if conditions to
-	inline the operation.
-
-	@param sub Effect or computed node
-	@param subFlags Subscriber's current flags
-]]
-local function clearPending(sub: ReactiveNode, subFlags: ReactiveFlags)
-	sub.flags = bit32.band(subFlags, bit32.bnot(PENDING))
-end
-
---[[
 	Clears all dependencies and subscribers from the effect node. After calling
 	this, the node will no longer be subscribed to any dependencies and will be
 	inactive, with all cleanup functions run and resources released.
@@ -359,6 +346,7 @@ local function stopEffect(effect: EffectScopeNode)
 
 	purgeDeps(effect)
 
+	-- Unlink from the parent effect, if it exists
 	local sub = effect.subs
 	if sub then
 		unlink(sub, effect)
@@ -383,15 +371,18 @@ end
 	correct order.
 ]]
 local function notify(effect: ReactiveNode)
-	local insertIndex = queuedLength
-	local firstInsertedIndex = insertIndex
+	local startIndex = queuedLength + 1
 
 	-- Collect inner effects in a chain
 	repeat
-		queued[insertIndex] = effect :: EffectNode
-		insertIndex += 1
+		queuedLength += 1
+		queued[queuedLength] = effect :: EffectNode
 
+		-- Mark as not watching to prevent duplicates in the same flush
 		effect.flags = bit32.band(effect.flags, bit32.bnot(WATCHING))
+
+		-- Traverse to the parent effect, if it exists and is not queued, to
+		-- ensure it gets notified before the child effect
 		effect = (effect.subs and effect.subs.sub) :: EffectNode
 
 		if not effect or bit32.band(effect.flags, WATCHING) == 0 then
@@ -399,17 +390,15 @@ local function notify(effect: ReactiveNode)
 		end
 	until false
 
-	queuedLength = insertIndex
+	local endIndex = queuedLength
 
-	-- Reverse the collected effects to ensure outer effects run first
-	repeat
-		insertIndex -= 1
-		if firstInsertedIndex >= insertIndex then
-			break
-		end
-		queued[firstInsertedIndex], queued[insertIndex] = queued[insertIndex], queued[firstInsertedIndex]
-		firstInsertedIndex += 1
-	until false
+	-- Reverse the collected effects since they were collected from child to
+	-- parent, but should be notified from parent to child
+	while startIndex < endIndex do
+		queued[startIndex], queued[endIndex] = queued[endIndex], queued[startIndex]
+		startIndex += 1
+		endIndex -= 1
+	end
 end
 
 --[[
@@ -555,19 +544,23 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 	local function computedOper(): T
 		local nodeFlags = node.flags
 
-		if
-			bit32.btest(nodeFlags, DIRTY)
-			or (
-				bit32.btest(nodeFlags, PENDING)
-				and (checkDirty(node.deps :: Link, node) or clearPending(node, nodeFlags))
-			)
-		then
+		if bit32.btest(nodeFlags, DIRTY) then
 			if updateComputed(node) then
-				-- Notify subscribers if the value changed
 				local subs = node.subs
 				if subs then
 					shallowPropagate(subs)
 				end
+			end
+		elseif bit32.btest(nodeFlags, PENDING) then
+			if checkDirty(node.deps :: Link, node) then
+				if updateComputed(node) then
+					local subs = node.subs
+					if subs then
+						shallowPropagate(subs)
+					end
+				end
+			else
+				node.flags = bit32.band(nodeFlags, bit32.bnot(PENDING))
 			end
 		elseif nodeFlags == NONE then
 			-- First access should initialize the computed value
@@ -590,7 +583,7 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 			link(node, activeSub, cycle)
 		end
 
-		return node.value :: T
+		return node.value
 	end
 
 	return computedOper
@@ -618,26 +611,30 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 		cleanups = {},
 	}
 
+	-- Inner effects are tracked as a dependency of the parent effect, so that
+	-- they can be automatically cleaned up when the parent effect re-runs, and
+	-- to ensure the correct execution order when nested effects are notified
 	if activeSub and (flags.trackInnerEffects or activeSub.flags == NONE) then
 		link(node, activeSub, 0)
 	end
 
-	-- Start a batch so that any signal updates triggered during the effect
-	-- execution are queued after the effect registers a cleanup function
+	-- Start a batch so that the effect can register a cleanup function before
+	-- it can receive notifications, ensuring the cleanup always runs
 	startBatch()
 
 	local prevSub = setActiveSub(node)
 	local success, result = pcall(node.fn)
 	activeSub = prevSub
 
-	if not success then
+	if success then
+		if result then
+			table.insert(node.cleanups, wrapUserSpace(result))
+		end
+		endBatch()
+	else
 		endBatch()
 		error(result, 2)
-	elseif result then
-		table.insert(node.cleanups, wrapUserSpace(result))
 	end
-
-	endBatch()
 
 	return function()
 		stopEffect(node)
@@ -659,6 +656,7 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 		cleanups = {},
 	}
 
+	-- Inner effect scopes are tracked as a dependency of the parent effect
 	if activeSub and not detached then
 		link(node, activeSub, 0)
 	end
@@ -948,7 +946,7 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, transform: (
 			end
 
 			local nextValueOut, keyOutOrNil = transform(nextValueIn, keyIn)
-			local nextKeyOut: KO = if keyOutOrNil ~= nil then keyOutOrNil else keyIn :: any
+			local nextKeyOut: KO = if keyOutOrNil ~= nil then keyOutOrNil else keyIn
 			local prevKeyOut = keyMap[keyIn]
 
 			if prevKeyOut ~= nil and prevKeyOut ~= nextKeyOut then
