@@ -226,10 +226,12 @@ local function run(effect: EffectNode)
 
 		purgeDeps(effect)
 
-		if not success then
+		if success then
+			if type(result) == "function" then
+				table.insert(effect.cleanups, wrapUserSpace(result))
+			end
+		else
 			error(result, 0)
-		elseif result then
-			table.insert(effect.cleanups, wrapUserSpace(result))
 		end
 
 		-- If the effect was disposed during execution but before a cleanup was
@@ -627,7 +629,7 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	activeSub = prevSub
 
 	if success then
-		if result then
+		if type(result) == "function" then
 			table.insert(node.cleanups, wrapUserSpace(result))
 		end
 		endBatch()
@@ -665,10 +667,12 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	local success, result = pcall(wrapUserSpace(fn))
 	activeSub = prevSub
 
-	if not success then
+	if success then
+		if type(result) == "function" then
+			table.insert(node.cleanups, wrapUserSpace(result))
+		end
+	else
 		error(result, 2)
-	elseif result then
-		table.insert(node.cleanups, wrapUserSpace(result))
 	end
 
 	return function()
