@@ -12,4 +12,4 @@ exclude = [
 ]
 
 [dependencies]
-Charm = "littensy/charm@^0.11.0-rc.5"
+Charm = "littensy/charm@^0.11.0-rc.6"
