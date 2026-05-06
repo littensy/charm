@@ -226,11 +226,9 @@ local function run(effect: EffectNode)
 
 		purgeDeps(effect)
 
-		if success then
-			if type(result) == "function" then
-				table.insert(effect.cleanups, wrapUserSpace(result))
-			end
-		else
+		if success and result then
+			table.insert(effect.cleanups, wrapUserSpace(result))
+		elseif not success then
 			error(result, 0)
 		end
 
@@ -442,6 +440,32 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		deepFreeze(initialValue)
 	end
 
+	local function signalGetter(): T
+		-- Check if the signal has a pending update that needs to be applied
+		if bit32.btest(node.flags, DIRTY) then
+			if updateSignal(node) then
+				local subs = node.subs
+				if subs then
+					shallowPropagate(subs)
+				end
+			end
+		end
+
+		-- Register this signal as a dependency of the first subscriber in the
+		-- chain that is a computed signal or an effect
+		local sub = activeSub
+		while sub do
+			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
+				link(node, sub, cycle)
+				break
+			end
+			local subs = sub.subs
+			sub = if subs then subs.sub else nil
+		end
+
+		return node.currentValue
+	end
+
 	local function signalSetter(update: Update<T>): T
 		local value: T
 
@@ -475,37 +499,9 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 				propagate(subs)
 				flush()
 			end
-
-			return value
 		end
 
-		return node.currentValue
-	end
-
-	local function signalGetter(): T
-		-- Check if the signal has a pending update that needs to be applied
-		if bit32.btest(node.flags, DIRTY) then
-			if updateSignal(node) then
-				local subs = node.subs
-				if subs then
-					shallowPropagate(subs)
-				end
-			end
-		end
-
-		-- Register this signal as a dependency of the first subscriber in the
-		-- chain that is a computed signal or an effect
-		local sub = activeSub
-		while sub do
-			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
-				link(node, sub, cycle)
-				break
-			end
-			local subs = sub.subs
-			sub = if subs then subs.sub else nil
-		end
-
-		return node.currentValue
+		return node.pendingValue
 	end
 
 	return signalGetter, signalSetter
@@ -522,9 +518,11 @@ end
 ]]
 local function atom<T>(initialValue: T, equals: Equals<T>?): Atom<T>
 	local get, set = signal(initialValue, equals)
+
 	local function atomOper(...)
 		return if select("#", ...) == 0 then get() else set((...))
 	end
+
 	return atomOper
 end
 
@@ -628,15 +626,14 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	local success, result = pcall(node.fn)
 	activeSub = prevSub
 
-	if success then
-		if type(result) == "function" then
-			table.insert(node.cleanups, wrapUserSpace(result))
-		end
-		endBatch()
-	else
+	if success and result then
+		table.insert(node.cleanups, wrapUserSpace(result))
+	elseif not success then
 		endBatch()
 		error(result, 2)
 	end
+
+	endBatch()
 
 	return function()
 		stopEffect(node)
@@ -667,11 +664,9 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	local success, result = pcall(wrapUserSpace(fn))
 	activeSub = prevSub
 
-	if success then
-		if type(result) == "function" then
-			table.insert(node.cleanups, wrapUserSpace(result))
-		end
-	else
+	if success and result then
+		table.insert(node.cleanups, wrapUserSpace(result))
+	elseif not success then
 		error(result, 2)
 	end
 
@@ -750,9 +745,11 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 		local prevSub = setActiveSub(nil)
 		local results: { any } = { pcall(wrapUserSpace(fn), ...) }
 		activeSub = prevSub
+
 		if not results[1] then
 			error(results[2], 2)
 		end
+
 		return unpack(results, 2)
 	else
 		return fn(...)
@@ -772,9 +769,11 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 	startBatch()
 	local results: { any } = { pcall(wrapUserSpace(fn), ...) }
 	endBatch()
+
 	if not results[1] then
 		error(results[2], 2)
 	end
+
 	return unpack(results, 2)
 end
 

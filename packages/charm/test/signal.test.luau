@@ -46,4 +46,22 @@ test("should not freeze values with metatables", function()
 	)
 end)
 
+test("should setter return same value as getter even if equal", function()
+	local src, setSrc = signal(0, function()
+		return true
+	end)
+	assert(setSrc(1) == src(), `setSrc(1) expected 0, got {setSrc(1)}`)
+end)
+
+test("should setter return latest value", function()
+	local src, setSrc = signal(0)
+	effect(function()
+		if src() == 1 then
+			setSrc(2)
+		end
+	end)
+	assert(setSrc(1) == 2, `setSrc(1) expected 2, got {setSrc(1)}`)
+	assert(src() == 2, `src() expected 2, got {src()}`)
+end)
+
 return {}
