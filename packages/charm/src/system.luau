@@ -149,7 +149,6 @@ local function propagate(link: Link)
 			sub.flags = bit32.bor(flags, bit32.bor(RECURSED, PENDING))
 			flags = bit32.band(flags, MUTABLE)
 		else
-			-- selene: allow(if_same_then_else)
 			flags = NONE
 		end
 

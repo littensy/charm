@@ -1,5 +1,0 @@
-std = "roblox"
-exclude = ["*/node_modules/*"]
-
-[lints]
-shadowing = "allow"

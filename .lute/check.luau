@@ -24,12 +24,10 @@ local analyze = process.run({
 
 fs.remove("roblox.d.luau")
 
-local selene = process.run({ "selene", "packages", "tests", "benches" }, { stdio = "inherit" })
-
 local stylua = process.run({ "stylua", "--check", "packages", "tests", "benches" }, { stdio = "inherit" })
 
 local eslint = process.run({ "pnpm", "eslint", "packages" }, { stdio = "inherit" })
 
-if not (analyze.ok and selene.ok and stylua.ok and eslint.ok) then
+if not (analyze.ok and stylua.ok and eslint.ok) then
 	process.exit(1)
 end
