@@ -69,7 +69,7 @@ local batchDepth = 0
 local activeSub: ReactiveNode?
 
 local function isO2(): boolean
-	return debug.info(1, "n") ~= "isO2"
+	return debug.info(1, "f") ~= isO2
 end
 
 local flags = {
