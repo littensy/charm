@@ -573,4 +573,21 @@ test.skip("should handle inner effect cleanup disposing outer effect", function(
 	assert(#order == 0, "should not cleanup after dispose")
 end)
 
+test.skip("should old inner effect dispose before outer effect re-runs", function()
+	local order: { string } = {}
+	local src, setSrc = signal(false)
+	effect(function()
+		src()
+		table.insert(order, "outer")
+		effect(function()
+			return function()
+				table.insert(order, "inner")
+			end
+		end)
+	end)
+	table.clear(order)
+	setSrc(true)
+	assert(table.concat(order) == "innerouter", `bad rerun order: {table.concat(order)}`)
+end)
+
 return {}
