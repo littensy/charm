@@ -1,6 +1,6 @@
 {
 	"name": "@rbxts/react-charm",
-	"version": "0.4.0-rc.4",
+	"version": "0.4.0",
 	"description": "React bindings for Charm state management",
 	"license": "MIT",
 	"main": "src/init.luau",
