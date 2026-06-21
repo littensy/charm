@@ -504,4 +504,73 @@ test("recursive effects should run and cleanup in order", function()
 	assert(table.concat(order) == "-3+100", `bad order: {table.concat(order)}`)
 end)
 
+test("should effects dispose in order", function()
+	local order: { number } = {}
+
+	local src, setSrc = signal(false)
+	local stopEffect = effect(function()
+		src()
+		for i = 1, 3 do
+			effect(function()
+				return function()
+					table.insert(order, i)
+				end
+			end)
+		end
+	end)
+
+	assert(#order == 0, "should not cleanup immediately")
+	setSrc(true)
+	assert(table.concat(order) == "123", `bad rerun order: {table.concat(order)}`)
+	table.clear(order)
+	stopEffect()
+	assert(table.concat(order) == "123", `bad dispose order: {table.concat(order)}`)
+	table.clear(order)
+	setSrc(false)
+	assert(#order == 0, "should not cleanup after dispose")
+end)
+
+test("should handle inner effect clearing outer effect's deps on rerun", function()
+	local src, setSrc = signal(false)
+	local stopEffect: () -> ()
+	stopEffect = effect(function()
+		src()
+		effect(function()
+			return function()
+				stopEffect()
+			end
+		end)
+		effect(function() end)
+	end)
+	setSrc(true)
+end)
+
+test.skip("should handle inner effect cleanup disposing outer effect", function()
+	local order: { number } = {}
+
+	local src, setSrc = signal(false)
+	local stopEffect: () -> ()
+	stopEffect = effect(function()
+		src()
+		table.insert(order, 0)
+		for i = 1, 4 do
+			effect(function()
+				return function()
+					table.insert(order, i)
+					stopEffect()
+				end
+			end)
+		end
+	end)
+	assert(table.concat(order) == "0", "should not cleanup immediately")
+
+	table.clear(order)
+	setSrc(true)
+	assert(table.concat(order) == "1234", `bad rerun order: {table.concat(order)}`)
+
+	table.clear(order)
+	setSrc(false)
+	assert(#order == 0, "should not cleanup after dispose")
+end)
+
 return {}

@@ -198,4 +198,23 @@ test("should trigger effect even computed already dirty", function()
 	assert(v() == 2, `expected 2 for v(), got {v()}`)
 end)
 
+test("should handle inner effect clearing outer computed's deps on rerun", function()
+	local src, setSrc = signal(false)
+	local stopEffect: () -> ()
+	local c = computed(function()
+		src()
+		effect(function()
+			return function()
+				stopEffect()
+			end
+		end)
+		effect(function() end)
+		return 0
+	end)
+	stopEffect = effect(function()
+		c()
+	end)
+	setSrc(true)
+end)
+
 return {}
