@@ -16,7 +16,7 @@ local React = require("./React")
 local function useSignalState<T>(getter: () -> T, dependencies: {}?): T
 	local value, setValue = React.useState(getter)
 
-	React.useLayoutEffect(function()
+	React.useLayoutEffect(function(): () -> ()
 		return Charm.listen(getter, setValue :: (T, T?) -> ())
 	end, dependencies :: { any } or {})
 
@@ -38,7 +38,7 @@ local function useSignalBinding<T>(getter: () -> T, dependencies: {}?)
 	local initialValue = React.useMemo(getter, {})
 	local binding, setBinding = React.useBinding(initialValue)
 
-	React.useLayoutEffect(function()
+	React.useLayoutEffect(function(): () -> ()
 		return Charm.listen(getter, setBinding :: (T, T?) -> ())
 	end, dependencies :: { any } or {})
 

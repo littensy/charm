@@ -12,7 +12,7 @@ test("should observe items", function()
 	local updates = {}
 	local cleanups = {}
 
-	observe(items, function(_, key)
+	observe(items, function(_, key: number)
 		local get = computed(function()
 			return items()[key]
 		end)
