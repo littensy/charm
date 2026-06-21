@@ -50,12 +50,12 @@ export const flags: {
 	/**
 	 * Enforces synchronous, non-yielding behavior in signals and effects.
 	 * Also enables state validation in Charm Sync to catch sync errors early.
-	 * Enabled if the optimization level is below 2, which is true in studio.
+	 * Enabled by default in Roblox Studio.
 	 */
 	strict: boolean;
 	/**
 	 * Enforces immutability of tables by deep-freezing table values. Enabled
-	 * if the optimization level is below 2, which is true in studio.
+	 * by default in Roblox Studio.
 	 */
 	frozen: boolean;
 	/**

@@ -68,22 +68,22 @@ local batchDepth = 0
 -- Dependencies accessed during this time will link to the active subscriber.
 local activeSub: ReactiveNode?
 
-local function isO2(): boolean
-	return debug.info(1, "n") ~= "isO2"
+local function isStudio(): boolean
+	return game ~= nil and game:GetService("RunService"):IsStudio()
 end
 
 local flags = {
 	--[[
 		Enforces synchronous, non-yielding behavior in signals and effects.
 		Also enables state validation in Charm Sync to catch sync errors early.
-		Enabled if the optimization level is below 2, which is true in studio.
+		Enabled by default in Roblox Studio.
 	]]
-	strict = not isO2(),
+	strict = isStudio(),
 	--[[
 		Enforces immutability of tables by deep-freezing table values. Enabled
-		if the optimization level is below 2, which is true in studio.
+		by default in Roblox Studio.
 	]]
-	frozen = not isO2(),
+	frozen = isStudio(),
 	--[[
 		Whether parent effects should track inner effects and clean them up
 		when the parent effect re-runs. This is usually desirable, but can be

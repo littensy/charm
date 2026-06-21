@@ -602,7 +602,7 @@ Charm exposes the following global flags to customize behavior:
 | frozen            | `true`\* | Enforces data immutability by deep-freezing tables passed to signals, excluding objects with metatables.                                               |
 | trackInnerEffects | `true`   | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
 
-The `strict` and `frozen` flags are automatically enabled in Roblox Studio and other development environments where the Luau optimization level is `O1` or lower.
+The `strict` and `frozen` flags are automatically enabled in Roblox Studio.
 
 ---
 
