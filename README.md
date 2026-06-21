@@ -885,6 +885,9 @@ You can opt-in to deep reactivity with the Deep Charm library:
 
 ### Installation
 
+> [!WARNING]
+> Deep Charm is an experimental library that is not fully documented, and the API is subject to breaking changes.
+
 ```sh
 npm install @rbxts/deep-charm
 yarn add @rbxts/deep-charm
@@ -938,6 +941,22 @@ local raw = {}
 local proxy = reactive(raw)
 
 print(toRaw(proxy) == raw) -- true
+```
+
+Calling `toRaw()` on a proxy also subscribes to its changes. This allows you to use proxies with `observe()` and other Charm APIs that accept a getter function:
+
+```luau
+local proxy, updateProxy = reactive({})
+
+observe(function()
+	return toRaw(proxy)
+end, function(value, key)
+	print(`Value {value} added at key {key}`)
+end)
+
+updateProxy(function(state)
+	table.insert(state, "foo")
+end) -- Value foo added at key 1
 ```
 
 ---

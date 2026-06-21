@@ -2,7 +2,10 @@ local Charm = require("../Charm")
 local DeepCharm = require("../src")
 local test = require("../../../tests/test")
 
+local batch = Charm.batch
+local computed = Charm.computed
 local effect = Charm.effect
+local observe = Charm.observe
 local reactive = DeepCharm.reactive
 local toRaw = DeepCharm.toRaw
 
@@ -184,6 +187,46 @@ test("should unwrap nested proxy", function()
 
 	src.y = 2
 	assert(runs == 3, `bad runs: {runs}`)
+end)
+
+test("should observe items", function()
+	local items, updateItems = reactive({ 0, 0, 0 })
+	local updates = {}
+	local cleanups = {}
+
+	observe(function()
+		return toRaw(items)
+	end, function(_, key: number)
+		local get = computed(function()
+			return items[key]
+		end)
+
+		effect(function()
+			table.insert(updates, get())
+		end)
+
+		return function()
+			table.insert(cleanups, key)
+		end
+	end)
+
+	assert(table.concat(updates) == "000", `bad mount: {table.concat(updates)}`)
+
+	table.clear(updates)
+	updateItems(function(state)
+		state[1] = 1
+		state[2] = 2
+		state[3] = 3
+	end)
+	assert(table.concat(updates) == "123", `bad update: {table.concat(updates)}`)
+
+	table.clear(updates)
+	batch(function()
+		items[3] = nil
+		items[4] = 4
+	end)
+	assert(table.concat(updates) == "4", `should add 4: {table.concat(updates)}`)
+	assert(table.concat(cleanups) == "3", `bad cleanup: {table.concat(cleanups)}`)
 end)
 
 return {}
