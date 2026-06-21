@@ -1,267 +1,416 @@
-local Players = game:GetService("Players")
+local Charm = require("../Charm")
+local config = require("./config")
+local patch = require("./patch")
+local types = require("./types")
+local utils = require("./utils")
 
-local Charm = require(script.Parent.Parent.Charm)
-local interval = require(script.Parent.interval)
-local patch = require(script.Parent.patch)
-local types = require(script.Parent.types)
-type AtomMap = types.AtomMap
 type SyncPayload = types.SyncPayload
 
-type ServerOptions = {
-	--[=[
-		The atoms to synchronize with the client.
-	]=]
-	atoms: AtomMap,
-	--[=[
-		The interval at which to send patches to the client, in seconds.
-		Defaults to `0` (patches are sent up to once per frame). Set to a
-		negative value to disable automatic syncing.
-	]=]
-	interval: number?,
-	--[=[
-		Whether the history of state changes since the client's last update
-		should be preserved. This is useful for values that change multiple times
-		per frame, where each individual change is important. Defaults to `false`.
-	]=]
-	preserveHistory: boolean?,
-	--[=[
-		When `true`, Charm will apply validation and serialize unsafe arrays
-		to address remote event argument limitations. Defaults to `true`.
+type SyncStatus = number
 
-		This option should be disabled if your network library uses a custom
-		serialization method (i.e. Zap, ByteNet) to prevent interference.
-	]=]
-	autoSerialize: boolean?,
+type ClientKeys = { [string]: SyncStatus }
+
+type TrackedState<T = any> = {
+	identifier: unknown,
+	currentValue: T,
+	lastSyncedValue: T,
+	isReactive: boolean,
+	dispose: () -> (),
 }
 
-type ServerSyncer = {
-	--[=[
-		Sets up a subscription to each atom that schedules a patch to be sent to
-		the client whenever the state changes. When a change occurs, the `callback`
-		is called with the player and the payload to send.
-
-		Note that the `payload` object should not be mutated. If you need to
-		modify the payload, apply the changes to a copy of the object.
-
-		@param callback The function to call when the state changes.
-		@return A cleanup function that unsubscribes all listeners.
-	]=]
-	connect: (self: ServerSyncer, callback: (player: Player, ...SyncPayload) -> ()) -> () -> (),
-	--[=[
-		Hydrates the client's state with the server's state. This should be
-		called when a player joins the game and requires the server's state.
-
-		@param player The player to hydrate.
-	]=]
-	hydrate: (self: ServerSyncer, player: Player) -> (),
-	--[=[
-		@deprecated For internal use only.
-	]=]
-	_sendPatch: (self: ServerSyncer, player: Player) -> (),
+type StateUpdate = {
+	key: string,
+	newValue: any,
+	oldValue: any,
 }
 
---[=[
-	Creates a `ServerSyncer` object that sends patches to the client and
-	hydrates the client's state.
-	
-	@param options The atoms to synchronize with the client.
-	@return A `ServerSyncer` object.
-]=]
-local function server(options: ServerOptions): ServerSyncer
-	local atoms = options.atoms
-	local autoSerialize = options.autoSerialize ~= false
-	local preserveHistory = options.preserveHistory
-	local syncRate = options.interval or 0
+local PENDING_INITIAL_STATE: SyncStatus = 0
+local LISTENING_FOR_CHANGES: SyncStatus = 1
 
-	local self = {} :: ServerSyncer
-	local sync: (player: Player, payload: SyncPayload) -> ()
+local trackedStates: { [string]: TrackedState } = {}
+local globalUpdates: { StateUpdate } = {}
+local clients: { [any]: ClientKeys } = {}
 
-	local function createSnapshot()
-		local snapshot = {}
+local connection: RBXScriptConnection?
+local syncCallback: ((client: any, payloads: { SyncPayload }) -> ())?
 
-		for key, atom in next, atoms do
-			snapshot[key] = atom()
+--[[
+	Manually converts a reactive proxy to its raw representation to potentially
+	support custom implementations of reactive proxies.
+]]
+local function toRaw<T>(value: T): T
+	value = value :: types.ReactiveProxy<T>
+	if type(value) == "table" and type(value.__target) == "table" and type(value.__track) == "function" then
+		value.__track()
+		return toRaw(value.__target)
+	end
+	return value
+end
+
+local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
+	if trackedStates[key] then
+		-- Warn against name collisions with conflicting signals or proxies
+		if trackedStates[key].identifier ~= identifier then
+			warn("[Charm] Attempted to sync different states with the same key:", key)
 		end
-
-		return snapshot
+		return
 	end
 
-	-- Send the initial state to a player when they join the server.
-	function self:hydrate(player)
-		assert(sync, "connect() must be called before hydrate()")
+	local trackedState: TrackedState<T>
+	local initialValue = getter()
+	local rawInitialValue = toRaw(initialValue)
+	local snapshot = if initialValue ~= rawInitialValue then utils.deepCopy(rawInitialValue) else initialValue
 
-		sync(player, {
-			type = "init",
-			data = createSnapshot(),
-		})
-	end
+	local dispose = Charm.effect(function()
+		local newValue = getter()
+		local rawValue = toRaw(newValue)
+		local isReactive = newValue ~= rawValue
 
-	-- If the history of state changes should be preserved, keep a list of
-	-- previous snapshots and diff-check each one from the last.
-	if preserveHistory then
-		local snapshots = { createSnapshot() }
-		local changed = false
-
-		function self:connect(callback)
-			local subscriptions = {}
-
-			sync = callback
-
-			local function pushSnapshot(key: string | number, current: any, previous: any)
-				local lastSnapshot = snapshots[#snapshots]
-				local previousSnapshot = snapshots[#snapshots - 1]
-
-				-- Optimize snapshots by updating the most recent snapshot if the
-				-- previous and current values are the same, since this allows us
-				-- to group multiple changes into a single snapshot.
-				if previousSnapshot and previousSnapshot[key] == previous and lastSnapshot[key] == previous then
-					lastSnapshot[key] = current
-				else
-					local nextSnapshot = table.clone(lastSnapshot)
-					nextSnapshot[key] = current
-					table.insert(snapshots, nextSnapshot)
-				end
-			end
-
-			-- Populate the snapshot with the initial state of each atom.
-			-- Subscribe to each atom and update the state when it changes.
-			for key, atom in next, atoms do
-				subscriptions[key] = Charm.subscribe(atom, function(current, previous)
-					pushSnapshot(key, current, previous)
-					changed = true
-				end)
-			end
-
-			local disconnect = interval(function()
-				if not changed then
-					return
-				end
-
-				local payloads: { SyncPayload } = {}
-				local lastSnapshot
-
-				for index, snapshot in next, snapshots do
-					lastSnapshot = snapshot
-
-					if index == 1 then
-						continue
-					end
-
-					table.insert(payloads, {
-						type = "patch",
-						data = patch.diff(snapshots[index - 1], snapshot, autoSerialize),
-					})
-				end
-
-				snapshots = { lastSnapshot }
-				changed = false
-
-				for _, player in next, Players:GetPlayers() do
-					callback(player, unpack(payloads))
-				end
-			end, syncRate)
-
-			return function()
-				disconnect()
-
-				for _, unsubscribe in next, subscriptions do
-					unsubscribe()
-				end
-			end
-		end
-
-		function self:_sendPatch(player: Player)
-			assert(sync, "connect() must be called before _sendPatch()")
-
-			if not changed then
-				return
-			end
-
-			local payloads: { SyncPayload } = {}
-
-			for index, snapshot in next, snapshots do
-				if index == 1 then
-					continue
-				end
-
-				table.insert(payloads, {
-					type = "patch",
-					data = patch.diff(snapshots[index - 1], snapshot, autoSerialize),
-				})
-			end
-
-			snapshots = { snapshots[#snapshots] }
-			changed = false
-
-			sync(player, unpack(payloads))
-		end
-
-		return self
-	end
-
-	local previousSnapshot = createSnapshot()
-	local currentSnapshot = table.clone(previousSnapshot)
-	local changed = false
-
-	function self:connect(callback)
-		local subscriptions = {}
-
-		sync = callback
-
-		-- Subscribe to each atom and update the state when one changes.
-		for key, atom in next, atoms do
-			subscriptions[key] = Charm.subscribe(atom, function(state)
-				currentSnapshot[key] = state
-				changed = true
-			end)
-		end
-
-		local disconnect = interval(function()
-			if not changed then
-				return
-			end
-
-			local payload: SyncPayload = {
-				type = "patch",
-				data = patch.diff(previousSnapshot, currentSnapshot, autoSerialize),
-			}
-
-			previousSnapshot = table.clone(currentSnapshot)
-			changed = false
-
-			for _, player in next, Players:GetPlayers() do
-				callback(player, payload)
-			end
-		end, syncRate)
-
-		return function()
-			disconnect()
-
-			for _, unsubscribe in next, subscriptions do
-				unsubscribe()
-			end
-		end
-	end
-
-	function self:_sendPatch(player)
-		assert(sync, "connect() must be called before _sendPatch()")
-
-		if not changed then
+		if not trackedState then
 			return
 		end
 
-		local payload: SyncPayload = {
-			type = "patch",
-			data = patch.diff(previousSnapshot, currentSnapshot, autoSerialize),
-		}
+		-- When preserving history, we need to keep track of previous values
+		-- so we can create granular patches for each change.
+		if config.preserveHistory then
+			local prevSnapshot = snapshot
+			snapshot = if isReactive then utils.deepCopy(rawValue) else newValue
+			table.insert(globalUpdates, {
+				key = key,
+				newValue = snapshot,
+				oldValue = prevSnapshot,
+			})
+		end
 
-		previousSnapshot = table.clone(currentSnapshot)
-		changed = false
+		trackedState.currentValue = rawValue
+		trackedState.isReactive = isReactive
+	end)
 
-		sync(player, payload)
-	end
+	trackedState = {
+		identifier = identifier,
+		currentValue = rawInitialValue,
+		lastSyncedValue = snapshot,
+		isReactive = initialValue ~= rawInitialValue,
+		dispose = dispose,
+	}
 
-	return self
+	trackedStates[key] = trackedState
 end
 
-return server
+local function stopTracking(key: string)
+	local trackedState = trackedStates[key]
+	if trackedState then
+		trackedState.dispose()
+		trackedStates[key] = nil
+	end
+end
+
+local function purgeUntracked()
+	local active: { [string]: boolean } = {}
+
+	for _, clientKeys in clients do
+		for key in clientKeys do
+			active[key] = true
+		end
+	end
+
+	for key in trackedStates do
+		if not active[key] then
+			stopTracking(key)
+		end
+	end
+end
+
+local function diffGlobalUpdateBuffer(): { any }
+	local patchCount = #globalUpdates
+	local patches = table.create(patchCount)
+
+	for _, update in globalUpdates do
+		table.insert(patches, patch.diff(update.oldValue, update.newValue))
+	end
+
+	return patches
+end
+
+local function selectFromGlobalPatchList(client: any, globalPatches: { any }): { SyncPayload }?
+	local clientKeys = clients[client]
+
+	if not clientKeys then
+		return nil
+	end
+
+	local payloads: { SyncPayload } = {}
+
+	-- Iterate over all global updates and see if the client is interested in
+	-- any of them. If so, we create a patch payload for the update.
+	for index, update in globalUpdates do
+		local patchData = globalPatches[index]
+
+		if not patchData then
+			continue
+		end
+
+		local key = update.key
+		local status = clientKeys[key]
+
+		if status == LISTENING_FOR_CHANGES then
+			local payload: SyncPayload = {
+				type = "patch",
+				data = { [key] = patchData },
+			}
+			table.insert(payloads, payload)
+		elseif status == PENDING_INITIAL_STATE then
+			local payload: SyncPayload = {
+				type = "init",
+				data = { [key] = update.newValue },
+			}
+			table.insert(payloads, payload)
+			clientKeys[key] = LISTENING_FOR_CHANGES
+		end
+	end
+
+	-- If a pending signal was never updated, we still need to send its initial
+	-- state. This can happen if a signal was registered after its last change.
+	local initData = {}
+
+	for key, status in clientKeys do
+		local trackedState = trackedStates[key]
+
+		if status == PENDING_INITIAL_STATE and trackedState then
+			initData[key] = trackedState.currentValue
+			clientKeys[key] = LISTENING_FOR_CHANGES
+		end
+	end
+
+	if next(initData) ~= nil then
+		table.insert(payloads, 1, { type = "init" :: "init", data = initData })
+	end
+
+	return payloads
+end
+
+local function diffGlobalState(): { [string]: any }?
+	local currentGlobalState: { [string]: any } = {}
+	local previousGlobalState: { [string]: any } = {}
+
+	for key, trackedState in trackedStates do
+		local currentValue = if trackedState.isReactive
+			then utils.deepCopy(trackedState.currentValue)
+			else trackedState.currentValue
+
+		currentGlobalState[key] = currentValue
+		previousGlobalState[key] = trackedState.lastSyncedValue
+		trackedState.lastSyncedValue = currentValue
+	end
+
+	return patch.diff(previousGlobalState, currentGlobalState)
+end
+
+local function selectFromGlobalPatch(client: any, globalPatch: { [string]: any }?): { SyncPayload }?
+	local clientKeys = clients[client]
+
+	if not clientKeys then
+		return nil
+	end
+
+	local payloads: { SyncPayload } = {}
+	local initData: { [string]: any } = {}
+	local patchData: { [string]: any } = {}
+
+	-- Create patches for initialized signals that changed, and add signals
+	-- that are still pending initial state to the init payload.
+	for key, status in clientKeys do
+		local trackedState = trackedStates[key]
+
+		if status == LISTENING_FOR_CHANGES and globalPatch then
+			patchData[key] = globalPatch[key]
+		elseif status == PENDING_INITIAL_STATE then
+			initData[key] = trackedState.currentValue
+			clientKeys[key] = LISTENING_FOR_CHANGES
+		end
+	end
+
+	if next(initData) ~= nil then
+		local payload: SyncPayload = {
+			type = "init",
+			data = initData,
+		}
+		table.insert(payloads, payload)
+	end
+
+	if next(patchData) ~= nil then
+		local payload: SyncPayload = {
+			type = "patch",
+			data = patchData,
+		}
+		table.insert(payloads, payload)
+	end
+
+	return payloads
+end
+
+local function startInterval(callback: () -> ())
+	if not game then
+		return
+	end
+
+	if connection then
+		connection:Disconnect()
+	end
+
+	local timestamp = os.clock()
+
+	connection = game:GetService("RunService").Heartbeat:Connect(function()
+		if config.interval >= 0 and os.clock() >= timestamp + config.interval then
+			timestamp = os.clock()
+			debug.profilebegin("CharmSync")
+			callback()
+			debug.profileend()
+		end
+	end)
+end
+
+--[[
+	Subscribes a client to the given signals. When an update occurs, the client
+	will receive a partial state patch to merge into their local state. May be
+	called multiple times to subscribe to additional keys.
+
+	Atoms, signals converted to atoms, and signal getter functions are allowed.
+	Note that `client.addSignals` still requires some way to set the state.
+
+	@param client The client receiving state updates.
+	@param signals A map of getter functions to sync with the client.
+]]
+local function addSignalsToClient(client: any, signals: { [string]: {} | () -> any })
+	if not clients[client] then
+		clients[client] = {}
+	end
+
+	local clientKeys = clients[client]
+
+	for key, signal in signals do
+		if type(signal) == "function" then
+			trackSignal(key, signal, signal)
+		else
+			trackSignal(key, function()
+				return signal
+			end, signal)
+		end
+
+		if not clientKeys[key] then
+			-- Mark the signal as pending initial state so we send its full
+			-- value the next time we sync.
+			clientKeys[key] = PENDING_INITIAL_STATE
+		end
+	end
+end
+
+--[[
+	Unsubscribes a client from receiving all state updates. To only unsubscribe
+	from specific keys, use `unsubscribeClientFrom` instead.
+
+	@param client The client receiving state updates.
+]]
+local function removeClient(client: any)
+	clients[client] = nil
+	purgeUntracked()
+end
+
+--[[
+	Unsubscribes a client from receiving updates for the given keys.
+
+	@param client The client receiving state updates.
+	@param keys The keys of the state to unsubscribe from.
+]]
+local function removeSignalsFromClient(client: any, ...: string)
+	local clientKeys = clients[client]
+
+	if not clientKeys then
+		return
+	end
+
+	for index = 1, select("#", ...) do
+		local key = select(index, ...)
+		clientKeys[key] = nil
+	end
+
+	if next(clientKeys) == nil then
+		removeClient(client)
+	else
+		purgeUntracked()
+	end
+end
+
+--[[
+	Immediately sends pending updates to all clients. Normally, updates are
+	sent at the interval specified in `config.interval`, but this function
+	can be used to force an immediate sync.
+]]
+local function flush()
+	if not syncCallback then
+		return
+	end
+
+	local granular = config.preserveHistory
+	local globalPatch: { [any]: any }? = if granular then diffGlobalUpdateBuffer() else diffGlobalState()
+
+	for client in clients do
+		local payloads = if granular
+			then selectFromGlobalPatchList(client, globalPatch :: { any })
+			else selectFromGlobalPatch(client, globalPatch)
+
+		if payloads and payloads[1] then
+			if task then
+				task.spawn(syncCallback, client, payloads)
+			else
+				syncCallback(client, payloads)
+			end
+		end
+	end
+
+	table.clear(globalUpdates)
+end
+
+--[[
+	Uses the callback to send state updates to clients that are subscribed
+	to state changes. Starts automatically sending updates at the interval
+	specified in `config.interval`.
+
+	@param onSync Called when sending patches to a client.
+]]
+local function connect(onSync: (client: any, payloads: { SyncPayload }) -> ())
+	syncCallback = onSync
+	startInterval(flush)
+end
+
+--[[
+	Stops syncing state updates to clients at the automatic interval.
+	Flushing can still be performed manually via `flush`.
+]]
+local function disconnect()
+	if connection then
+		connection:Disconnect()
+		connection = nil
+	end
+end
+
+--[[
+	Unsubscribes all clients, stops tracking all state, and disconnects
+	from the automatic sync interval.
+]]
+local function reset()
+	table.clear(trackedStates)
+	table.clear(clients)
+	table.clear(globalUpdates)
+	disconnect()
+end
+
+return {
+	addSignalsToClient = addSignalsToClient,
+	removeClient = removeClient,
+	removeSignalsFromClient = removeSignalsFromClient,
+	connect = connect,
+	disconnect = disconnect,
+	flush = flush,
+	reset = reset,
+}

@@ -1,28 +1,59 @@
 {
 	"name": "charm-test",
+	"globIgnorePaths": [
+		"**/default.project.json",
+		"node_modules/charm",
+		"node_modules/charm-sync",
+		"node_modules/react-charm",
+		"node_modules/vide-charm"
+	],
+	"emitLegacyScripts": false,
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
-			"DevPackages": {
-				"$path": "modules/DevPackages",
-				"Charm": {
-					"$path": "packages/charm"
+			"packages": {
+				"$className": "Folder",
+				"vide": {
+					"$path": "node_modules/@rbxts/vide"
 				},
-				"CharmSync": {
-					"$path": "packages/charm-sync"
+				"charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/charm/src" },
+					"test": { "$path": "packages/charm/test" }
 				},
-				"ReactCharm": {
-					"$path": "packages/react"
+				"deep-charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/deep-charm/src" },
+					"test": { "$path": "packages/deep-charm/test" },
+					"Charm": { "$path": "packages/deep-charm/Charm.luau" }
 				},
-				"VideCharm": {
-					"$path": "packages/vide"
+				"charm-sync": {
+					"$className": "Folder",
+					"src": { "$path": "packages/charm-sync/src" },
+					"test": { "$path": "packages/charm-sync/test" },
+					"Charm": { "$path": "packages/charm-sync/Charm.luau" }
+				},
+				"react-charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/react-charm/src" },
+					"test": { "$path": "packages/react-charm/test" },
+					"React": { "$path": "packages/react-charm/React.luau" },
+					"ReactRoblox": { "$path": "packages/react-charm/ReactRoblox.luau" },
+					"Charm": { "$path": "packages/react-charm/Charm.luau" }
+				},
+				"vide-charm": {
+					"$className": "Folder",
+					"src": { "$path": "packages/vide-charm/src" },
+					"test": { "$path": "packages/vide-charm/test" },
+					"Vide": { "$path": "packages/vide-charm/Vide.luau" },
+					"Charm": { "$path": "packages/vide-charm/Charm.luau" }
 				}
-			}
-		},
-		"ServerScriptService": {
-			"$className": "ServerScriptService",
-			"Tests": {
+			},
+			"@rbxts-js": {
+				"$path": "node_modules/@rbxts-js"
+			},
+			"tests": {
 				"$path": "tests"
 			}
 		}

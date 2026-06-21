@@ -1,187 +1,280 @@
-export = Charm;
-export as namespace Charm;
+type Key = string | number | symbol;
 
 type Cleanup = () => void;
 
-declare namespace Charm {
-	/**
-	 * A primitive state container that can be read from or written to. When
-	 * the state changes, all subscribers are notified.
-	 *
-	 * @param state The next state or a function that produces the next state.
-	 * @returns The current state.
-	 */
-	interface Atom<State> extends Selector<State> {
-		(nextState: State | ((prevState: State) => State)): State;
-	}
-
-	/**
-	 * A function that depends on one or more atoms and produces a value. Can be
-	 * used to derive state from atoms.
-	 *
-	 * @returns The current state.
-	 */
-	type Selector<State> = () => State;
-
-	/**
-	 * A function that depends on one or more atoms and produces a value. Can be
-	 * used to derive state from atoms.
-	 *
-	 * @deprecated Use `Selector<T>` instead.
-	 * @returns The current state.
-	 */
-	type Molecule<State> = Selector<State>;
-
-	/**
-	 * Infers the type of the state produced by the given function.
-	 */
-	type StateOf<T> = T extends Selector<infer State> ? State : never;
-
-	interface AtomOptions<State> {
-		/**
-		 * A function that determines whether the state has changed. By default,
-		 * a strict equality check (`===`) is used.
-		 */
-		equals?: (prev: State, next: State) => boolean;
-	}
-
-	/**
-	 * Creates a new atom with the given state.
-	 *
-	 * @param state The initial state.
-	 * @param options Optional configuration.
-	 * @returns A new atom.
-	 */
-	function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
-
-	// Overload for no arguments
-	function atom<State>(state?: State, options?: AtomOptions<State>): Atom<State | undefined>;
-
-	/**
-	 * Creates a read-only atom that derives its state from one or more atoms.
-	 * Used to avoid unnecessary recomputations if multiple listeners depend on
-	 * the same atoms.
-	 *
-	 * @param callback The function that produces the state.
-	 * @param options Optional configuration.
-	 * @returns A new read-only atom.
-	 */
-	function computed<State>(callback: Selector<State>, options?: AtomOptions<State>): Selector<State>;
-
-	/**
-	 * Subscribes to changes in the given atom or selector. The callback is
-	 * called with the current state and the previous state immediately after a
-	 * change occurs.
-	 *
-	 * @param callback The atom or selector to subscribe to.
-	 * @param listener The function to call when the state changes.
-	 * @returns A function that unsubscribes the callback.
-	 */
-	function subscribe<State>(callback: Selector<State>, listener: (state: State, prev: State) => void): Cleanup;
-
-	/**
-	 * Runs the given callback immediately and whenever any atom it depends on
-	 * changes. Returns a cleanup function that unsubscribes the callback.
-	 *
-	 * @param callback The function to run.
-	 * @returns A function that unsubscribes the callback.
-	 */
-	function effect(callback: (cleanup: Cleanup) => Cleanup | void): Cleanup;
-
-	/**
-	 * Returns the result of the function without subscribing to changes. If a
-	 * non-function value is provided, it is returned as is.
-	 *
-	 * @param callback The atom or selector to get the state of.
-	 * @param args Arguments to pass to the function.
-	 * @returns The current state.
-	 */
-	function peek<State, Args extends unknown[]>(callback: State | ((...args: Args) => State), ...args: Args): State;
-
-	/**
-	 * Returns whether the given value is an atom.
-	 *
-	 * @param value The value to check.
-	 * @returns `true` if the value is an atom, otherwise `false`.
-	 */
-	function isAtom(value: unknown): value is Atom<any>;
-
-	/**
-	 * Runs the given function and schedules listeners to be notified only once
-	 * after the function has completed. Useful for batching multiple changes.
-	 *
-	 * @param callback The function to run.
-	 */
-	function batch(callback: () => void): void;
-
-	/**
-	 * Captures all atoms that are read during the function call and returns them
-	 * along with the result of the function. Useful for tracking dependencies.
-	 *
-	 * @param callback The function to run.
-	 * @returns A tuple containing the captured atoms and the result of the function.
-	 */
-	function capture<State>(callback: Selector<State>): LuaTuple<[dependencies: Set<Atom<unknown>>, state: State]>;
-
-	/**
-	 * Notifies all subscribers of the given atom that the state has changed.
-	 * Mainly for running effects, since subscriptions check for equality.
-	 *
-	 * @param atom The atom to notify.
-	 */
-	function notify<State>(atom: Atom<State>): void;
-
-	/**
-	 * Creates an instance of `factory` for each item in the atom's state, and
-	 * cleans up the instance when the item is removed. Returns a cleanup function
-	 * that unsubscribes all instances.
-	 *
-	 * @param callback The atom or selector to observe.
-	 * @param factory The function that tracks the lifecycle of each item.
-	 * @returns A function that unsubscribes all instances.
-	 */
-	function observe<Item>(
-		callback: Selector<readonly Item[]>,
-		factory: (item: Item, index: number) => Cleanup | void,
-	): Cleanup;
-
-	function observe<Key, Item>(
-		callback: Selector<Map<Key, Item> | ReadonlyMap<Key, Item>>,
-		factory: (item: Item, key: Key) => Cleanup | void,
-	): Cleanup;
-
-	function observe<Key extends string | number | symbol, Item>(
-		callback: Selector<{ readonly [P in Key]: Item }>,
-		factory: (item: Item, key: Key) => Cleanup | void,
-	): Cleanup;
-
-	/**
-	 * Maps each entry in the atom's state to a new key-value pair. If the `mapper`
-	 * function returns `undefined`, the entry is omitted from the resulting map.
-	 * When the atom changes, the `mapper` is called for each entry in the state
-	 * to compute the new state.
-	 *
-	 * @param callback The atom or selector to map.
-	 * @param mapper The function that maps each entry.
-	 * @returns A new atom with the mapped state.
-	 */
-	function mapped<V0, K1, V1>(
-		callback: Selector<readonly V0[]>,
-		mapper: (value: V0, index: number) => LuaTuple<[value: V1 | undefined, key: K1]>,
-	): Selector<ReadonlyMap<K1, V1>>;
-
-	function mapped<V0, V1>(
-		callback: Selector<readonly V0[]>,
-		mapper: (value: V0, index: number) => V1,
-	): Selector<readonly V1[]>;
-
-	function mapped<K0, V0, K1 = K0, V1 = V0>(
-		callback: Selector<Map<K0, V0> | ReadonlyMap<K0, V0>>,
-		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
-	): Selector<ReadonlyMap<K1, V1>>;
-
-	function mapped<K0 extends string | number | symbol, V0, K1 = K0, V1 = V0>(
-		callback: Selector<{ readonly [P in K0]: V0 }>,
-		mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
-	): Selector<ReadonlyMap<K1, V1>>;
+export enum ReactiveFlags {
+	None = 0b000000,
+	Mutable = 0b000001,
+	Watching = 0b000010,
+	RecursedCheck = 0b000100,
+	Recursed = 0b001000,
+	Dirty = 0b010000,
+	Pending = 0b100000,
 }
+
+export interface ReactiveNode {
+	deps?: Link;
+	depsTail?: Link;
+	subs?: Link;
+	subsTail?: Link;
+	flags: ReactiveFlags;
+}
+
+export interface Link {
+	version: number;
+	dep: ReactiveNode;
+	sub: ReactiveNode;
+	prevSub?: Link;
+	nextSub?: Link;
+	prevDep?: Link;
+	nextDep?: Link;
+}
+
+export interface Atom<T> {
+	(update: Update<T>): T;
+	(): T;
+}
+
+export type Getter<T> = () => T;
+
+export type Setter<T> = (update: Update<T>) => T;
+
+export type Update<T> = ((currentValue: T) => T) | T;
+
+export type Equals<T> = (current: T, incoming: T) => boolean;
+
+/**
+ * Global flags that modify the behavior of Charm's reactive system.
+ */
+export const flags: {
+	/**
+	 * Enforces synchronous, non-yielding behavior in signals and effects.
+	 * Also enables state validation in Charm Sync to catch sync errors early.
+	 * Enabled if the optimization level is below 2, which is true in studio.
+	 */
+	strict: boolean;
+	/**
+	 * Enforces immutability of tables by deep-freezing table values. Enabled
+	 * if the optimization level is below 2, which is true in studio.
+	 */
+	frozen: boolean;
+	/**
+	 * Whether parent effects should track inner effects and clean them up
+	 * when the parent effect re-runs. This is usually desirable, but can be
+	 * disabled to revert to the old behavior. Defaults to `true`.
+	 */
+	trackInnerEffects: boolean;
+};
+
+/**
+ * Creates a reactive signal that stores a value and notifies subscribers when
+ * the value changes. The signal provides both a getter and a setter.
+ *
+ * @param initialValue The initial value of the signal.
+ * @param equals A comparator function to determine if the signal's value has changed.
+ * @returns A tuple containing the getter and setter functions for the signal.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
+ */
+export function signal<T>(initialValue: T, equals?: Equals<T>): LuaTuple<[getter: Getter<T>, setter: Setter<T>]>;
+export function signal<T>(): LuaTuple<[getter: Getter<T | undefined>, setter: Setter<T | undefined>]>;
+
+/**
+ * Creates a reactive atom that acts as both a signal getter and setter.
+ * Calling the atom with an argument sets its value, while calling it with no
+ * arguments returns its current value.
+ *
+ * @param initialValue The initial value of the atom. If empty, the atom's value will be `nil`.
+ * @param equals A comparator function to determine if the atom's value has changed.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
+ */
+export function atom<T>(initialValue: T, equals?: Equals<T>): Atom<T>;
+export function atom<T>(): Atom<T | undefined>;
+
+/**
+ * Creates a new read-only signal that is computed based on the values of
+ * other signals. The computed signal's value is automatically updated when a
+ * change is detected in any of its dependencies.
+ *
+ * @param getter A function that produces the next value.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
+ */
+export function computed<T>(getter: (previousValue?: T) => T): Getter<T>;
+
+/**
+ * Creates an effect that runs a callback in response to signal state changes.
+ * An effect tracks which signals are accessed during its execution, and runs
+ * the callback when those signals change.
+ *
+ * The effect callback may return a cleanup function, which gets called once,
+ * either before the effect re-runs or when it is disposed.
+ *
+ * If the effect is called within another effect, it will be disposed when the
+ * parent effect re-runs.
+ *
+ * @param fn The function to run when dependencies change.
+ * @returns A function for disposing the effect.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
+ */
+export function effect(fn: () => Cleanup | void): Cleanup;
+
+/**
+ * Creates an effect scope that can capture reactive effects and computed
+ * signals created within it so that they can be disposed together.
+ *
+ * @param fn A function that may create reactive effects.
+ * @param detached If true, the scope will not be automatically disposed of when the parent scope is disposed. Defaults to false.
+ * @returns A function for disposing all effects created within the scope.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
+ */
+export function effectScope(fn: () => Cleanup | void, detached?: boolean): Cleanup;
+
+/**
+ * Allows you to manually trigger updates for downstream dependencies when
+ * you've directly mutated a signal's value without using the signal setter.
+ *
+ * @param fn The dependency or a function that calls multiple dependencies.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
+ */
+export function trigger(fn: () => void): void;
+
+/**
+ * Binds the cleanup function to the current active effect or effect scope. If
+ * there is no active effect, a warning is logged, unless `failSilently` is
+ * set to `true`.
+ *
+ * @param fn The cleanup function to register.
+ * @param failSilently If `true`, suppresses the warning when there is no active effect or scope. Defaults to `false`.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
+ */
+export function onCleanup(fn: Cleanup, failSilently?: boolean): void;
+
+/**
+ * Runs the function without subscribing to signal updates and prevents the
+ * current effect or scope from tracking inner effects created within the
+ * function.
+ *
+ * To avoid tracking signals while still allowing inner effects to be tracked
+ * by parent effects/scopes, use `effectScope()` instead.
+ *
+ * @param fn A function that may read signals or create effects.
+ * @param args Arguments to pass to the function.
+ * @returns The return value of the function.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
+ */
+export function untracked<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
+
+/**
+ * Combines multiple updates into a single "commit" that runs effects and
+ * computed signals after the provided function finishes running.
+ *
+ * @param fn A function that performs multiple updates.
+ * @param args Arguments to pass to the function.
+ * @returns The return value of the function.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#batchcallback
+ */
+export function batch<Args extends any[], Result>(fn: (...args: Args) => Result, ...args: Args): Result;
+
+/**
+ * Creates an effect that runs the callback one immediately, and then again
+ * when the value returned by the getter changes. The callback receives the new
+ * value and the previous value as arguments.
+ *
+ * @param getter A function that returns the value to watch.
+ * @param callback The function to run when the value changes.
+ * @returns A function for disposing the effect.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
+ */
+export function listen<T>(getter: Getter<T>, callback: (value: T, previousValue: T | undefined) => void): Cleanup;
+
+/**
+ * Creates an effect that only runs the callback when the value returned by the
+ * getter changes. The callback receives the new value and the previous value
+ * as arguments.
+ *
+ * @param getter A function that returns the value to watch.
+ * @param callback The function to run when the value changes.
+ * @returns A function for disposing the effect.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
+ */
+export function subscribe<T>(getter: Getter<T>, callback: (value: T, previousValue: T) => void): Cleanup;
+
+/**
+ * Creates a new read-only signal that is computed by mapping over the entries
+ * of the source table. If the key is omitted from the transform function's
+ * return value, the original key is preserved.
+ *
+ * This function is optimized to minimize unnecessary updates by only calling
+ * the transform function for entries that have changed since the last run.
+ *
+ * @param getter A signal or function that returns a table
+ * @param transform Function that maps each entry from the source to a new entry in the mapped table
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-transform
+ */
+export function mapped<VI, KI, VO, KO = KI>(
+	getter: Getter<Map<KI, VI> | ReadonlyMap<KI, VI>>,
+	transform: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
+): Getter<ReadonlyMap<KO, VO>>;
+// Overload for arrays
+export function mapped<VI, VO, K extends Key = number>(
+	getter: Getter<readonly VI[]>,
+	transform: (value: VI, key: number) => LuaTuple<[VO, K]> | VO,
+): Getter<K extends number ? readonly VO[] : { readonly [P in K]: VO }>;
+// Overload for objects
+export function mapped<VI, KI extends Key, VO, KO extends Key = KI>(
+	getter: Getter<{ readonly [K in KI]: VI }>,
+	transform: (value: VI, key: KI) => LuaTuple<[VO, KO]> | VO,
+): Getter<{ readonly [K in KO]: VO }>;
+
+/**
+ * Calls the callback function for each unique key in the table returned by the
+ * getter. The callback is called once for each key, and again when a new key
+ * is added.
+ *
+ * The callback may return a cleanup function, which will be called when the
+ * key is removed or when the entire callback is disposed.
+ *
+ * Effects created within the callback are cleaned up when the item is removed
+ * from the table or when the callback is disposed.
+ *
+ * @param getter A function that returns the table to observe.
+ * @param callback A function that is called for each key in the table.
+ * @returns A function for disposing the observer.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
+ */
+export function observe<V, K = number>(
+	getter: Getter<Map<K, V> | ReadonlyMap<K, V> | readonly V[]>,
+	callback: (value: V, key: K) => Cleanup | void,
+): Cleanup;
+// Overload for objects
+export function observe<V, K extends Key>(
+	getter: Getter<{ readonly [K in Key]: V }>,
+	callback: (value: V, key: K) => Cleanup | void,
+): Cleanup;
+
+/**
+ * Returns the currently active subscriber (effect or computed node).
+ *
+ * @return Current active subscriber or `nil`
+ */
+export function getActiveSub(): ReactiveNode | undefined;
+
+/**
+ * Sets the currently active subscriber (effect or computed node) and returns
+ * the previous subscriber.
+ *
+ * @param sub New subscriber to set as active
+ * @return Previous active subscriber
+ */
+export function setActiveSub(sub?: ReactiveNode): ReactiveNode | undefined;
+
+/**
+ * Starts a batch operation, incrementing the batch depth counter. Effects
+ * will not run until the outermost batch ends.
+ */
+export function startBatch(): void;
+
+/**
+ * Ends a batch operation, decrementing the batch depth counter. If this is
+ * the outermost batch, queued effects are flushed and run.
+ */
+export function endBatch(): void;

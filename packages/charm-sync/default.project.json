@@ -1,5 +1,5 @@
 {
-	"name": "CharmSync",
+	"name": "charm-sync",
 	"tree": {
 		"$path": "src"
 	}

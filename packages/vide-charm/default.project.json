@@ -1,0 +1,6 @@
+{
+	"name": "vide-charm",
+	"tree": {
+		"$path": "src"
+	}
+}

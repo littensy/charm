@@ -1,0 +1,27 @@
+{
+	"name": "@rbxts/deep-charm",
+	"version": "0.1.0-rc.1",
+	"description": "Use Charm with plain Luau tables",
+	"license": "MIT",
+	"main": "src/init.luau",
+	"types": "src/index.d.ts",
+	"files": [
+		"src",
+		"*.luau",
+		"!wally.toml",
+		"!wally.lock",
+		"!default.project.json",
+		"!test"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/littensy/charm.git"
+	},
+	"scripts": {
+		"prepare": "cp ../../LICENSE . && cp ../../README.md .",
+		"publish:wally": "wally publish"
+	},
+	"dependencies": {
+		"@rbxts/charm": "workspace:^"
+	}
+}

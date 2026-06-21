@@ -1,13 +1,24 @@
 {
 	"name": "@rbxts/charm",
-	"version": "0.10.0",
-	"description": "An atomic state management library for Roblox",
-	"repository": "littensy/charm",
+	"version": "0.11.0-rc.6",
+	"description": "Atomic state management based on alien-signals",
 	"license": "MIT",
 	"main": "src/init.luau",
 	"types": "src/index.d.ts",
+	"files": [
+		"src",
+		"*.luau",
+		"!wally.toml",
+		"!wally.lock",
+		"!default.project.json",
+		"!test"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/littensy/charm.git"
+	},
 	"scripts": {
-		"prepare": "cp ../../LICENSE.md . && cp ../../README.md .",
+		"prepare": "cp ../../LICENSE . && cp ../../README.md .",
 		"publish:wally": "wally publish"
 	}
 }

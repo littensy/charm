@@ -1,83 +1,108 @@
-local Charm = require(script.Parent.Parent.Charm)
-local patch = require(script.Parent.patch)
-local types = require(script.Parent.types)
-type AtomMap = types.AtomMap
+local Charm = require("../Charm")
+local patch = require("./patch")
+local types = require("./types")
+
 type SyncPayload = types.SyncPayload
+type ReactiveProxy<T = { [any]: any }> = types.ReactiveProxy<T>
 
-type ClientOptions = {
-	--[=[
-		The atoms to synchronize with the server.
-	]=]
-	atoms: AtomMap,
-	--[=[
-		Whether to ignore patches sent before the client has been hydrated.
-		Default is `true`.
-	]=]
-	ignoreUnhydrated: boolean?,
-}
+local trackedSignals: { [string]: (any) -> any } = {}
+local trackedReactives: { [string]: ReactiveProxy } = {}
 
-type ClientSyncer = {
-	--[=[
-		Applies a patch or initializes the state of the atoms with the given
-		payload from the server.
-		
-		@param ...payloads The patches or hydration payloads to apply.
-	]=]
-	sync: (self: ClientSyncer, ...SyncPayload) -> (),
-}
-
---[=[
-	Creates a `ClientSyncer` object that receives patches from the server and
-	applies them to the local state.
-	
-	@param options The atoms to synchronize with the server.
-	@return A `ClientSyncer` object.
-]=]
-local function client(options: ClientOptions): ClientSyncer
-	local atoms = options.atoms
-	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
-
-	local self = {} :: ClientSyncer
-	local hydrated = false
-
-	local function hydrate(state: { [string | number]: any })
-		hydrated = true
-
-		for key, value in next, state do
-			local atom = atoms[key]
-			atom(value)
-		end
+local function shallowMergeReactive(reactive: ReactiveProxy, source: { [any]: any })
+	local target = reactive.__target
+	for key, value in source do
+		target[key] = value
 	end
-
-	local function apply(data: { [string | number]: any })
-		local target = {}
-
-		for key, atom in next, atoms do
-			target[key] = atom()
-		end
-
-		target = patch.apply(target, data)
-
-		for key, atom in next, atoms do
-			atom(target[key])
-		end
-	end
-
-	function self:sync(...)
-		for index = 1, select("#", ...) do
-			local payload: SyncPayload = select(index, ...)
-
-			Charm.batch(function()
-				if payload.type == "init" then
-					hydrate(payload.data)
-				elseif not ignoreUnhydrated or hydrated then
-					apply(payload.data)
-				end
-			end)
-		end
-	end
-
-	return self
+	Charm.trigger(reactive.__track)
 end
 
-return client
+--[[
+	Registers a map of setters to the state with the corresponding keys on the
+	server. When the server sends updates, these setters will be called with
+	the new values.
+
+	Atoms, signals converted to atoms, and signal setter functions are allowed.
+	Note that `server.addSignalsToClient` still requires some way to get the
+	state.
+
+	@param signals A map of setter functions to sync with the server.
+]]
+local function addSignals(signals: { [string]: ((any) -> any) | {} })
+	for key, signal in signals do
+		if type(signal) == "function" then
+			trackedSignals[key] = signal
+		else
+			trackedReactives[key] = (signal :: any) :: ReactiveProxy
+		end
+	end
+end
+
+--[[
+	Unregisters from server state updates for the given keys. The signals
+	will retain their current values, but will no longer receive updates
+	from the server.
+]]
+local function removeSignals(...: string)
+	for index = 1, select("#", ...) do
+		local key = select(index, ...)
+		trackedSignals[key] = nil
+		trackedReactives[key] = nil
+	end
+end
+
+--[[
+	Unsubscribes from all server state updates.
+]]
+local function removeAllSignals()
+	table.clear(trackedSignals)
+	table.clear(trackedReactives)
+end
+
+local function applyInitPayload(data: { [string]: any })
+	for key, value in data do
+		if trackedSignals[key] then
+			trackedSignals[key](value)
+		elseif trackedReactives[key] then
+			shallowMergeReactive(trackedReactives[key], value)
+		end
+	end
+end
+
+local function applyPatchPayload(data: { [string]: any })
+	for key, diffs in data do
+		local trackedSignal = trackedSignals[key]
+		local trackedReactive = trackedReactives[key]
+
+		if trackedSignal then
+			trackedSignal(function(value)
+				return patch.apply(value, diffs)
+			end)
+		elseif trackedReactive then
+			patch.applyMutable(trackedReactive.__target, diffs)
+			Charm.trigger(trackedReactive.__track)
+		end
+	end
+end
+
+--[[
+	Merges the server's state patches into the client's state, either
+	initializing it with the full state or merging a partial patch.
+
+	@param payloads The state updates received from the server.
+]]
+local function applyPatches(payloads: { SyncPayload })
+	for _, payload in payloads do
+		if payload.type == "init" then
+			Charm.batch(applyInitPayload, payload.data)
+		elseif payload.type == "patch" then
+			Charm.batch(applyPatchPayload, payload.data)
+		end
+	end
+end
+
+return {
+	addSignals = addSignals,
+	removeSignals = removeSignals,
+	removeAllSignals = removeAllSignals,
+	patch = applyPatches,
+}

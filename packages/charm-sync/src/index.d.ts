@@ -1,214 +1,292 @@
-import { Atom, Selector } from "@rbxts/charm";
-
-export = CharmSync;
-export as namespace CharmSync;
-
-type Cleanup = () => void;
+import { Atom, Setter } from "@rbxts/charm";
 
 type Key = string | number | symbol;
 
-declare namespace CharmSync {
-	type AtomMap = Record<string, Atom<any>>;
+/**
+ * Represents the removal of a value from the state.
+ */
+export interface None {
+	readonly __none: "__none";
+}
 
-	type SelectorMap = Record<string, Selector<any>>;
+export type MaybeNone<T> = undefined extends T ? None : never;
 
+type ReactiveObject = { [key: Key]: any };
+
+type ServerSignalMap = Record<string, (() => any) | ReactiveObject>;
+
+type ClientSignalMap = Record<string, Setter<any> | ReactiveObject>;
+
+/**
+ * Infers the type of the return values produced by a map of functions.
+ */
+export type StateOfMap<T> = {
+	readonly [P in keyof T]: T[P] extends () => infer State ? State : never;
+};
+
+type DataTypes = {
+	[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];
+};
+
+type DataType = DataTypes[keyof DataTypes];
+
+/**
+ * A partial patch that can be applied to the state to update it. Represents
+ * the difference between the current state and the next state.
+ *
+ * If a value was removed, it is replaced with `None`. This can be checked
+ * using the `isNone` function.
+ */
+// TODO: Optimize type, this looks overly complex
+export type SyncPatch<State, FixArrays extends boolean = true> = MaybeNone<State> | State extends
+	| ReadonlyMap<infer K, infer V>
+	| Map<infer K, infer V>
+	? ReadonlyMap<K, SyncPatch<V, FixArrays> | None>
+	: State extends Set<infer T> | ReadonlySet<infer T>
+		? ReadonlyMap<T, true | None>
+		: State extends readonly (infer T)[]
+			? FixArrays extends true
+				? ReadonlyMap<string | number, SyncPatch<T, FixArrays> | None>
+				: readonly (SyncPatch<T, FixArrays> | None | undefined)[]
+			: State extends DataType
+				? State
+				: State extends object
+					? { readonly [P in keyof State]?: SyncPatch<State[P], FixArrays> }
+					: State;
+
+/**
+ * A payload that can be sent from the server to the client to synchronize
+ * state between the two.
+ */
+export type SyncPayload<Getters extends ServerSignalMap = ServerSignalMap, FixArrays extends boolean = true> =
+	| { type: "init"; data: StateOfMap<Getters> }
+	| { type: "patch"; data: SyncPatch<StateOfMap<Getters>, FixArrays> };
+
+/**
+ * Global configuration options that affect the behavior of Charm Sync.
+ */
+export const config: {
 	/**
-	 * @deprecated Use `SelectorMap` instead.
-	 */
-	type MoleculeMap = SelectorMap;
-
-	/**
-	 * Infers the type of the return values produced by a map of functions.
-	 */
-	type StateOfMap<T> = {
-		readonly [P in keyof T]: T[P] extends Selector<infer State> ? State : never;
-	};
-
-	/**
-	 * Represents the removal of a value from the state.
-	 */
-	interface None {
-		readonly __none: "__none";
-	}
-
-	type MaybeNone<T> = undefined extends T ? None : never;
-
-	/**
-	 * Creates a `ClientSyncer` object that receives patches from the server and
-	 * applies them to the local state.
-	 *
-	 * @client
-	 * @param options The atoms to synchronize with the server.
-	 * @returns A `ClientSyncer` object.
-	 */
-	function client<Atoms extends AtomMap>(options: ClientOptions<Atoms>): ClientSyncer<Atoms>;
-
-	/**
-	 * Creates a `ServerSyncer` object that sends patches to the client and
-	 * hydrates the client's state.
+	 * The interval at which to send patches to the client, in seconds.
+	 * Defaults to `0` (patches are sent up to once per frame). Set to a
+	 * negative value to disable automatic syncing.
 	 *
 	 * @server
-	 * @param options The atoms to synchronize with the client.
-	 * @returns A `ServerSyncer` object.
 	 */
-	function server<Selectors extends SelectorMap, Serialize extends boolean = true>(
-		options: ServerOptions<Selectors, Serialize>,
-	): ServerSyncer<Selectors, Serialize>;
-
+	interval: number;
 	/**
-	 * Checks whether a value is `None`. If `true`, the value is scheduled to be
-	 * removed from the state when the patch is applied.
+	 * Whether the history of state changes since the client's last update
+	 * should be preserved. This is useful for values that change multiple
+	 * times per frame, where each individual change is important. Defaults
+	 * to `false` for performance reasons.
 	 *
-	 * @param value The value to check.
-	 * @returns `true` if the value is `None`, otherwise `false`.
+	 * @server
 	 */
-	function isNone(value: unknown): value is None;
-
-	interface NestedAtomMap {
-		readonly [key: string]: NestedAtomMap | Atom<any>;
-	}
-
-	type AppendPath<Path extends Key | undefined, Name extends Key> = undefined extends Path
-		? Name
-		: Name extends string
-			? Path extends string
-				? `${Path}/${Name}`
-				: never
-			: never;
-
-	type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
-
-	type IntersectValues<T> = UnionToIntersection<{ readonly [K in keyof T]: T[K] }[keyof T]>;
-
-	type FlattenNestedAtoms<Atoms extends NestedAtomMap, Path extends Key | undefined = undefined> = IntersectValues<{
-		readonly [Name in keyof Atoms as AppendPath<Path, Name>]: Atoms[Name] extends Atom<any>
-			? { readonly [K in AppendPath<Path, Name>]: Atoms[Name] }
-			: Atoms[Name] extends NestedAtomMap
-				? FlattenNestedAtoms<Atoms[Name], AppendPath<Path, Name>>
-				: never;
-	}>;
-
+	preserveHistory: boolean;
 	/**
-	 * Flattens a nested atom map into a single object with slash-separated
-	 * keys. Useful for recursively collecting atoms returned by modules.
+	 * When `true`, Charm will modify sparse arrays to prevent data loss from
+	 * remote event limitations. When an unsafe array is detected, numeric
+	 * indices will be converted to string keys so that the array can be sent
+	 * safely and then converted back to an array on the receiving end.
 	 *
-	 * @param atoms The nested atom map to flatten.
-	 * @return A flattened atom map.
-	 */
-	function flatten<Atoms extends NestedAtomMap>(atoms: Atoms): FlattenNestedAtoms<Atoms>;
-
-	type DataTypes = {
-		[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];
-	};
-
-	/**
-	 * A type that should not be made partial in patches.
-	 */
-	type DataType = DataTypes[keyof DataTypes];
-
-	/**
-	 * A partial patch that can be applied to the state to update it. Represents
-	 * the difference between the current state and the next state.
+	 * This option should be disabled if your network library uses a custom
+	 * serialization method (i.e. Zap, ByteNet) to prevent interference.
 	 *
-	 * If a value was removed, it is replaced with `None`. This can be checked
-	 * using the `sync.isNone` function.
+	 * @server
 	 */
-	type SyncPatch<State, Serialize extends boolean = true> = MaybeNone<State> | State extends
-		| ReadonlyMap<infer K, infer V>
-		| Map<infer K, infer V>
-		? ReadonlyMap<K, SyncPatch<V, Serialize> | None>
-		: State extends Set<infer T> | ReadonlySet<infer T>
-			? ReadonlyMap<T, true | None>
-			: State extends readonly (infer T)[]
-				? Serialize extends true
-					? ReadonlyMap<string | number, SyncPatch<T, Serialize> | None>
-					: readonly (SyncPatch<T, Serialize> | None | undefined)[]
-				: State extends DataType
-					? State
-					: State extends object
-						? { readonly [P in keyof State]?: SyncPatch<State[P], Serialize> }
-						: State;
+	fixArrays: boolean;
+	/**
+	 * When `true`, synced state containing unsafe sparse arrays or mixed
+	 * tables will emit a warning. Only checked in strict mode and if
+	 * `fixArrays` is enabled. Defaults to `true`.
+	 *
+	 * @server
+	 */
+	validatePatches: boolean;
+};
+
+/**
+ * @client
+ */
+export namespace client {
+	/**
+	 * Registers a map of setters to the state with the corresponding keys on the
+	 * server. When the server sends updates, these setters will be called with
+	 * the new values.
+	 *
+	 * Atoms, signals converted to atoms, and signal setter functions are allowed.
+	 * Note that `server.addSignalsToClient` still requires some way to get the
+	 * state.
+	 *
+	 * @param signals A map of setter functions to sync with the server.
+	 */
+	export function addSignals<Signals extends ClientSignalMap = ClientSignalMap>(signals: Signals): void;
 
 	/**
-	 * A payload that can be sent from the server to the client to synchronize
-	 * state between the two.
+	 * Unregisters from server state updates for the given keys. The signals
+	 * will retain their current values, but will no longer receive updates
+	 * from the server.
 	 */
-	type SyncPayload<Selectors extends SelectorMap, Serialize extends boolean = true> =
-		| { readonly type: "init"; readonly data: StateOfMap<Selectors> }
-		| { readonly type: "patch"; readonly data: SyncPatch<StateOfMap<Selectors>, Serialize> };
+	export function removeSignals<Signals extends ServerSignalMap | ClientSignalMap = ClientSignalMap>(
+		...keys: (keyof Signals)[]
+	): void;
 
-	interface ClientOptions<Atoms extends AtomMap> {
-		/**
-		 * The atoms to synchronize with the server.
-		 */
-		atoms: Atoms;
-		/**
-		 * Whether to ignore patches sent before the client has been hydrated.
-		 * Defaults to `true`.
-		 */
-		ignoreUnhydrated?: boolean;
-	}
+	/**
+	 * Unsubscribes from all server state updates.
+	 */
+	export function removeAllSignals(): void;
 
-	interface ServerOptions<Selectors extends SelectorMap, Serialize extends boolean = true> {
-		/**
-		 * The atoms to synchronize with the client.
-		 */
-		atoms: Selectors;
-		/**
-		 * The interval at which to send patches to the client, in seconds.
-		 * Defaults to `0` (patches are sent up to once per frame). Set to a
-		 * negative value to disable automatic syncing.
-		 */
-		interval?: number;
-		/**
-		 * Whether the history of state changes since the client's last update
-		 * should be preserved. This is useful for values that change multiple times
-		 * per frame, where each individual change is important. Defaults to `false`.
-		 *
-		 * If `true`, the broadcaster will send a list of payloads to the client
-		 * instead of a single payload. The client will apply each payload in order
-		 * to reconstruct the state's changes over time.
-		 */
-		preserveHistory?: boolean;
-		/**
-		 * When `true`, Charm will apply validation and serialize unsafe arrays
-		 * to address remote event argument limitations. Defaults to `true`.
-		 *
-		 * This option should be disabled if your network library uses a custom
-		 * serialization method (i.e. Zap, ByteNet) to prevent interference.
-		 */
-		autoSerialize?: Serialize;
-	}
-
-	interface ClientSyncer<Atoms extends AtomMap> {
-		/**
-		 * Applies a patch or initializes the state of the atoms with the given
-		 * payload from the server.
-		 *
-		 * @param payloads The patches or hydration payloads to apply.
-		 */
-		sync(...payloads: SyncPayload<Atoms, boolean>[]): void;
-	}
-
-	interface ServerSyncer<Selectors extends SelectorMap, Serialize extends boolean> {
-		/**
-		 * Sets up a subscription to each atom that schedules a patch to be sent to
-		 * the client whenever the state changes. When a change occurs, the `callback`
-		 * is called with the player and the payloads to send.
-		 *
-		 * Note that a `payload` object should not be mutated. If you need to modify
-		 * a payload, apply the changes to a copy of the object.
-		 *
-		 * @param callback The function to call when the state changes.
-		 * @returns A cleanup function that unsubscribes all listeners.
-		 */
-		connect(callback: (player: Player, ...payloads: SyncPayload<Selectors, Serialize>[]) => void): Cleanup;
-		/**
-		 * Hydrates the client's state with the server's state. This should be
-		 * called when a player joins the game and requires the server's state.
-		 *
-		 * @param player The player to hydrate.
-		 */
-		hydrate(player: Player): void;
-	}
+	/**
+	 * Merges the server's state patches into the client's state, either
+	 * initializing it with the full state or merging a partial patch.
+	 *
+	 * @param payloads The state updates received from the server.
+	 */
+	export function patch<Getters extends ServerSignalMap = ServerSignalMap, FixArrays extends boolean = true>(
+		payloads: SyncPayload<Getters, FixArrays>[],
+	): void;
 }
+
+/**
+ * @server
+ */
+export namespace server {
+	/**
+	 * Subscribes a client to the given signals. When an update occurs, the client
+	 * will receive a partial state patch to merge into their local state. May be
+	 * called multiple times to subscribe to additional keys.
+	 *
+	 * Atoms, computed signals, and signal getter functions are allowed. Note
+	 * that `client.addSignals` still requires some way to set the state.
+	 *
+	 * @param client The client receiving state updates.
+	 * @param signals A map of getter functions to sync with the client.
+	 */
+	export function addSignalsToClient<Signals extends ServerSignalMap = ServerSignalMap>(
+		client: Player,
+		signals: Signals,
+	): void;
+
+	/**
+	 * Unsubscribes a client from receiving all state updates. To only unsubscribe
+	 * from specific keys, use `removeSignalsFromClient` instead.
+	 *
+	 * @param client The client receiving state updates.
+	 */
+	export function removeClient(client: Player): void;
+
+	/**
+	 * Unsubscribes a client from receiving updates for the given keys.
+	 *
+	 * @param client The client receiving state updates.
+	 * @param keys The keys of the state to unsubscribe from.
+	 */
+	export function removeSignalsFromClient<Signals extends ServerSignalMap = ServerSignalMap>(
+		client: Player,
+		...keys: (keyof Signals)[]
+	): void;
+
+	/**
+	 * Uses the callback to send state updates to clients that are subscribed
+	 * to state changes. Starts automatically sending updates at the interval
+	 * specified in `config.interval`.
+	 *
+	 * @param onSync Called when sending patches to a client.
+	 */
+	export function connect<Getters extends ServerSignalMap = ServerSignalMap, FixArrays extends boolean = true>(
+		onSync: (client: Player, payloads: SyncPayload<Getters, FixArrays>[]) => void,
+	): void;
+
+	/**
+	 * Stops syncing state updates to clients at the automatic interval.
+	 * Flushing can still be performed manually via `flush`.
+	 */
+	export function disconnect(): void;
+
+	/**
+	 * Immediately sends pending updates to all clients. Normally, updates are
+	 * sent at the interval specified in `config.interval`, but this function
+	 * can be used to force an immediate sync.
+	 */
+	export function flush(): void;
+
+	/**
+	 * Unsubscribes all clients, stops tracking all state, and disconnects
+	 * from the automatic sync interval.
+	 */
+	export function reset(): void;
+}
+
+export namespace patch {
+	/**
+	 * Converts `nil` values to the special `None` symbol. This is useful when
+	 * preparing data for serialization, since `nil` can represent both the
+	 * absence of a value and the removal of a value in patches.
+	 */
+	export function nilToNone<T>(value: T | undefined): T | None;
+
+	/**
+	 * Compares two states and returns a patch that can be applied to the
+	 * current state to produce the next state.
+	 *
+	 * @param currentState The current state.
+	 * @param nextState The next state.
+	 * @returns A patch that can be applied to the current state.
+	 */
+	export function diff<State, FixArrays extends boolean = true>(
+		currentState: State,
+		nextState: State,
+	): SyncPatch<State, FixArrays>;
+
+	/**
+	 * Applies a patch to a state and returns the resulting value.
+	 *
+	 * @param currentState The current state.
+	 * @param statePatch The patches to apply.
+	 * @returns The new state with the patch applied.
+	 */
+	export function applyImmutable<State, FixArrays extends boolean = true>(
+		currentState: State,
+		statePatch: SyncPatch<State, FixArrays>,
+	): State;
+}
+
+type DeepFlattenImpl<T, Prefix extends string = ""> = {
+	[K in keyof T]: T[K] extends DataType | Callback
+		? { [P in `${Prefix}${Exclude<K, symbol>}`]: T[K] }
+		: T[K] extends object
+			? DeepFlattenImpl<T[K], `${Prefix}${Exclude<K, symbol>}/`>
+			: { [P in `${Prefix}${Exclude<K, symbol>}`]: T[K] };
+}[keyof T];
+
+type DeepFlatten<T> = Reconstruct<UnionToIntersection<DeepFlattenImpl<T>>>;
+
+/**
+ * Flattens a nested table into a single table with slash-separated keys.
+ * Useful for recursively collecting atoms returned by modules.
+ *
+ * @param input A nested table.
+ * @return A flattened table with slash-separated keys.
+ */
+export function flatten<T>(input: T): DeepFlatten<T>;
+
+/**
+ * Checks whether a value is `None`. If `true`, the value is scheduled to be
+ * removed from the state when the patch is applied.
+ *
+ * @param value The value to check.
+ * @returns `true` if the value is `None`, otherwise `false`.
+ */
+export function isNone(value: unknown): value is None;
+
+/**
+ * Converts a signal getter and setter into an atom. This is useful for
+ * syncing client signals with the server, as the sync system requires both
+ * the getter and setter to update state.
+ *
+ * @param getter A function that returns the current value of the signal.
+ * @param setter A function that sets the value of the signal.
+ * @returns An atom that can either get or set the signal's value.
+ * @see https://github.com/littensy/charm?tab=readme-ov-file#signaltoatomgetter-setter
+ */
+export function signalToAtom<T>(getter: () => T, setter: (value: ((prev: T) => T) | T) => T): Atom<T>;

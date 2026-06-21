@@ -1,10 +1,10 @@
 <p align="center">
   <p align="center">
-	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/main/images/logo.png" alt="Logo">
+	<img width="150" height="150" src="https://raw.githubusercontent.com/littensy/charm/main/assets/logo.png" alt="Logo">
   </p>
   <h1 align="center"><b>Charm</b></h1>
   <p align="center">
-    Atomic state management for Roblox.
+    Fine-grained reactivity for Roblox
     <br />
     <a href="https://npmjs.com/package/@rbxts/charm"><strong>npm package →</strong></a>
   </p>
@@ -14,29 +14,139 @@
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/littensy/charm/ci.yml?style=for-the-badge&branch=main&logo=github)
 [![NPM Version](https://img.shields.io/npm/v/@rbxts/charm.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/@rbxts/charm)
-[![GitHub License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE.md)
+[![GitHub License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE)
 
 </div>
 
-**Charm** is an atomic and immutable state management library, inspired by [Jotai](https://jotai.org) and [Nanostores](https://github.com/nanostores/nanostores). Store your state in atoms, and write your own functions to read, write, and observe state.
+Charm is a reactive state management library designed for storing data in discrete containers called _signals_. Connect behavior to data with signals, ensuring systems stay up-to-date with their underlying data while reactivity eliminates the need for manual updates.
 
-See an example of Charm's features in [this example repository](https://github.com/littensy/charm-example).
+**Build game state from simple building blocks:**
 
-## 🍀 Features
+- Store data in [signals](#signalinitialvalue-equals): reactive state containers that hold a value
+- React to state changes with [effects](#effectcallback): re-run code when signals update
+- Derive new values from data with [computed signals](#computedgetter): memoize functions that access signals
 
--   ⚛️ **Manage state with _atoms_.** Decompose state into independent containers called _atoms_, as opposed to combining them into a single store.
+**Want to learn more about reactivity?**
 
--   💪 **Minimal, yet powerful.** Less boilerplate — write simple functions to read from and write to state.
+- https://dev.to/ryansolid/a-hands-on-introduction-to-fine-grained-reactivity-3ndf
+- https://preactjs.com/blog/introducing-signals
+- https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity
+- https://github.com/roblox/signals
 
--   🔬 **Immediate updates.** Listeners run asynchronously by default, avoiding the cascading effects of deferred updates and improving responsiveness.
+[Migrating from an older version of Charm?](#migration)
 
--   🦄 **Like magic.** Selector functions can be subscribed to as-is — with implicit dependency tracking, atoms are captured and memoized for you.
+<details>
+<summary><b>Table of Contents</b></summary>
 
----
+- [Installation](#installation)
+- [Reference](#reference)
+    - [`signal(initialValue, equals?)`](#signalinitialvalue-equals)
+    - [`computed(getter)`](#computedgetter)
+    - [`effect(callback)`](#effectcallback)
+    - [Nested effects](#nested-effects)
+    - [`effectScope(callback)`](#effectscopecallback)
+    - [`listen(getter, callback)`](#listengetter-callback)
+    - [Getter functions](#getter-functions)
+    - [`observe(getter, callback)`](#observegetter-callback)
+    - [`subscribe(getter, callback)`](#subscribegetter-callback)
+    - [`untracked(callback)`](#untrackedcallback)
+    - [`batch(callback)`](#batchcallback)
+    - [`mapped(getter, transform)`](#mappedgetter-transform)
+    - [`onCleanup(callback, failSilently?)`](#oncleanupcallback-failsilently)
+    - [`atom(initialValue, equals?)`](#atominitialvalue-equals)
+    - [`trigger(callback)`](#triggercallback)
+    - [`flags`](#flags)
+- [Client-Server Sync](#client-server-sync)
+    - [Installation](#installation-1)
+    - [Quick Start](#quick-start)
+    - [Server API](#config)
+    - [Client API](#clientaddsignalssetters)
+    - [Sync Caveats](#sync-caveats)
+- [Deep Reactivity](#deep-reactivity)
+    - [Installation](#installation-2)
+    - [`reactive(initialValue)`](#reactiveinitialvalue)
+    - [Mutation vs. update function](#mutation-vs-update-function)
+    - [`toRaw(value)`](#torawvalue)
+    - [`isReactive(value)`](#isreactivevalue)
+- [Migration](#migration)
+- [Examples](#examples)
 
-## 📦 Setup
+</details>
 
-Install Charm for roblox-ts using your package manager of choice.
+## At a Glance
+
+```luau
+local getTodos, setTodos = signal({} :: { string })
+local getQuery, setQuery = signal("")
+
+observe(getTodos, function(todo: string, index: number)
+	local instance = Instance.new("TextLabel")
+
+	local getText = computed(function()
+		return getTodos()[index] or ""
+	end)
+
+	effect(function()
+		instance.Text = getText()
+		instance.Visible = string.match(getText(), getQuery()) ~= nil
+	end)
+
+	instance.LayoutOrder = index
+	instance.Size = UDim2.new(1, 0, 0, 40)
+	instance.Parent = screenGui
+
+	return function()
+		instance:Destroy()
+	end
+end)
+
+setTodos({ "Buy milk", "Buy eggs", "Play Roblox" })
+setQuery("Buy")
+```
+
+<details>
+<summary>Explain code</summary>
+
+```luau
+-- Declare state for a todo list and a search query
+local getTodos, setTodos = signal({} :: { string })
+local getQuery, setQuery = signal("")
+
+-- Create a text label when an item is added to the list
+observe(getTodos, function(todo, index)
+	local instance = Instance.new("TextLabel")
+
+	-- Create a memoized function that only re-runs effects when the todo list
+	-- updates or the function returns new text
+	local getText = computed(function()
+		return getTodos()[index] or ""
+	end)
+
+	-- Update instance properties when the text or query updates
+	effect(function()
+		instance.Text = getText()
+		instance.Visible = string.match(getText(), getQuery()) ~= nil
+	end)
+
+	instance.LayoutOrder = index
+	instance.Size = UDim2.new(1, 0, 0, 40)
+	instance.Parent = screenGui
+
+	-- Destroy the instance when this item is removed
+	return function()
+		instance:Destroy()
+	end
+end)
+
+-- Add items to the todo list
+setTodos({ "Buy milk", "Buy eggs", "Play Roblox" })
+-- Filter for items containing "Buy"
+setQuery("Buy")
+```
+
+</details>
+
+## Installation
 
 ```sh
 npm install @rbxts/charm
@@ -44,391 +154,461 @@ yarn add @rbxts/charm
 pnpm add @rbxts/charm
 ```
 
-Alternatively, add `littensy/charm` to your `wally.toml` file.
-
 ```toml
+# wally.toml
 [dependencies]
 Charm = "littensy/charm@VERSION"
 ```
 
 ---
 
-## 🐛 Debugging
+## Reference
 
-Charm provides a debug mode to help you identify potential bugs in your project. To enable debug mode, set the global `_G.__DEV__` flag to `true` before importing Charm.
+### `signal(initialValue, equals?)`
 
-Enabling `__DEV__` adds a few helpful features:
-
--   Better error handling for selectors, subscriptions, and batched functions:
-
-    -   Errors provide the function's name and line number.
-    -   Yielding in certain functions will throw an error.
-
--   Server state is validated for [remote event limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations) before being passed to the client.
-
-Enabling debug mode in unit tests, storybooks, and other development environments can help you catch potential issues early. However, remember to turn off debug mode in production to avoid the performance overhead.
-
----
-
-## 📚 Reference
-
-### `atom(state, options?)`
-
-Atoms are the building blocks of Charm. They are functions that hold a single value, and calling them can read or write to that value. Atoms, or any function that reads from atoms, can also be [subscribed](#subscribecallback-listener) to.
-
-Call `atom` to create a state container initialized with the value `state`.
+Signals are the core of reactivity in Charm. The `signal` function creates a reactive signal that acts as a container for a value. It returns a function to access the value, and another to update the value.
 
 ```luau
-local nameAtom = atom("John")
-local todosAtom: Atom<{ string }> = atom({})
+local getCounter, setCounter = signal(0)
+
+setCounter(1)
+setCounter(function(count)
+	return count + 1
+end)
+print(getCounter()) -- 2
 ```
 
-#### Parameters
+Accessing the signal's value in an effect or computed signal will subscribe to it as a dependency. Changing the value will immediately notify every effect and computed signal that depends on the signal, ensuring all of your state is correct and up-to-date.
 
--   `state`: The value to assign to the atom initially.
-
--   **optional** `options`: An object that configures the behavior of this atom.
-
-    -   **optional** `equals`: An equality function to determine whether the state has changed. By default, strict equality (`==`) is used.
-
-#### Returns
-
-The `atom` constructor returns an atom function with two possible operations:
-
-1. **Read the state.** Call the atom without arguments to get the current state.
-2. **Set the state.** Pass a new value or an updater function to change the state.
+You can also pass a custom equality function to only update the signal if the equality function returns `false`:
 
 ```luau
-local function newTodo()
-	nameAtom("Jane")
-
-	todosAtom(function(todos)
-		todos = table.clone(todos)
-		table.insert(todos, "Buy milk")
-		return todos
-	end)
-
-	print(nameAtom()) --> "Jane"
-end
-```
-
----
-
-### `subscribe(callback, listener)`
-
-Call `subscribe` to listen for changes in an atom or selector function. When the function's result changes, subscriptions are immediately called with the new state and the previous state.
-
-```luau
-local nameAtom = atom("John")
-
-local cleanup = subscribe(nameAtom, function(name, prevName)
-	print(name)
+local getMax, setMax = signal(0, function(current, incoming)
+	return incoming <= current
 end)
 
-nameAtom("Jane") --> "Jane"
+setMax(1) -- 1
+setMax(2) -- 2
+setMax(-1) -- 2
 ```
 
-You may also pass a selector function that calls other atoms. The function will be memoized and only runs when its atom dependencies update.
-
-```luau
-local function getUppercase()
-	return string.upper(nameAtom())
-end
-
-local cleanup = subscribe(getUppercase, function(name)
-	print(name)
-end)
-
-nameAtom("Jane") --> "JANE"
-```
-
-#### Parameters
-
--   `callback`: The function to subscribe to. This may be an atom or a selector function that depends on an atom.
-
--   `listener`: The listener is called when the result of the callback changes. It receives the new state and the previous state as arguments.
-
-#### Returns
-
-`subscribe` returns a cleanup function.
+> [!NOTE]
+> Looking for atoms? You can still use [`atom()`](#atominitialvalue-equals) to create a signal with a unified getter and setter.
 
 ---
 
 ### `effect(callback)`
 
-Call `effect` to track state changes in all atoms read within the callback. The callback will run once to retrieve its dependencies, and then again whenever they change. Your callback may return a cleanup function to run when the effect is removed or about to re-run.
+Effects are fundamental to reactivity, allowing you to react to signal updates. The `effect` function subscribes to signals accessed by the effect callback, and when a dependency updates, the callback will re-execute.
 
 ```luau
-local nameAtom = atom("John")
+local getCounter, setCounter = signal(0)
 
-local cleanup = effect(function()
-	print(nameAtom())
+effect(function()
+	print(`Count is {getCounter()}`)
+end) -- Count is 0
+
+setCounter(1) -- Count is 1
+```
+
+You can also return a cleanup function that will run once, either before the effect re-runs or when the effect is disposed:
+
+```luau
+local getCounter, setCounter = signal(0)
+
+local dispose = effect(function()
+	local count = getCounter()
 	return function()
-		print("Cleanup function called!")
+		print(`Cleanup {count}`)
 	end
 end)
+
+setCounter(1) -- Cleanup 0
+dispose() -- Cleanup 1
 ```
 
-Because `effect` implicitly tracks all atoms read within the callback, it might be useful to exclude atoms that should not trigger a re-run. You can use [`peek`](#peekvalue) to read from atoms without tracking them as dependencies.
+### Nested Effects
 
-#### Parameters
-
--   `callback`: The function to track for state changes. The callback will run once to retrieve its dependencies, and then again whenever they change.
-
-#### Returns
-
-`effect` returns a cleanup function.
-
-#### Caveats
-
--   **If your effect should disconnect itself, use the `cleanup` argument.** Because effects run immediately, your effect may run before a `cleanup` function is returned. To disconnect an effect from the inside, use the argument passed to your effect instead:
-    ```lua
-    effect(function(cleanup)
-    	if condition() then
-    		cleanup()
-    	end
-    end)
-    ```
-
----
-
-### `computed(callback, options?)`
-
-Call `computed` when you want to derive a new atom from one or more atoms. The callback will be memoized, meaning that subsequent calls to the atom return a cached value that is only re-calculated when the dependencies change.
+An effect is _nested_ if it was created during the execution of another effect. In Charm, when an effect with nested effects re-runs or gets cleaned up, the nested effects from the previous run are automatically cleaned up and re-created if needed. This prevents memory leaks and ensures that outer effects always run before their inner effects:
 
 ```luau
-local todosAtom: Atom<{ string }> = atom({})
-local mapToUppercase = computed(function()
-	local result = table.clone(todosAtom())
-	for key, todo in result do
-		result[key] = string.upper(todo)
+local getPrintCount, setPrintCount = signal(true)
+local getCount, setCount = signal(1)
+
+effect(function()
+	if getPrintCount() then
+		-- This inner effect is created when getPrintCount() is true
+		effect(function()
+			print(`Count is {getCount()}`)
+		end)
 	end
-	return result
-end)
+end) -- Count is 1
+
+setCount(2) -- Count is 2
+
+-- This re-runs the outer effect and cleans up old inner effects
+setPrintCount(false)
+
+setCount(3) -- No output
 ```
-
-Because `computed` implicitly tracks all atoms read within the callback, it might be useful to exclude atoms that should not trigger a re-run. You can use [`peek`](#peekvalue) to read from atoms without tracking them as dependencies.
-
-This function is also useful for optimizing `effect` calls that depend on multiple atoms. For instance, if an effect derives some value from two atoms, it will run twice if both atoms change at the same time. Using `computed` can group these dependencies together and avoid re-running side effects.
-
-#### Parameters
-
--   `callback`: A function that returns a new value depending on one or more atoms.
-
--   **optional** [`options`](#parameters): An object that configures the behavior of this atom.
-
-#### Returns
-
-`computed` returns a read-only atom.
-
----
-
-### `observe(callback, factory)`
-
-Call `observe` to create an instance of `factory` for each key present in a dictionary or array. Your factory can return a cleanup function to run when the key is removed or the observer is cleaned up.
 
 > [!NOTE]
-> Because `observe` tracks the lifetime of each key in your data, your keys must be unique and unchanging. If your data is not keyed by unique and stable identifiers, consider using [`mapped`](#mappedcallback-mapper) to transform it into a keyed object before passing it to `observe`.
+> To run code that is "detached" from the parent effect or scope, use `untracked()` or a detached effect scope. If you suspect that the new nested effect behavior is causing issues with migration, try disabling the `flags.trackInnerEffects` flag to assist with debugging.
+
+---
+
+### `computed(getter)`
+
+The `computed` function creates a read-only signal whose value is derived from other signals. The computed signal caches the getter function's last result, and the value is only re-computed if a dependency has updated since the last computation.
 
 ```luau
-local todosAtom: Atom<{ [string]: Todo }> = atom({})
+local getName, setName = signal("John")
+local getSurname, setSurname = signal("Doe")
+local getFullName = computed(function()
+	return `{getName()} {getSurname()}`
+end)
 
-local cleanup = observe(todosAtom, function(todo, key)
-	print(`Added {key}: {todo.name}`)
+print(getFullName()) -- "John Doe"
+setName("Jane")
+print(getFullName()) -- "Jane Doe"
+```
+
+The getter function also receives the previous result (or `nil` during the initial run). You can use this for computed signals that depend on the previous result:
+
+```luau
+local getCounter, setCounter = signal(10)
+local getMax = computed(function(prevMax)
+	return math.max(getCounter(), prevMax or 0)
+end)
+
+print(getMax()) -- 10
+setCounter(5)
+print(getMax()) -- 10
+```
+
+---
+
+### `effectScope(callback)`
+
+Scopes allow you to dispose multiple effects at once. The `effectScope` function creates a scope that tracks inner effects, so effects created during the execution of the callback will clean up when the scope disposes.
+
+```luau
+local getCounter, setCounter = signal(0)
+
+local dispose = effectScope(function()
+	effect(function()
+		print(`Count 1 is {getCounter()}`)
+	end)
+	effect(function()
+		print(`Count 2 is {getCounter()}`)
+	end)
+end)
+
+setCounter(1) -- Count 1 is 1, Count 2 is 1
+dispose()
+setCounter(2) -- No output; effects got disposed
+```
+
+Similar to `effect()`, the callback can return a cleanup function that runs when the effect scope is disposed.
+
+---
+
+### `listen(getter, callback)`
+
+The `listen` function creates an effect that only subscribes to the signals accessed by `getter`. Signals accessed by the callback will not be subscribed to, avoiding accidental subscriptions when you want to run side effects.
+
+The callback also receives the previous value, or `nil` when running for the first time.
+
+```luau
+local getCounter, setCounter = signal(0)
+
+listen(getCounter, function(count, prevCount)
+	print(`Count is {count} (was {prevCount})`)
+end) -- Count is 0 (was nil)
+
+setCounter(1) -- Count is 1 (was 0)
+```
+
+Note that the listener callback runs in `untracked()`, so nested effects are not cleaned up.
+
+### Getter functions
+
+In most Charm APIs, you can also subscribe to getter functions that call one or more signals, and they will automatically be tracked:
+
+```luau
+local getCounter, setCounter = signal(0)
+
+local function floorCounter()
+	return math.floor(getCounter())
+end
+
+listen(floorCounter, function(count, prevCount)
+	print(`Floor of count is {count} (was {prevCount})`)
+end) -- Floor of count is 0 (was nil)
+
+setCounter(0.5) -- Doesn't print anything, floor is still 0
+setCounter(1) -- Floor of count is 1 (was 0)
+```
+
+---
+
+### `observe(getter, callback)`
+
+[Observers](https://sleitnick.github.io/RbxObservers/docs/observer-pattern) allow you to track the lifetime of a given state. The `observe` function executes the callback for every unique key added to a table, and disposes the callback when that key is removed.
+
+```luau
+local getItems, setItems = signal({ a = 0, b = 0 })
+
+observe(getItems, function(value, key)
+	print(`Added {key}`)
 	return function()
 		print(`Removed {key}`)
 	end
-end)
+end) -- Added a, Added b
+
+setItems({ a = 0, c = 0 }) -- Removed b, Added c
 ```
 
-#### Parameters
+The callback runs in an effect scope, so effects created in the callback will be disposed when the key is removed:
 
--   `callback`: An atom or selector function that returns a dictionary or an array of values. When a key is added to the state, the factory will be called with the new key and its initial value.
+```luau
+local getItems, setItems = signal({})
 
--   `factory`: A function that will be called whenever a key is added or removed from the atom's state. The callback will receive the key and the entry's initial value as arguments, and may return a cleanup function.
+local dispose = observe(getItems, function(value, key)
+	local getValue = computed(function(prevValue)
+		return getItems()[key] or prevValue
+	end)
 
-#### Returns
+	effect(function()
+		local value = getValue()
+		print(`Set {key} = {value}`)
+		return function()
+			print(`Cleanup {key} = {value}`)
+		end
+	end)
+end)
 
-`observe` returns a cleanup function.
+setItems({ a = 0, b = 0 }) -- Set a = 0, Set b = 0
+setItems({ a = 1, b = 0 }) -- Cleanup a = 0, Set a = 1
+setItems({ a = 1 }) -- Cleanup b = 0
+dispose() -- Cleanup a = 1
+```
 
 ---
 
-### `mapped(callback, mapper)`
+### `subscribe(getter, callback)`
 
-Call `mapped` to transform the keys and values of your state. The `mapper` function will be called for each key-value pair in the atom's state, and the new keys and atoms will be stored in a new atom.
+The `subscribe` function is identical to `listen()`, but the callback does not run initially. The callback only runs when the value returned by the getter function changes.
 
 ```luau
-local todosAtom: Atom<{ Todo }> = atom({})
-local todosById = mapped(todosAtom, function(todo, index)
-	return todo, todo.id
+local getCounter, setCounter = signal(0)
+
+-- Does not output anything initially
+subscribe(getCounter, function(count, prevCount)
+	print(`Count is {count} (was {prevCount})`)
 end)
+
+setCounter(1) -- Count is 1 (was 0)
 ```
-
-#### Parameters
-
--   `callback`: The function whose result you want to map over. This can be an atom or a selector function that reads from atoms.
-
--   `mapper`: The mapper is called for each key in your state. Given the current value and key, it should return a new corresponding value and key:
-
-    1. Return a single value to map the table's original key to a new value.
-    2. Return two values, the first being the value and the second being the key, to update both keys and values.
-    3. Return `nil` for the value to remove the key from the resulting table.
-
-#### Returns
-
-`mapped` returns a read-only atom.
 
 ---
 
-### `peek(value, ...)`
+### `untracked(callback)`
 
-Call `peek` to call a function without tracking it as the dependency of an effect or a selector function.
+In case you want to opt-out of dependency tracking in an effect, you can use `untracked()` to call a function _outside_ the current scope, preventing signals and effects in the function from being tracked.
 
 ```luau
-local nameAtom = atom("John")
-local ageAtom = atom(25)
+local getTracked, setTracked = signal(0)
+local getUntracked, setUntracked = signal(0)
 
 effect(function()
-	local name = nameAtom()
-	local age = peek(ageAtom)
-end)
+	print(`Tracked: {getTracked()}, Untracked: {untracked(getUntracked)}`)
+end) -- Tracked: 0, Untracked: 0
+
+setTracked(1) -- Tracked: 1, Untracked: 0
+setUntracked(1) -- No output
+setTracked(2) -- Tracked: 2, Untracked: 1
 ```
 
-#### Parameters
+Because `untracked()` executes the callback outside the current effect, nested effects created during the execution of the callback will not be tracked by the parent effect:
 
--   `value`: Any value. If the value is a function, `peek` will call it without tracking dependencies and return the result.
+```luau
+local stopEffect
+local stopScope = effectScope(function()
+	untracked(function()
+		stopEffect = effect(function()
+			return function()
+				print("Cleaned up untracked effect")
+			end
+		end)
+	end)
+end)
 
--   **optional** `...args`: Additional arguments to pass to the value if it is a function.
-
-#### Returns
-
-`peek` returns the result of the given function. If the value is not a function, it will return the value as-is.
+stopScope() -- No output, the scope did not track the effect
+stopEffect() -- Cleaned up untracked effect
+```
 
 ---
 
 ### `batch(callback)`
 
-Call `batch` to defer state changes until after the callback has run. This is useful when you need to make multiple changes to the state and only want listeners to be notified once.
+Combines multiple signal updates made by the callback into a single commit that triggers effects once the callback completes.
 
 ```luau
-local nameAtom = atom("John")
-local ageAtom = atom(25)
+local getName, setName = signal("John")
+local getSurname, setSurname = signal("Doe")
 
+effect(function()
+	print(`Full name: {getName()} {getSurname()}`)
+end)
+
+-- Combines both writes into a single update.
+-- Once the callback completes, outputs "Full name: Foo Bar"
 batch(function()
-	nameAtom("Jane")
-	ageAtom(26)
+	setName("Foo")
+	setSurname("Bar")
 end)
 ```
 
-#### Parameters
-
--   `callback`: A function that updates atoms. Listeners will only be notified once all changes have been applied.
-
-#### Returns
-
-`batch` does not return anything.
-
 ---
 
-## 📦 React
+### `mapped(getter, transform)`
 
-### Setup
+The `mapped` function iterates over every key in a table and uses the transform function to assign them to a new key and value. The result is returned as a read-only signal containing the new keys and values. When a key's value changes, or a new key is added to the table, `transform` is called for that key and its current value.
 
-Install the React bindings for Charm using your package manager of choice.
-
-```sh
-npm install @rbxts/react-charm
-yarn add @rbxts/react-charm
-pnpm add @rbxts/react-charm
-```
-
-```toml
-[dependencies]
-ReactCharm = "littensy/react-charm@VERSION"
-```
-
----
-
-### `useAtom(callback, dependencies?)`
-
-Call `useAtom` at the top-level of a React component to read from an atom or selector. The component will re-render when the value changes.
+The first value returned by the transform function is used as the new value:
 
 ```luau
-local todosAtom = require(script.Parent.todosAtom)
+local getList, setList = signal({ "a", "b", "c" })
 
-local function Todos()
-	local todos = useAtom(todosAtom)
-	-- ...
-end
+local getUppercase = mapped(getList, function(value)
+	return string.upper(value)
+end)
+
+print(getUppercase()) -- { "A", "B", "C" }
 ```
 
-If your selector depends on the component's state or props, remember to pass them in a dependency array. This prevents skipped updates when an untracked parameter of the selector changes.
+If the transform function returns two values, the second value is used as the new key:
 
 ```luau
-local todos = useAtom(function()
-	return searchTodos(props.filter)
-end, { props.filter })
-```
+local getList, setList = signal({ "a", "b", "c" })
 
-#### Parameters
+local getSwapped = mapped(getList, function(value, key)
+	return key, value
+end)
 
--   `callback`: An atom or selector function that depends on an atom.
-
--   **optional** `dependencies`: An array of outside values that the selector depends on. If the dependencies change, the subscription is re-created and the component re-renders with the new state.
-
-#### Returns
-
-`useAtom` returns the current state of the atom.
-
----
-
-## 📦 Vide
-
-### Setup
-
-Install the Vide bindings for Charm using your package manager of choice.
-
-```sh
-npm install @rbxts/vide-charm
-yarn add @rbxts/vide-charm
-pnpm add @rbxts/vide-charm
-```
-
-```toml
-[dependencies]
-VideCharm = "littensy/vide-charm@VERSION"
+print(getSwapped()) -- { a = 1, b = 2, c = 3 }
 ```
 
 ---
 
-### `useAtom(callback)`
+### `onCleanup(callback, failSilently?)`
 
-Call `useAtom` in any scope to create a Vide source that returns the current state of an atom or selector.
+The `onCleanup` function binds the callback to the currently running effect or effect scope. Multiple cleanup functions can be bound to the same effect.
+
+Unless `failSilently` is set to `true`, this function will emit a warning if there is no active effect or scope.
 
 ```luau
-local todosAtom = require(script.Parent.todosAtom)
+local dispose = effectScope(function()
+	onCleanup(function()
+		print("Cleaned up")
+	end)
+end)
 
-local function Todos()
-	local todos = useAtom(todosAtom)
-	-- ...
-end
+dispose() -- Cleaned up
 ```
-
-#### Parameters
-
--   `callback`: An atom or selector function that depends on an atom.
-
-#### Returns
-
-`useAtom` returns a Vide source.
 
 ---
 
-## 📗 Charm Sync
+### `atom(initialValue, equals?)`
 
-### Setup
+The `atom` function creates a new reactive signal and returns a single function that acts as both a getter and setter.
 
-The Charm Sync package provides server-client synchronization for your Charm atoms. Install it using your package manager of choice.
+If the atom is called with 0 arguments, the atom returns the current value and subscribes to the signal. Otherwise, when called with 1 or more arguments, the atom will update the signal's value.
+
+```luau
+local counter = atom(0)
+
+print(counter()) -- 0
+counter(1)
+counter(function(count)
+	return count + 1
+end)
+```
+
+You can also pass a custom equality function to only update the signal if the new value is _not_ equal to the current value:
+
+```luau
+local max = atom(0, function(current, incoming)
+	return incoming <= current
+end)
+
+max(1) -- 1
+max(-1) -- 1
+```
+
+---
+
+### `trigger(callback)`
+
+The `trigger()` function allows you to manually trigger updates for downstream dependencies when you've directly mutated a signal's value without using the signal setter:
+
+```luau
+local array = signal({} :: { number })
+local length = computed(function()
+	return #array()
+end)
+
+print(length()) -- 0
+
+-- Direct mutation doesn't automatically trigger updates
+table.insert(array(), 1)
+print(length()) -- Still 0
+
+-- Manually trigger updates
+trigger(array)
+print(length()) -- 1
+```
+
+You can also trigger multiple signals at once:
+
+```luau
+local src1 = signal({} :: { number })
+local src2 = signal({} :: { number })
+local total = computed(function()
+	return #src1() + #src2()
+end)
+
+table.insert(src1(), 1)
+table.insert(src2(), 2)
+
+trigger(function()
+  src1()
+  src2()
+end)
+
+print(total()) -- 2
+```
+
+---
+
+### `flags`
+
+Charm exposes the following global flags to customize behavior:
+
+| Flag              | Default  | Description                                                                                                                                            |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| strict            | `true`\* | Enforces synchronous, non-yielding behavior in signals, effects, and other critical code.                                                              |
+| frozen            | `true`\* | Enforces data immutability by deep-freezing tables passed to signals, excluding objects with metatables.                                               |
+| trackInnerEffects | `true`   | Whether nested effects should be tracked and cleaned up when the parent effect re-runs. This should only be disabled to debug issues during migration. |
+
+The `strict` and `frozen` flags are automatically enabled in Roblox Studio and other development environments where the Luau optimization level is `O1` or lower.
+
+---
+
+## Client-Server Sync
+
+### Installation
 
 ```sh
 npm install @rbxts/charm-sync
@@ -441,273 +621,459 @@ pnpm add @rbxts/charm-sync
 CharmSync = "littensy/charm-sync@VERSION"
 ```
 
----
+### Quick Start
 
-### `server(options)`
-
-Call `server` to create a server sync object. This synchronizes every client's atoms with the server's state by sending partial patches that the client merges into its state.
+Start by specifying the signals that the server should sync to clients. For this example, we'll use the first and last name signals:
 
 ```luau
-local syncer = CharmSync.server({
-	-- A dictionary of the atoms to sync, matching the client's
-	atoms = atomsToSync,
-	-- The minimum interval between state updates
-	interval = 0,
-	-- Whether to send a full history of changes made to the atoms (slower)
-	preserveHistory = false,
-	-- Whether to apply fixes for remote event limitations. Disable this option
-	-- when using a network library with custom ser/des, like ByteNet or Zap.
-	autoSerialize = true,
-})
+-- nameStore
+local getName, setName = signal("John")
+local getSurname, setSurname = signal("Doe")
+local ageAtom = atom(20)
 
--- Sends state updates to clients when a synced atom changes.
--- Omitting sensitive information and data serialization can be done here.
-syncer:connect(function(player, ...)
-	remotes.syncState:fire(player, ...)
-end)
-
--- Sends the initial state to a player upon request. This should fire when a
--- player joins the game.
-remotes.requestState:connect(function(player)
-	syncer:hydrate(player)
-end)
+return {
+	getName = getName,
+	setName = setName,
+	getSurname = getSurname,
+	setSurname = setSurname,
+	ageAtom = ageAtom,
+}
 ```
 
-#### Parameters
+When a player notifies the server that they're ready to start syncing, call `server.addSignalsToClient` with the signals that the client should receive updates for. Once they leave, call `server.removeClient` to unsubscribe them from all updates.
 
--   `options`: An object to configure sync behavior.
+Then, use `server.connect` to specify how state updates should be sent to each client. Pass a callback function that fires a remote with the given target player and the state updates they subscribed to:
 
-    -   `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the client.
+```luau
+playerReadyEvent.OnServerEvent:Connect(function(player)
+	-- Sync signal getters, computed signals, atoms, or reactive proxies
+	server.addSignalsToClient(player, {
+		name = nameStore.getName,
+		surname = nameStore.getSurname,
+		age = nameStore.ageAtom,
+	})
+end)
 
-    -   **optional** `interval`: The interval at which to batch state updates to clients. Defaults to `0`, meaning updates are batched every frame.
+Players.PlayerRemoving:Connect(function(player)
+	server.removeClient(player)
+end)
 
-    -   **optional** `preserveHistory`: Whether to sync an exhaustive history of changes made to the atoms since the last sync event. If `true`, the server sends multiple payloads instead of one. Defaults to `false` for performance.
-
-    -   **optional** `autoSerialize`: Whether to apply validation and workarounds to certain [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#table-indexing). Defaults to `true`, but you should set it to `false` if you serialize remote arguments (i.e. if you use [ByteNet](https://github.com/ffrostfall/ByteNet) or [Zap](https://github.com/red-blox/zap)).
+server.connect(function(player, updates)
+	-- Customize how you send state updates to clients
+	syncEvent:FireClient(player, updates)
+end)
+```
 
 > [!NOTE]
-> Charm sends table updates in the form of partial tables, so arrays will contain `nil` values, which has undefined behavior in remotes without serialization.
->
-> Charm's default `autoSerialize` behavior fixes this, but it can interfere with custom serialization. Disable this option if you use a network library that serializes remote event arguments.
+> On the server, make sure each key corresponds to the same data across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
 
-#### Returns
+To sync the client with the server's state, call `client.addSignals` with a table of writable signals (setter functions or atoms) whose keys match their server counterparts.
 
-`server` returns an object with the following methods:
-
--   `syncer:connect(callback)`: Registers a callback to send state updates to clients. The callback will receive the player and the payload(s) to send, and should fire a remote event. The payload is read-only, so any changes should be applied to a copy of the payload.
-
--   `syncer:hydrate(player)`: Sends the player a full state update for all synced atoms.
-
-#### Caveats
-
--   **Do not use values that cannot be sent over remotes** in your shared atoms. This includes functions, threads, and non-string keys in dictionaries. [Read more about argument limitations in remotes.](https://create.roblox.com/docs/scripting/events/remote#argument-limitations)
-
--   **By default, Charm omits the individual changes made to atoms** between sync events (i.e. a `counterAtom` set to `1` and then `2` will only send the final state of `2`). If you need to preserve a history of changes, set `preserveHistory` to `true`.
-
--   **Charm does not handle network communication.** Use remote events or a network library to send sync payloads - and remember to set `autoSerialize` accordingly!
-
----
-
-### `client(options)`
-
-Call `client` to create a client sync object. This synchronizes the client's atoms with the server's state by merging partial patches sent by the server into each atom.
+After the client receives updates from the server, call `client.patch` to patch the client's signals with the incoming state updates.
 
 ```luau
-local syncer = CharmSync.client({
-	atoms = atomsToSync, -- A dictionary of the atoms to sync, matching the server's
-	ignoreUnhydrated = true, -- Whether to ignore state updates before the initial update
+-- Add signal setters, atoms, or reactive proxies
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+	age = nameStore.ageAtom,
 })
 
--- Applies state updates from the server to the client's atoms.
--- Data deserialization can be done here.
-remotes.syncState:connect(function(...)
-	syncer:sync(...)
+-- Update client signals when receiving updates from the server
+syncEvent.OnClientEvent:Connect(function(updates)
+	client.patch(updates)
 end)
-
--- Requests the initial state from the server when the client joins the game.
--- Before this runs, the client uses the atoms' default values.
-remotes.requestState:fire()
 ```
-
-#### Parameters
-
--   `options`: An object to configure sync behavior.
-
-    -   `atoms`: A dictionary of the atoms to sync. The keys should match the keys on the server.
-
-    -   **optional** `ignoreUnhydrated`: Whether to ignore state updates before setting the initial state. Defaults to `true`.
-
-#### Returns
-
-`client` returns an object with the following methods:
-
--   `syncer:sync(...payloads)` applies a state update from the server.
-
-#### Caveats
-
--   **Charm does not handle network communication.** Use remote events or a network library to receive sync payloads. This includes requesting the initial state, which is implemented via `requestState` in the example above.
 
 ---
 
-### `isNone(value)`
+### `config`
 
-Call `isNone` to check if a value is `None`. Charm's partial state patches omit values that did not change between sync events, so to mark keys for deletion, Charm uses the `None` marker.
+A configuration table that customizes the behavior of Charm Sync on the server.
 
-This function can be used to check whether a value is about to be removed from an atom.
-
-```luau
-local syncer = CharmSync.server({ atoms = atomsToSync })
-
-syncer:connect(function(player, payload)
-	if
-		payload.type === "patch"
-		and payload.data.todosAtom
-		and CharmSync.isNone(payload.data.todosAtom.eggs)
-	then
-		-- 'eggs' will be removed from the client's todo list
-	end
-	remotes.syncState.fire(player, payload)
-end)
-```
-
-#### Parameters
-
--   `value`: Any value. If the value is `None`, `isNone` will return `true`.
-
-#### Returns
-
-`isNone` returns a boolean.
+| Option          | Default | Description                                                                                                                                                                                                                                                           |
+| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| interval        | `0`     | The frequency at which the server will send patches to the client, in seconds. A value of `0` sends updates on the next frame. Set to a negative value to disable the interval.                                                                                       |
+| preserveHistory | `false` | Whether to preserve a full history of state changes since the last sync, at the cost of performance. This is useful if you need to replicate each individual change that occurs between sync events.                                                                  |
+| fixArrays       | `true`  | When `true`, Charm will attempt to work around remote event limitations that cause data loss in array patches. Disable this if your networking library serializes remote arguments (Zap, ByteNet, etc.).                                                              |
+| validatePatches | `true`  | When `true`, and both `fixArrays` and strict mode are enabled, synced values containing unsafe sparse arrays or mixed tables will emit a warning. See the [remote argument limitations](https://create.roblox.com/docs/scripting/events/remote#argument-limitations). |
 
 ---
 
-## 🚀 Examples
+### `server.addSignalsToClient(client, getters)`
 
-### Counter atom
+The `addSignalsToClient` function subscribes a client to updates in the given signals. When an update occurs, the client will receive a state patch of only the values that changed.
+
+You can pass signal getter functions, computed signals, atoms, and [reactive objects](#reactiveinitialvalue) in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
 
 ```luau
-local counterAtom = atom(0)
-
--- Create a selector that returns double the counter value
-local function doubleCounter()
-	return counterAtom() * 2
-end
-
--- Runs after counterAtom is updated and prints double the new value
-subscribe(doubleCounter, function(value)
-	print(value)
+playerReadyEvent.OnServerEvent:Connect(function(player)
+	server.addSignalsToClient(player, {
+		name = nameStore.getName,
+		surname = nameStore.getSurname,
+		age = nameStore.ageAtom,
+	})
 end)
-
-counterAtom(1) --> 2
-counterAtom(function(count)
-	return count + 1
-end) --> 4
 ```
 
-### React component
+You're also allowed to create new signals to sync to specific players, as long as the key is unique to that data:
 
 ```luau
-local counter = require(script.Parent.counter)
-local counterAtom = counter.counterAtom
-local incrementCounter = counter.incrementCounter
+playerReadyEvent.OnServerEvent:Connect(function(player)
+	server.addSignalsToClient(player, {
+		-- 🟢 Good: Player-specific data is synced with a unique key
+		[`data-{player.UserId}`] = computed(function()
+			return getPlayerData(player.UserId)
+		end),
+
+		-- 🔴 Bad: Syncing different data with the same keys does not work
+		playerData = computed(function()
+			return getPlayerData(player.UserId)
+		end),
+	})
+end)
+```
+
+---
+
+### `server.removeSignalsFromClient(client, ...keys)`
+
+The `removeSignalsFromClient` function unsubscribes the client from a list of keys that were previously subscribed to via `addSignalsToClient`.
+
+```luau
+server.addSignalsToClient(player, {
+	name = nameStore.getName,
+	surname = nameStore.getSurname,
+})
+
+server.removeSignalsFromClient(player, "surname")
+```
+
+---
+
+### `server.removeClient(client)`
+
+The `removeClient` function unsubscribes a client from receiving all state updates from the server. You should call this function when a player leaves the game.
+
+```luau
+playerReadyEvent.OnServerEvent:Connect(function(player)
+	server.addSignalsToClient(player, signals)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	server.removeClient(player)
+end)
+```
+
+---
+
+### `server.connect(onSync)`
+
+Binds a callback to run when sending state updates a client. Scheduled updates will be sent periodically at the interval specified in [`config.interval`](#config).
+
+When a synced signal updates, the `onSync` function is scheduled to run for each client subscribed to that signal on the next sync event.
+
+```luau
+server.connect(function(player, updates)
+	syncEvent:FireServer(player, updates)
+end)
+```
+
+---
+
+### `server.disconnect()`
+
+Stops syncing state updates to clients at the automatic interval. This doesn't unbind the last callback, so you can still manually trigger sync events after calling this function by calling `server.flush()`.
+
+```luau
+server.connect(function(player, updates)
+	syncEvent:FireServer(player, updates)
+end)
+
+-- Stops calling the function at the automatic interval
+server.disconnect()
+
+-- Flushing still sends pending updates
+server.flush()
+```
+
+---
+
+### `client.addSignals(setters)`
+
+Subscribes the given writable signals to the states with the corresponding keys on the server. When the server sends updates, the functions associated with each key in the state will be called with the patched values.
+
+You can pass either writable signals, atoms, or [reactive objects](#reactiveinitialvalue) to this function:
+
+```luau
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+	age = nameStore.ageAtom,
+})
+```
+
+---
+
+### `client.removeSignals(...keys)`
+
+Unsubscribes from each signal with the corresponding keys. The signals will retain their current values, but will no longer receive updates from the server.
+
+```luau
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+})
+
+client.removeSignals("name")
+```
+
+---
+
+### `client.patch(updates)`
+
+The `patch` function patches the client's state with the updates sent from the server. The initial update sent by the server will be the full state, and later updates will only include the values that changed.
+
+You should call `patch` when receiving updates from the server from a remote event:
+
+```luau
+client.addSignals({
+	name = nameStore.setName,
+	surname = nameStore.setSurname,
+})
+
+syncEvent.OnClientEvent:Connect(function(updates)
+	client.patch(updates)
+end)
+```
+
+---
+
+### `signalToAtom(getter, setter)`
+
+If you have a lot of signals to sync between the server and clients, it might become difficult to keep track of many getters and setters. The `signalToAtom()` function unifies a signal's `get()` and `set()` functions, allowing you to reuse the same values for `client.addSignals` and `server.addSignalsToClient`.
+
+```luau
+local sharedState = {
+	name = signalToAtom(nameStore.getName, nameStore.setName),
+	surname = signalToAtom(nameStore.getSurname, nameStore.setSurname),
+}
+
+client.addSignals(sharedState)
+server.addSignalsToClient(client, sharedState)
+```
+
+---
+
+### Sync Caveats
+
+Charm Sync will only send clients the differences between the current state and the last-synced state through a process called _delta compression_. In this case, tables are recursively scanned for changes, and unchanged properties are omitted by setting them to `nil`.
+
+But it's hard to differentiate between an unchanged value and a removed value, as both cases are represented by `nil`. We chose to address this by representing deleted values with a special `None` symbol denoted by `{ __none = "__none" }`.
+
+This means nilable values may be replaced with `None` in patches, and code working with update payloads (usually for remote argument serialization) should account for nilable values possibly being sent as `None` in the payload.
+
+---
+
+## Deep Reactivity
+
+Charm's reactivity system is _shallow_ by default: only the top-level value is reactive, so table properties are not checked when determining whether a signal has updated. As a result, tables in Charm should be immutable (copied before writing) in order to signal that a table's properties have changed.
+
+Deep reactivity, on the other hand, uses proxy tables to perform dependency tracking on properties. You can subscribe to a property by indexing the proxy table, and setting a property will notify its subscribers. This approach to reactivity lets you work with mutable data, making state management more intuitive at the cost of added overhead.
+
+You can opt-in to deep reactivity with the Deep Charm library:
+
+### Installation
+
+> [!WARNING]
+> Deep Charm is an experimental library that is not fully documented, and the API is subject to breaking changes.
+
+```sh
+npm install @rbxts/deep-charm
+yarn add @rbxts/deep-charm
+pnpm add @rbxts/deep-charm
+```
+
+```toml
+[dependencies]
+DeepCharm = "littensy/deep-charm@VERSION"
+```
+
+---
+
+### `reactive(initialValue)`
+
+The `reactive()` function takes a mutable table and wraps it in a reactive proxy. Reading properties through the proxy will perform dependency tracking, and nested tables will also be wrapped in a reactive proxy.
+
+```luau
+local users, updateUsers = reactive({
+	{ name = "John", surname = "Doe" },
+})
+
+effect(function()
+	print(`{users[1].name} {users[1].surname}`)
+end) -- Output: John Doe
+
+updateUsers(function(raw)
+	raw[1].name = "Jane"
+	raw[1].surname = "Smith"
+	table.insert(raw, { name = "Steve", surname = "Doe" })
+end) -- Output: Jane Smith
+
+-- You can also mutate the reactive proxy directly:
+users[1].name = "John" -- John Smith
+```
+
+### Mutation vs. update function
+
+Because reactive proxies use metatables for reading and writing, functions like `table.insert` will not work on the proxy. Table functions should only be called on the raw table value, which you can access through the update function returned by `reactive()`.
+
+This update function (`updateUsers()` in the example above) passes the raw table for you to mutate. Once your callback is done executing, the updater will manually notify subscriptions to the reactive proxy and its nested properties. This process does not use metatables, so you should use this for table operations or batching updates.
+
+---
+
+### `toRaw(value)`
+
+If you need to access the raw table through the reactive proxy, use the `toRaw()` function:
+
+```luau
+local raw = {}
+local proxy = reactive(raw)
+
+print(toRaw(proxy) == raw) -- true
+```
+
+Calling `toRaw()` on a proxy also subscribes to its changes. This allows you to use proxies with `observe()` and other Charm APIs that accept a getter function:
+
+```luau
+local proxy, updateProxy = reactive({})
+
+observe(function()
+	return toRaw(proxy)
+end, function(value, key)
+	print(`Value {value} added at key {key}`)
+end)
+
+updateProxy(function(state)
+	table.insert(state, "foo")
+end) -- Value foo added at key 1
+```
+
+---
+
+### `isReactive(value)`
+
+The `isReactive()` function returns `true` if the given value is a reactive proxy by checking its metatable.
+
+```lua
+local raw = {}
+local proxy = reactive(raw)
+
+print(isReactive(proxy)) -- true
+print(isReactive(raw)) -- false
+```
+
+---
+
+## Migration
+
+Charm v0.11 introduces several breaking changes, so this section should help you migrate from an older version.
+
+For reference, a signal is a state container with a separated getter and setter function. Atoms are a signal with a single function for getting and setting the state.
+
+**What to look out for:**
+
+1. Address all of the type errors introduced in your project after updating Charm. Most of them are caused by changes like:
+    - `peek()` was changed to `untracked()` for parity with other state managers
+    - The second arguments of `atom()` changed from an `options` table to an equality function
+    - Removed the second argument of `computed()` (you can do your own equality checks since the computed callback now receives the previous value)
+    - Removed the cleanup argument in effect callbacks (`effect(function(cleanup) end)`)
+
+2. If you use Charm Sync, you'll have to rewrite a lot of your sync code. Fortunately, most of the changes should make your code _less_ complicated:
+    - You can now sync signals per-client, including computed signals. You shouldn't have to modify sync payloads to filter data anymore.
+    - Instead of creating client/server syncers, these modules now act like singletons. Sync APIs are called directly through `CharmSync.client`/`server`.
+    - [Read the updated docs for syncing state →](#client-server-sync)
+
+3. The [`strict` and `frozen` flags](#flags) are automatically enabled in Roblox Studio, so unsafe Charm code will start throwing errors. The flags have the following behaviors:
+    - `strict`: Yielding in effects, signals, and other critical Charm functions will throw an error
+    - `frozen`: Tables passed to signals are deeply frozen to strictly enforce data immutability and prevent accidental mutations
+
+4. Nested effects automatically clean up when the parent effect re-runs or gets disposed. In other words, all effects created during the execution of another effect will be added as a "child" and clean up with the parent effect. This might cause issues in code that relied on the old behavior, where effects were detached from the parent.
+    - This feature applies to the observer function in `observe()`, which also automatically cleans up inner effects to prevent memory leaks. However, this does not apply to `subscribe()` or `listen()`.
+    - Effects that should not be tracked by a parent effect/scope should be wrapped in [`untracked()`](#untrackedcallback).
+    - This feature can introduce runtime bugs in migrated code. If you suspect this to be the cause, to help identify the issue, you can temporarily disable this feature by setting [`flags.trackInnerEffects`](#flags) to `false`.
+
+5. Consider refactoring your code to use some new quality-of-life features. Many of these are made possible thanks to [alien-signals](https://github.com/stackblitz/alien-signals)!
+    - [`signal()`](#signalinitialvalue-equals): make atom reads and writes more explicit
+    - [`listen()`](#listengetter-callback): create a subscription that also runs once immediately
+    - [`effectScope()`](#effectscopecallback): collect and clean up multiple effects at once
+    - [`onCleanup()`](#oncleanupcallback-failsilently): bind a cleanup function to the active effect or scope
+    - [`trigger()`](#triggercallback): trigger updates for table mutations
+
+---
+
+## Examples
+
+- https://github.com/littensy/fishing-minigame: Fisch clone using Charm for server and client state
+
+### React Counter
+
+```luau
+local Charm = require("@packages/charm")
+local ReactCharm = require("@packages/react-charm")
+local React = require("@packages/react")
+
+local getCounter, setCounter = Charm.signal(0)
 
 local function Counter()
-	local count = useAtom(counterAtom)
+	local count = ReactCharm.useSignalState(getCounter)
 
 	return React.createElement("TextButton", {
-		[React.Event.Activated] = incrementCounter,
+		[React.Event.Activated] = function()
+			setCounter(count + 1)
+		end,
 		Text = `Count: {count}`,
-		Size = UDim2.new(0, 100, 0, 50),
+		Size = UDim2.fromOffset(100, 50),
 	})
 end
 ```
 
-### Vide component
+### Vide Counter
 
 ```luau
-local counter = require(script.Parent.counter)
-local counterAtom = counter.counterAtom
-local incrementCounter = counter.incrementCounter
+local Charm = require("@packages/charm")
+local VideCharm = require("@packages/vide-charm")
+local Vide = require("@packages/vide")
+
+local create = Vide.create
+
+local getCounter, setCounter = Charm.signal(0)
 
 local function Counter()
-	local count = useAtom(counterAtom)
+	local count = VideCharm.useSignalState(getCounter)
 
 	return create "TextButton" {
-		Activated = incrementCounter,
+		Activated = function()
+			setCounter(function(count)
+				return count + 1
+			end)
+		end,
 		Text = function()
 			return `Count: {count()}`
 		end,
-		Size = UDim2.new(0, 100, 0, 50),
+		Size = UDim2.fromOffset(100, 50),
 	}
 end
-```
-
-### Server-client sync
-
-Charm is designed for both client and server use, but there are often cases where the client needs to reference state that lives on the server. The CharmSync package provides a way to synchronize atoms between the server and its clients using remote events.
-
-Start by creating a set of atoms to sync between the server and clients. Export these atoms from a module to be shared between the server and client:
-
-```luau
--- atoms.luau
-local counter = require(script.Parent.counter)
-local todos = require(script.Parent.todos)
-
-return {
-	counterAtom = counter.counterAtom,
-	todosAtom = todos.todosAtom,
-}
-```
-
-Then, on the server, create a server sync object and pass in the atoms to sync. Use remote events to broadcast state updates and send initial state to clients upon request.
-
-> [!NOTE]
-> If `preserveHistory` is `true`, the server will send multiple payloads to the client, so the callback passed to `connect` should accept a variadic `...payloads` parameter. Otherwise, you only need to handle a single `payload` parameter.
-
-```luau
--- sync.server.luau
-local atoms = require(script.Parent.atoms)
-
-local syncer = CharmSync.server({ atoms = atoms })
-
--- Sends state updates to clients when a synced atom changes.
--- Omitting sensitive information and data serialization can be done here.
-syncer:connect(function(player, payload)
-	remotes.syncState.fire(player, payload)
-end)
-
--- Sends the initial state to a player upon request. This should fire when a
--- player joins the game.
-remotes.requestState:connect(function(player)
-	syncer:hydrate(player)
-end)
-```
-
-Finally, on the client, create a client sync object and use it to apply incoming state changes.
-
-```luau
--- sync.client.luau
-local atoms = require(script.Parent.atoms)
-
-local syncer = CharmSync.client({ atoms = atoms })
-
--- Applies state updates from the server to the client's atoms.
-remotes.syncState:connect(function(payload)
-	syncer:sync(payload)
-end)
-
--- Requests the initial state from the server when the client joins the game.
--- Before this runs, the client uses the atoms' default values.
-remotes.requestState:fire()
 ```
 
 ---
 
 <p align="center">
-Charm is released under the <a href="LICENSE.md">MIT License</a>.
+Charm is released under the <a href="LICENSE">MIT License</a>.
 </p>
 
 <div align="center">
 
-[![MIT License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE.md)
+[![MIT License](https://img.shields.io/github/license/littensy/charm?style=for-the-badge)](LICENSE)
 
 </div>

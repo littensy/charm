@@ -1,31 +1,32 @@
 name: CI
 
-on:
-  push:
-    branches:
-      - main
-
-  pull_request:
-    branches:
-      - main
+on: [push, pull_request]
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: pnpm/action-setup@v4
         with:
           run_install: true
+      - uses: CompeyDev/setup-rokit@v0.1.2
 
-      - name: Install Rokit
-        uses: CompeyDev/setup-rokit@v0.1.2
-
-      - name: Install Wally dependencies
-        run: pnpm wally
+      - name: Setup Lute
+        run: lute setup --with-luaurc
 
       - name: Check code quality
-        run: pnpm check
+        run: lute run check
+
+      - name: Run ESLint and Prettier
+        run: |
+          pnpm eslint packages
+          pnpm prettier --check packages
+
+      - name: Run tests
+        run: lute run test
 
       - name: Build models
-        run: pnpm build
+        run: lute run build
