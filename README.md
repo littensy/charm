@@ -700,7 +700,7 @@ client.addSignals({
 	status = store.setStatus,
 	timer = store.timerAtom,
 	-- Signals unique to a player should also have a key unique to
-	-- that player, to avoid overwriting other synced signals
+	-- that player, to avoid name collisions
 	[`inventory-{Players.LocalPlayer.UserId}`] = setInventory,
 })
 
@@ -708,6 +708,9 @@ client.addSignals({
 syncEvent.OnClientEvent:Connect(function(updates)
 	client.patch(updates)
 end)
+
+-- Notify the server that the client is ready to receive updates
+playerReadyEvent:FireServer()
 
 -- The signals will now update to match the server's state
 subscribe(getInventory, function(inventory)
@@ -844,7 +847,7 @@ client.addSignals({
 	status = store.setStatus,
 	timer = store.timerAtom,
 	-- Signals unique to a player should also have a key unique to
-	-- that player, to avoid overwriting other synced signals
+	-- that player, to avoid name collisions
 	[`inventory-{Players.LocalPlayer.UserId}`] = clientStore.setInventory,
 })
 ```
