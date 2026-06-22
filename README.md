@@ -623,34 +623,43 @@ CharmSync = "littensy/charm-sync@VERSION"
 
 ### Quick Start
 
-Start by specifying the signals that the server should sync to clients. For this example, we'll use the first and last name signals:
+Start by specifying the signals that the server should sync to clients. For this example, we'll replicate a round status and timer signal, and each player's inventory:
 
 ```luau
--- nameStore
-local getName, setName = signal("John")
-local getSurname, setSurname = signal("Doe")
-local ageAtom = atom(20)
+-- store.luau
+
+local getStatus, setStatus = signal("intermission")
+local timerAtom = atom(20)
+local getInventories, setInventories = signal({} :: { [Username]: Inventory })
 
 return {
-	getName = getName,
-	setName = setName,
-	getSurname = getSurname,
-	setSurname = setSurname,
-	ageAtom = ageAtom,
+	getStatus = getStatus,
+	setStatus = setStatus,
+	timerAtom = timerAtom,
+	getInventories = getInventories,
+	setInventories = setInventories,
 }
 ```
+
+#### Server setup
 
 When a player notifies the server that they're ready to start syncing, call `server.addSignalsToClient` with the signals that the client should receive updates for. Once they leave, call `server.removeClient` to unsubscribe them from all updates.
 
 Then, use `server.connect` to specify how state updates should be sent to each client. Pass a callback function that fires a remote with the given target player and the state updates they subscribed to:
 
 ```luau
+-- sync.server.luau
+
 playerReadyEvent.OnServerEvent:Connect(function(player)
 	-- Sync signal getters, computed signals, atoms, or reactive proxies
 	server.addSignalsToClient(player, {
-		name = nameStore.getName,
-		surname = nameStore.getSurname,
-		age = nameStore.ageAtom,
+		status = store.getStatus,
+		timer = store.timerAtom,
+		-- Signals unique to a player should also have a key unique to
+		-- that player, to avoid overwriting other synced signals
+		[`inventory-{player.UserId}`] = computed(function()
+			return store.getInventories()[player.Name]
+		end),
 	})
 end)
 
@@ -659,29 +668,50 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 server.connect(function(player, updates)
-	-- Customize how you send state updates to clients
+	-- Customize how you replicate state updates to clients
 	syncEvent:FireClient(player, updates)
 end)
+
+-- Changes now get replicated to clients
+store.setStatus("started")
+store.timerAtom(30)
 ```
 
-> [!NOTE]
-> On the server, make sure each key corresponds to the same data across all players. If two players subscribe to the same key, but were given different signals, Charm will output a warning.
+> [!WARNING]
+> On the server, make sure each key corresponds to the same signal across all players. In other words, if you're syncing a signal that is unique to a player, ensure that the key is also unique to that player.
+> 
+> If two players subscribe to the same key, but were assigned different signals for that key, Charm will output a warning.
+
+#### Client setup
 
 To sync the client with the server's state, call `client.addSignals` with a table of writable signals (setter functions or atoms) whose keys match their server counterparts.
 
 After the client receives updates from the server, call `client.patch` to patch the client's signals with the incoming state updates.
 
 ```luau
+-- sync.client.luau
+
+-- The server is replicating a signal containing the client's
+-- inventory, so this signal will receive those updates
+local getInventory, setInventory = signal({} :: Inventory)
+
 -- Add signal setters, atoms, or reactive proxies
 client.addSignals({
-	name = nameStore.setName,
-	surname = nameStore.setSurname,
-	age = nameStore.ageAtom,
+	status = store.setStatus,
+	timer = store.timerAtom,
+	-- Signals unique to a player should also have a key unique to
+	-- that player, to avoid overwriting other synced signals
+	[`inventory-{Players.LocalPlayer.UserId}`] = setInventory,
 })
 
 -- Update client signals when receiving updates from the server
 syncEvent.OnClientEvent:Connect(function(updates)
 	client.patch(updates)
+end)
+
+-- The signals will now update to match the server's state
+subscribe(getInventory, function(inventory)
+  print("My inventory is", table.concat(inventory))
 end)
 ```
 
@@ -702,37 +732,41 @@ A configuration table that customizes the behavior of Charm Sync on the server.
 
 ### `server.addSignalsToClient(client, getters)`
 
-The `addSignalsToClient` function subscribes a client to updates in the given signals. When an update occurs, the client will receive a state patch of only the values that changed.
+The `addSignalsToClient` function replicates changes in the given signals to a specific client. When an update occurs, the client will receive a delta-compressed state patch containing only the values that changed.
 
-You can pass signal getter functions, computed signals, atoms, and [reactive objects](#reactiveinitialvalue) in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
+You can pass signal getter functions, computed signals, atoms, and [reactive proxies](#reactiveinitialvalue) in the `getters` table. This function can also be called multiple times on the same client to subscribe to new signals.
 
 ```luau
 playerReadyEvent.OnServerEvent:Connect(function(player)
 	server.addSignalsToClient(player, {
-		name = nameStore.getName,
-		surname = nameStore.getSurname,
-		age = nameStore.ageAtom,
+		status = store.getStatus,
+		timer = store.timerAtom,
 	})
 end)
 ```
 
-You're also allowed to create new signals to sync to specific players, as long as the key is unique to that data:
+You're also allowed to create new signals to sync to specific players, as long as the key is unique to that signal:
 
 ```luau
 playerReadyEvent.OnServerEvent:Connect(function(player)
 	server.addSignalsToClient(player, {
-		-- 🟢 Good: Player-specific data is synced with a unique key
-		[`data-{player.UserId}`] = computed(function()
-			return getPlayerData(player.UserId)
+		-- 🟢 Good: Player-specific signals are synced with a unique key
+		[`playerData-{player.UserId}`] = computed(function()
+			return clientStore.getPlayerData(player.UserId)
 		end),
 
-		-- 🔴 Bad: Syncing different data with the same keys does not work
+		-- 🔴 Bad: Syncing different signals with the same keys does not work
 		playerData = computed(function()
-			return getPlayerData(player.UserId)
+			return clientStore.getPlayerData(player.UserId)
 		end),
 	})
 end)
 ```
+
+> [!NOTE]
+> On the server, make sure each key corresponds to the same signal across all players. In other words, if you're syncing a signal that is unique to a player, ensure that the key is also unique to that player.
+> 
+> If two players subscribe to the same key, but were assigned different signals for that key, Charm will output a warning.
 
 ---
 
@@ -742,11 +776,11 @@ The `removeSignalsFromClient` function unsubscribes the client from a list of ke
 
 ```luau
 server.addSignalsToClient(player, {
-	name = nameStore.getName,
-	surname = nameStore.getSurname,
+	status = store.getStatus,
+	timer = store.timerAtom,
 })
 
-server.removeSignalsFromClient(player, "surname")
+server.removeSignalsFromClient(player, "status")
 ```
 
 ---
@@ -807,9 +841,11 @@ You can pass either writable signals, atoms, or [reactive objects](#reactiveinit
 
 ```luau
 client.addSignals({
-	name = nameStore.setName,
-	surname = nameStore.setSurname,
-	age = nameStore.ageAtom,
+	status = store.setStatus,
+	timer = store.timerAtom,
+	-- Signals unique to a player should also have a key unique to
+	-- that player, to avoid overwriting other synced signals
+	[`inventory-{Players.LocalPlayer.UserId}`] = clientStore.setInventory,
 })
 ```
 
@@ -821,11 +857,11 @@ Unsubscribes from each signal with the corresponding keys. The signals will reta
 
 ```luau
 client.addSignals({
-	name = nameStore.setName,
-	surname = nameStore.setSurname,
+	status = store.setStatus,
+	timer = store.timerAtom,
 })
 
-client.removeSignals("name")
+client.removeSignals("status")
 ```
 
 ---
@@ -838,8 +874,9 @@ You should call `patch` when receiving updates from the server from a remote eve
 
 ```luau
 client.addSignals({
-	name = nameStore.setName,
-	surname = nameStore.setSurname,
+	status = store.setStatus,
+	timer = store.timerAtom,
+	[`inventory-{Players.LocalPlayer.UserId}`] = clientStore.setInventory,
 })
 
 syncEvent.OnClientEvent:Connect(function(updates)
@@ -855,8 +892,8 @@ If you have a lot of signals to sync between the server and clients, it might be
 
 ```luau
 local sharedState = {
-	name = signalToAtom(nameStore.getName, nameStore.setName),
-	surname = signalToAtom(nameStore.getSurname, nameStore.setSurname),
+	status = signalToAtom(store.getStatus, store.setStatus),
+	inventories = signalToAtom(store.getInventories, store.setInventories),
 }
 
 client.addSignals(sharedState)
@@ -869,7 +906,7 @@ server.addSignalsToClient(client, sharedState)
 
 Charm Sync will only send clients the differences between the current state and the last-synced state through a process called _delta compression_. In this case, tables are recursively scanned for changes, and unchanged properties are omitted by setting them to `nil`.
 
-But it's hard to differentiate between an unchanged value and a removed value, as both cases are represented by `nil`. We chose to address this by representing deleted values with a special `None` symbol denoted by `{ __none = "__none" }`.
+But it's hard to differentiate between an unchanged value and a removed value, as both cases are represented by `nil`. Charm addresses this by representing deleted values with a special `None` value denoted by `{ __none = "__none" }`.
 
 This means nilable values may be replaced with `None` in patches, and code working with update payloads (usually for remote argument serialization) should account for nilable values possibly being sent as `None` in the payload.
 
