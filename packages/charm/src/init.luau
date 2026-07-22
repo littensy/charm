@@ -52,6 +52,8 @@ local RECURSED = 0b001000 -- Has been visited in a recursion check
 local DIRTY = 0b010000 -- Value is outdated and needs recomputation
 local PENDING = 0b100000 -- Might be dirty, pending verification
 
+local HAS_CHILD = 0b1000000 -- Dependencies include child effects or scopes
+
 -- Global version counter for dependency link deduplication. Incremented at the
 -- start of each effect/computed run to ensure links created in the same cycle
 -- are deduplicated.
@@ -172,6 +174,33 @@ local function purgeDeps(sub: ReactiveNode)
 end
 
 --[[
+	Unlinks child effects and effect scopes before a parent effect reruns.
+]]
+local function unlinkChildEffects(sub: ReactiveNode)
+	local current = sub.depsTail
+	while current do
+		local previous = current.prevDep
+		local dep = current.dep
+		if not bit32.btest(dep.flags, MUTABLE) then
+			unlink(current, sub)
+		end
+		current = previous
+	end
+end
+
+--[[
+	Unlinks all dependencies in LIFO order (newest to oldest).
+]]
+local function disposeAllDepsInReverse(sub: ReactiveNode)
+	local current = sub.depsTail
+	while current do
+		local previous = current.prevDep
+		unlink(current, sub)
+		current = previous
+	end
+end
+
+--[[
 	Runs all cleanup functions registered with the effect node. Any errors
 	thrown during cleanup are caught and logged in a single error after all
 	cleanups are complete.
@@ -209,6 +238,10 @@ local function run(effect: EffectNode)
 		bit32.btest(effectFlags, DIRTY)
 		or (bit32.btest(effectFlags, PENDING) and checkDirty(effect.deps :: Link, effect))
 	then
+		if bit32.btest(effectFlags, HAS_CHILD) then
+			unlinkChildEffects(effect)
+		end
+
 		runCleanups(effect.cleanups)
 
 		-- Cancel the run if the effect was disposed during cleanup
@@ -238,7 +271,7 @@ local function run(effect: EffectNode)
 			runCleanups(effect.cleanups)
 		end
 	else
-		effect.flags = WATCHING
+		effect.flags = bit32.bor(WATCHING, bit32.band(effectFlags, HAS_CHILD))
 	end
 end
 
@@ -341,15 +374,14 @@ end
 	inactive, with all cleanup functions run and resources released.
 ]]
 local function stopEffect(effect: EffectScopeNode)
-	effect.depsTail = nil
 	effect.flags = NONE
 
-	purgeDeps(effect)
+	disposeAllDepsInReverse(effect)
 
 	-- Unlink from the parent effect, if it exists
 	local sub = effect.subs
 	if sub then
-		unlink(sub, effect)
+		unlink(sub)
 	end
 
 	runCleanups(effect.cleanups)
@@ -413,9 +445,8 @@ local function unwatched(node: ReactiveNode)
 	if bit32.band(node.flags, MUTABLE) == 0 then
 		stopEffect(node :: EffectScopeNode)
 	elseif node.depsTail then
-		node.depsTail = nil
 		node.flags = bit32.bor(MUTABLE, DIRTY)
-		purgeDeps(node)
+		disposeAllDepsInReverse(node)
 	end
 end
 
@@ -614,8 +645,10 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	-- Inner effects are tracked as a dependency of the parent effect, so that
 	-- they can be automatically cleaned up when the parent effect re-runs, and
 	-- to ensure the correct execution order when nested effects are notified
-	if activeSub and (flags.trackInnerEffects or activeSub.flags == NONE) then
-		link(node, activeSub, 0)
+	local parent = activeSub
+	if parent and (flags.trackInnerEffects or bit32.band(parent.flags, bit32.bnot(HAS_CHILD)) == NONE) then
+		link(node, parent, 0)
+		parent.flags = bit32.bor(parent.flags, HAS_CHILD)
 	end
 
 	-- Start a batch so that the effect can register a cleanup function before
@@ -656,8 +689,10 @@ local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
 	}
 
 	-- Inner effect scopes are tracked as a dependency of the parent effect
-	if activeSub and not detached then
-		link(node, activeSub, 0)
+	local parent = activeSub
+	if parent and not detached then
+		link(node, parent, 0)
+		parent.flags = bit32.bor(parent.flags, HAS_CHILD)
 	end
 
 	local prevSub = setActiveSub(node)
