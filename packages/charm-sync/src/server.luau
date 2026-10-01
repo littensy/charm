@@ -125,8 +125,8 @@ local function diffGlobalUpdateBuffer(): { any }
 	local patchCount = #globalUpdates
 	local patches = table.create(patchCount)
 
-	for _, update in globalUpdates do
-		table.insert(patches, patch.diff(update.oldValue, update.newValue))
+	for index, update in globalUpdates do
+		patches[index] = patch.diff(update.oldValue, update.newValue)
 	end
 
 	return patches
@@ -146,7 +146,7 @@ local function selectFromGlobalPatchList(client: any, globalPatches: { any }): {
 	for index, update in globalUpdates do
 		local patchData = globalPatches[index]
 
-		if not patchData then
+		if patchData == nil then
 			continue
 		end
 

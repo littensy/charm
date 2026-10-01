@@ -403,6 +403,27 @@ test.describe("historical", function()
 		server.flush()
 		assert(#payloads == 0, "Expected no payloads to be sent for unchanged state")
 	end)
+
+	test("should maintain patch list order for stale update", function()
+		local a = Charm.atom({ x = 1 })
+		local b = Charm.atom({ y = 1 })
+		local payloads
+
+		server.connect(function(_client, _payloads)
+			payloads = _payloads
+		end)
+
+		server.addSignalsToClient("client", { a = a, b = b })
+		server.flush()
+
+		payloads = nil
+		a({ x = 1 }) -- new table, same contents: diff is nil
+		b({ y = 2 })
+		server.flush()
+		assert(payloads, "Expected payloads to be sent")
+		assert(payloads[1].type == "patch", "Expected payload to be patch")
+		assert(payloads[1].data.b.y == 2, "Expected payload to contain atom 'b'")
+	end)
 end)
 
 test("addSignalsToClient should ignore tracking context", function()
