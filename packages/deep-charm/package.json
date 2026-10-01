@@ -1,6 +1,6 @@
 {
 	"name": "@rbxts/deep-charm",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Use Charm with plain Luau tables",
 	"license": "MIT",
 	"main": "src/init.luau",

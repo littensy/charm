@@ -1,6 +1,6 @@
 [package]
 name = "littensy/vide-charm"
-version = "0.4.0"
+version = "0.4.1"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 exclude = [
