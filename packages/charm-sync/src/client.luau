@@ -64,6 +64,8 @@ local function applyInitPayload(data: { [string]: any })
 			trackedSignals[key](value)
 		elseif trackedReactives[key] then
 			shallowMergeReactive(trackedReactives[key], value)
+		else
+			warn(`charm-sync failed to sync key '{key}' because it is not currently registered by addSignals()`)
 		end
 	end
 end
@@ -80,6 +82,8 @@ local function applyPatchPayload(data: { [string]: any })
 		elseif trackedReactive then
 			patch.applyMutable(trackedReactive.__target, diffs)
 			Charm.trigger(trackedReactive.__track)
+		else
+			warn(`charm-sync failed to sync key '{key}' because it is not currently registered by addSignals()`)
 		end
 	end
 end
