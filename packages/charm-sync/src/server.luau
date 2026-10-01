@@ -61,7 +61,7 @@ local function trackSignal<T>(key: string, getter: () -> T, identifier: unknown)
 	local rawInitialValue = toRaw(initialValue)
 	local snapshot = if initialValue ~= rawInitialValue then utils.deepCopy(rawInitialValue) else initialValue
 
-	local dispose = Charm.effect(function()
+	local dispose = Charm.untracked(Charm.effect, function()
 		local newValue = getter()
 		local rawValue = toRaw(newValue)
 		local isReactive = newValue ~= rawValue

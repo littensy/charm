@@ -405,4 +405,31 @@ test.describe("historical", function()
 	end)
 end)
 
+test("addSignalsToClient should ignore tracking context", function()
+	local counter = Charm.atom(0)
+	local payloads: { any }?
+
+	server.connect(function(_client, _payloads)
+		payloads = _payloads
+	end)
+
+	local dispose = Charm.effectScope(function()
+		server.addSignalsToClient("PLAYER_ID", { counter = counter })
+	end)
+
+	server.flush()
+	assert(payloads, "Expected payloads to be sent")
+	assert(payloads[1].type == "init", "Expected first payload to be init")
+	assert(payloads[1].data.counter == 0, "Expected init payload to contain atom 'counter'")
+
+	dispose()
+
+	payloads = nil
+	counter(1)
+	server.flush()
+	assert(payloads, "Expected payloads to be sent")
+	assert(payloads[1].type == "patch", "Expected first payload to be patch")
+	assert(payloads[1].data.counter == 1, "Expected patch payload to contain atom 'counter'")
+end)
+
 return {}
