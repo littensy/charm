@@ -39,10 +39,10 @@ local syncCallback: ((client: any, payloads: { SyncPayload }) -> ())?
 	support custom implementations of reactive proxies.
 ]]
 local function toRaw<T>(value: T): T
-	value = value :: types.ReactiveProxy<T>
-	if type(value) == "table" and type(value.__target) == "table" and type(value.__track) == "function" then
-		value.__track()
-		return toRaw(value.__target)
+	local proxy = value :: types.ReactiveProxy<T>
+	if type(proxy) == "table" and type(proxy.__target) == "table" and type(proxy.__track) == "function" then
+		proxy.__track()
+		return toRaw(proxy.__target)
 	end
 	return value
 end

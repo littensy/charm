@@ -486,7 +486,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 		end
 
 		-- Check if the new value is different from the pending value
-		if if equals then not equals(node.pendingValue, value) else node.pendingValue ~= value then
+		if if equals then not equals(node.pendingValue, value :: T) else node.pendingValue ~= value then
 			if flags.frozen then
 				deepFreeze(value)
 			end

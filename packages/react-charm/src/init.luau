@@ -14,7 +14,7 @@ local React = require("./React")
 	@return The current state.
 ]]
 local function useSignalState<T>(getter: () -> T, dependencies: {}?): T
-	local value, setValue = React.useState(getter)
+	local value: T, setValue = React.useState(getter)
 
 	React.useLayoutEffect(function(): () -> ()
 		return Charm.listen(getter, setValue :: (T, T?) -> ())

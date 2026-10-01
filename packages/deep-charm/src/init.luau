@@ -36,9 +36,9 @@ end
 ]]
 local function toRaw<T>(value: T): T
 	if isReactive(value) then
-		value = value :: ReactiveProxy<T>
-		value.__track()
-		return toRaw(value.__target)
+		local proxy = value :: ReactiveProxy<T>
+		proxy.__track()
+		return toRaw(proxy.__target)
 	end
 	return value
 end
@@ -115,7 +115,7 @@ end
 	@return A reactive proxy if the value is a table
 ]]
 local function toReactive<T>(value: T, trackParent: (() -> ())?): T
-	return if type(value) == "table" then reactive(value, trackParent) else value
+	return if type(value) == "table" then reactive(value, trackParent) :: T else value :: T
 end
 
 function ReactiveProxy.__index(self: ReactiveProxy, key: any): any

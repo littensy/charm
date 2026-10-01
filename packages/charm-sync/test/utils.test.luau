@@ -6,7 +6,7 @@ test("should flatten functions", function()
 	local input = {
 		a = Charm.atom(0),
 		b = { c = Charm.atom(0) },
-		d = { e = { f = utils.signalToAtom(Charm.signal(0)) } },
+		d = { e = { f = utils.signalToAtom<<number>>(Charm.signal(0)) } },
 	}
 
 	local result = utils.flatten<<{ [string]: Charm.Atom<number> }>>(input)
