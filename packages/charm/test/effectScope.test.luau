@@ -92,4 +92,67 @@ test("should dispose inner effects if created in an effect", function()
 	assert(triggers == 2, "ran after dispose")
 end)
 
+test("should dispose child effects in reverse order", function()
+	local order: { number } = {}
+	local stopScope = effectScope(function()
+		for i = 1, 3 do
+			effect(function()
+				return function()
+					table.insert(order, i)
+				end
+			end)
+		end
+	end)
+
+	stopScope()
+	assert(table.concat(order) == "321", `bad dispose order: {table.concat(order)}`)
+end)
+
+test("should dispose nested effects deepest first", function()
+	local order: { string } = {}
+	local stopScope = effectScope(function()
+		effect(function()
+			effect(function()
+				return function()
+					table.insert(order, "grandchild")
+				end
+			end)
+			return function()
+				table.insert(order, "child")
+			end
+		end)
+	end)
+
+	stopScope()
+	assert(table.concat(order, ", ") == "grandchild, child", `bad dispose order: {table.concat(order, ", ")}`)
+end)
+
+test("should cleanup an intermediate scope before its parent effect", function()
+	local order: { string } = {}
+	local src, setSrc = signal(false)
+
+	effect(function()
+		src()
+		table.insert(order, "outer run")
+		effectScope(function()
+			effect(function()
+				table.insert(order, "inner run")
+				return function()
+					table.insert(order, "inner cleanup")
+				end
+			end)
+		end)
+		return function()
+			table.insert(order, "outer cleanup")
+		end
+	end)
+
+	table.clear(order)
+	setSrc(true)
+	assert(
+		table.concat(order, ", ") == "inner cleanup, outer cleanup, outer run, inner run",
+		`bad rerun order: {table.concat(order, ", ")}`
+	)
+end)
+
 return {}

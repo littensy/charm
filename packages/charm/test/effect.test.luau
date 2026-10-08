@@ -521,13 +521,57 @@ test("should effects dispose in order", function()
 
 	assert(#order == 0, "should not cleanup immediately")
 	setSrc(true)
-	assert(table.concat(order) == "123", `bad rerun order: {table.concat(order)}`)
+	assert(table.concat(order) == "321", `bad rerun order: {table.concat(order)}`)
 	table.clear(order)
 	stopEffect()
-	assert(table.concat(order) == "123", `bad dispose order: {table.concat(order)}`)
+	assert(table.concat(order) == "321", `bad dispose order: {table.concat(order)}`)
 	table.clear(order)
 	setSrc(false)
 	assert(#order == 0, "should not cleanup after dispose")
+end)
+
+test("should cleanup nested effects deepest first", function()
+	local order: { string } = {}
+
+	local stopEffect = effect(function()
+		effect(function()
+			effect(function()
+				return function()
+					table.insert(order, "grandchild")
+				end
+			end)
+			return function()
+				table.insert(order, "child")
+			end
+		end)
+		return function()
+			table.insert(order, "outer")
+		end
+	end)
+
+	stopEffect()
+	assert(table.concat(order, ", ") == "grandchild, child, outer", `bad dispose order: {table.concat(order, ", ")}`)
+end)
+
+test("should cleanup computed child effects in reverse when unwatched", function()
+	local order: { number } = {}
+	local c = computed(function()
+		for i = 1, 3 do
+			effect(function()
+				return function()
+					table.insert(order, i)
+				end
+			end)
+		end
+		return 0
+	end)
+
+	local stopEffect = effect(function()
+		c()
+	end)
+
+	stopEffect()
+	assert(table.concat(order) == "321", `bad dispose order: {table.concat(order)}`)
 end)
 
 test("should handle inner effect clearing outer effect's deps on rerun", function()
@@ -545,7 +589,7 @@ test("should handle inner effect clearing outer effect's deps on rerun", functio
 	setSrc(true)
 end)
 
-test.skip("should handle inner effect cleanup disposing outer effect", function()
+test("should handle inner effect cleanup disposing outer effect", function()
 	local order: { number } = {}
 
 	local src, setSrc = signal(false)
@@ -566,28 +610,65 @@ test.skip("should handle inner effect cleanup disposing outer effect", function(
 
 	table.clear(order)
 	setSrc(true)
-	assert(table.concat(order) == "1234", `bad rerun order: {table.concat(order)}`)
+	assert(table.concat(order) == "4321", `bad rerun order: {table.concat(order)}`)
 
 	table.clear(order)
 	setSrc(false)
 	assert(#order == 0, "should not cleanup after dispose")
 end)
 
-test.skip("should old inner effect dispose before outer effect re-runs", function()
+test("should cleanup child before parent on rerun", function()
 	local order: { string } = {}
 	local src, setSrc = signal(false)
 	effect(function()
 		src()
-		table.insert(order, "outer")
+		table.insert(order, "outer run")
 		effect(function()
+			table.insert(order, "inner run")
 			return function()
-				table.insert(order, "inner")
+				table.insert(order, "inner cleanup")
 			end
 		end)
+		return function()
+			table.insert(order, "outer cleanup")
+		end
 	end)
+
 	table.clear(order)
 	setSrc(true)
-	assert(table.concat(order) == "innerouter", `bad rerun order: {table.concat(order)}`)
+	assert(
+		table.concat(order, ", ") == "inner cleanup, outer cleanup, outer run, inner run",
+		`bad rerun order: {table.concat(order, ", ")}`
+	)
+end)
+
+test("should preserve child tracking after an inner-only rerun", function()
+	local order: { string } = {}
+	local outerSrc, setOuterSrc = signal(false)
+	local innerSrc, setInnerSrc = signal(false)
+
+	effect(function()
+		outerSrc()
+		table.insert(order, "outer run")
+		effect(function()
+			innerSrc()
+			table.insert(order, "inner run")
+			return function()
+				table.insert(order, "inner cleanup")
+			end
+		end)
+		return function()
+			table.insert(order, "outer cleanup")
+		end
+	end)
+
+	setInnerSrc(true)
+	table.clear(order)
+	setOuterSrc(true)
+	assert(
+		table.concat(order, ", ") == "inner cleanup, outer cleanup, outer run, inner run",
+		`bad rerun order: {table.concat(order, ", ")}`
+	)
 end)
 
 return {}
