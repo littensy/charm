@@ -242,6 +242,48 @@ local function run(effect: EffectNode)
 	end
 end
 
+local failedEffects: { [EffectNode]: boolean }? = nil
+
+--[[
+	Settles the dependencies of an effect that already failed in this flush
+	without running it again, so a later change still reaches it.
+]]
+local function settleFailed(effect: EffectNode)
+	local dirty = bit32.btest(effect.flags, DIRTY)
+	-- `checkDirty` returns early once its subscriber is dirty, so it gets a
+	-- clean stand-in, and it stops at the first changed dependency, so it
+	-- starts again from each one.
+	local settled: ReactiveNode = { flags = NONE }
+	local dep = effect.deps
+	while dep do
+		local success, changed = pcall(checkDirty, dep, settled)
+		if changed or not success then
+			dirty = true
+		end
+		dep = dep.nextDep
+	end
+	effect.flags = if dirty then bit32.bor(WATCHING, RECURSED, DIRTY) else WATCHING
+end
+
+-- Kept at module level so a flush without errors allocates no closure.
+-- The running effect stays in `queued` until it returns, so `flush` can
+-- find the one that threw.
+local function drain()
+	local failed = failedEffects
+	while notifyIndex < queuedLength do
+		notifyIndex += 1
+		local effect = queued[notifyIndex] :: EffectNode
+
+		if failed and failed[effect] then
+			settleFailed(effect)
+		else
+			run(effect)
+		end
+
+		queued[notifyIndex] = nil
+	end
+end
+
 --[[
 	Processes the queued effect runs. Effects are run in the order they were
 	queued, ensuring that all updates are processed.
@@ -253,28 +295,40 @@ local function flush()
 		return
 	end
 
-	local success, err = pcall(function()
-		while notifyIndex < queuedLength do
-			notifyIndex += 1
-			local effect = queued[notifyIndex] :: EffectNode
-			queued[notifyIndex] = nil
-			run(effect)
-		end
-	end)
+	local errors: { any }?
+	local errorCount = 0
 
-	-- Skip over any remaining queued effects that were not run due to an error
-	while notifyIndex < queuedLength do
-		notifyIndex += 1
+	while true do
+		local success, err = pcall(drain)
+		if success then
+			break
+		end
 		local effect = queued[notifyIndex] :: EffectNode
 		queued[notifyIndex] = nil
-		effect.flags = bit32.bor(effect.flags, bit32.bor(WATCHING, RECURSED))
+		local failed = failedEffects or {}
+		failedEffects = failed
+		failed[effect] = true
+		local collected = errors or {}
+		errors = collected
+		errorCount += 1
+		collected[errorCount] = err
 	end
 
+	failedEffects = nil
 	notifyIndex = 0
 	queuedLength = 0
 
-	if not success then
-		error(err, 0)
+	if errorCount == 1 then
+		error((errors :: { any })[1], 0)
+	elseif errorCount > 1 then
+		local messages: { string } = {}
+		for index = 1, errorCount do
+			local success, message = pcall(tostring, (errors :: { any })[index])
+			messages[index] = if success and type(message) == "string"
+				then message
+				else "<error could not be converted to a string>"
+		end
+		error(`Errors occurred during effect execution:\n\n{table.concat(messages, "\n\n")}`, 0)
 	end
 end
 
