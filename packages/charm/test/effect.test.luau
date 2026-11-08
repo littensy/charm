@@ -271,16 +271,15 @@ test("should handle flags are indirectly updated during checkDirty", function()
 	assert(triggers == 2, "did not update indirectly")
 end)
 
-test("should not execute skipped effects from previous failed flush when updating unrelated signal", function()
+test("should not rerun flushed effects when updating unrelated signal", function()
 	local a, setA = signal(0)
 	local b, setB = signal(0)
 	local c, setC = signal(0)
 	local d = computed(function()
-		c()
-		return 0
+		return c()
 	end)
 
-	local effect3Executed = false
+	local effect3Runs = 0
 
 	effect(function()
 		a()
@@ -293,7 +292,7 @@ test("should not execute skipped effects from previous failed flush when updatin
 	effect(function()
 		a()
 		d()
-		effect3Executed = true
+		effect3Runs += 1
 	end)
 	effect(function()
 		b()
@@ -301,15 +300,14 @@ test("should not execute skipped effects from previous failed flush when updatin
 
 	setA(1)
 
-	effect3Executed = false
 	local success, err = pcall(setA, 2)
 	assert(not success and string.find(tostring(err), "Error in effect 2"), `bad error: {err}`)
 
-	assert(not effect3Executed, "effect 3 should not have executed after failed flush")
+	assert(effect3Runs == 3, "effect 3 should have executed during failed flush")
 	setB(1)
-	assert(not effect3Executed, "effect 3 should not have executed after updating unrelated signal b")
+	assert(effect3Runs == 3, "effect 3 should not have executed after updating unrelated signal b")
 	setC(1)
-	assert(effect3Executed, "effect 3 should have executed after updating signal c")
+	assert(effect3Runs == 4, "effect 3 should have executed after updating signal c")
 end)
 
 test("should allow finite recursion", function()
