@@ -12,6 +12,234 @@ test("should disallow yielding", function()
 	assert(not success, "should error on yield")
 end)
 
+for _, batched in { false, true } do
+	test(`should run every queued effect before rethrowing errors (batched: {batched})`, function()
+		local src = Charm.atom(0)
+		local seen = 0
+
+		Charm.effect(function()
+			if src() == 1 then
+				error("first effect failed", 0)
+			end
+		end)
+		Charm.effect(function()
+			if src() == 1 then
+				error("second effect failed", 0)
+			end
+		end)
+		Charm.effect(function()
+			seen = src()
+		end)
+
+		local success, err = pcall(function()
+			if batched then
+				Charm.batch(function()
+					src(1)
+				end)
+			else
+				src(1)
+			end
+		end)
+
+		assert(seen == 1, "should run the sibling effect before rethrowing")
+		assert(not success, "should rethrow effect errors to the writer")
+		assert(type(err) == "string", "should combine effect errors into a string")
+		assert(string.find(err, "first effect failed"), `missing first error: {err}`)
+		assert(string.find(err, "second effect failed"), `missing second error: {err}`)
+
+		src(2)
+		assert(seen == 2, "should run effects on the next write")
+	end)
+end
+
+test("should not retry a failed recursive effect in the same flush", function()
+	local src = Charm.atom(0)
+	local runs = 0
+	local seen = 0
+
+	Charm.effect(function()
+		local value = src()
+		if value > 0 and value < 4 then
+			runs += 1
+			src(value + 1)
+			error("recursive effect failed", 0)
+		end
+	end)
+	Charm.effect(function()
+		seen = src()
+	end)
+
+	local success, err = pcall(function()
+		src(1)
+	end)
+	assert(not success and string.find(tostring(err), "recursive effect failed"), `bad error: {err}`)
+	assert(runs == 1, "should not retry the failed effect in the same flush")
+	assert(seen == 2, "should run the sibling with the latest value")
+
+	src(4)
+	assert(seen == 4, "should run effects on the next write")
+end)
+
+test("should recover a failed effect through a computed dependency", function()
+	local trigger = Charm.atom(0)
+	local src = Charm.atom(0)
+	local value = Charm.computed(function()
+		return src()
+	end)
+	local runs = 0
+	local seen = 0
+	local fail = true
+
+	Charm.effect(function()
+		local current = trigger()
+		seen = value()
+		runs += 1
+		if current == 1 and fail then
+			error("effect failed", 0)
+		end
+	end)
+	Charm.effect(function()
+		if trigger() == 1 then
+			src(10)
+		end
+	end)
+
+	assert(not pcall(trigger, 1), "should report the failed effect")
+	assert(runs == 3 and seen == 10, "should run the failed effect and settle the computed dependency")
+	fail = false
+	for nextValue = 11, 13 do
+		src(nextValue)
+		assert(seen == nextValue, "should recover through the computed dependency")
+		assert(runs == nextValue - 7, "should run once per dependency write")
+	end
+end)
+
+test("should keep a failed effect isolated until its dependency changes", function()
+	local src = Charm.atom(0)
+	local other = Charm.atom(0)
+	local runs = 0
+	local seen = 0
+	local otherSeen = 0
+
+	Charm.effect(function()
+		local value = src()
+		runs += 1
+		if value == 1 then
+			src(2)
+			error("recursive effect failed", 0)
+		end
+	end)
+	Charm.effect(function()
+		seen = src()
+	end)
+	Charm.effect(function()
+		otherSeen = other()
+	end)
+
+	assert(not pcall(src, 1), "should report the failed effect")
+	assert(runs == 2 and seen == 2, "should skip only the requeued failed effect")
+	other(1)
+	assert(otherSeen == 1, "should flush the unrelated effect")
+	assert(runs == 2 and seen == 2, "should not retry on an unrelated write")
+	src(4)
+	assert(runs == 3 and seen == 4, "should recover on its own dependency write")
+end)
+
+test.describe("non-strict flush errors", function()
+	local previousStrict = Charm.flags.strict
+
+	test.beforeEach(function()
+		previousStrict = Charm.flags.strict
+		Charm.flags.strict = false
+	end)
+
+	test.afterEach(function()
+		Charm.flags.strict = previousStrict
+	end)
+
+	test("should rethrow one table error unchanged", function()
+		local src = Charm.atom(0)
+		local payload = {}
+		local seen = 0
+		Charm.effect(function()
+			if src() == 1 then
+				error(payload, 0)
+			end
+		end)
+		Charm.effect(function()
+			seen = src()
+		end)
+
+		local success, err = pcall(function()
+			src(1)
+		end)
+		assert(not success and err == payload, "should preserve the original error value")
+		assert(seen == 1, "should finish the queue before rethrowing")
+		src(2)
+		assert(seen == 2, "should flush the next write")
+	end)
+
+	test("should combine two errors in queue order", function()
+		local src = Charm.atom(0)
+		for _, message in { "first failure", "second failure" } do
+			Charm.effect(function()
+				if src() == 1 then
+					error(message, 0)
+				end
+			end)
+		end
+
+		local success, err = pcall(function()
+			src(1)
+		end)
+		assert(not success, "should report both errors")
+		assert(
+			string.find(tostring(err), "first failure") and string.find(tostring(err), "second failure"),
+			"should combine errors in queue order"
+		)
+	end)
+
+	test("should finish and recover when error conversion throws", function()
+		local src = Charm.atom(0)
+		local seen = 0
+		local payload = setmetatable({}, {
+			__tostring = function(): string
+				error("error conversion failed", 0)
+			end,
+		})
+		Charm.effect(function()
+			if src() == 1 then
+				error(payload, 0)
+			end
+		end)
+		Charm.effect(function()
+			if src() == 1 then
+				error("second failure", 0)
+			end
+		end)
+		Charm.effect(function()
+			seen = src()
+		end)
+
+		local success, err = pcall(function()
+			src(1)
+		end)
+		assert(not success, "should report the errors")
+		assert(seen == 1, "should finish the queue before converting errors")
+		print(err)
+		assert(string.find(tostring(err), "error conversion failed"), "should report the error conversion failure")
+		src(2)
+		assert(seen == 2, "should flush the next write")
+		local fresh = Charm.atom(0)
+		local freshSeen = 0
+		Charm.effect(function()
+			freshSeen = fresh()
+		end)
+		fresh(5)
+		assert(freshSeen == 5, "should flush a new unrelated effect")
+	end)
+end)
+
 test.describe("traceback", function()
 	local DEFAULT_ERROR = "Test error"
 

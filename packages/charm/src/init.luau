@@ -439,8 +439,12 @@ local function run(effect: EffectNode)
 		if success and type(cleanup) == "function" then
 			table.insert(effect.cleanups, wrapUserSpace(cleanup))
 		elseif not success then
-			effect.status = CLEAN
-			effect.queued = false
+			-- Do not allow the effect to queue itself if an error occurred
+			-- during its execution
+			if effect.queued and effect.status ~= DISPOSED then
+				effect.status = CLEAN
+				effect.queued = false
+			end
 			error(cleanup, 0)
 		end
 
@@ -462,8 +466,8 @@ local function flush()
 		return
 	end
 
-	local errors: { string } = {}
-	local failed = false
+	local errors: { unknown } = {}
+	local errorCount = 0
 
 	-- Run all queued effects, catching errors to ensure all effects have a
 	-- chance to run and clean up before the error is thrown
@@ -478,15 +482,22 @@ local function flush()
 		end)
 
 		if not success then
-			failed = true
-			table.insert(errors, tostring(err))
+			errorCount += 1
+			errors[errorCount] = err
 		end
 	end
 
 	notifyIndex = 0
 	queueLength = 0
 
-	if failed then
+	-- Preserve the original error value when possible, otherwise create a
+	-- combined error message if multiple errors occurred
+	if errorCount == 1 then
+		error(errors[1], 0)
+	elseif errorCount > 1 then
+		for index = 1, errorCount do
+			errors[index] = tostring(errors[index])
+		end
 		error(`An error occurred during effect execution:\n\n{table.concat(errors, "\n\n")}`, 0)
 	end
 end
