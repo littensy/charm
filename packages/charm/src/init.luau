@@ -13,6 +13,7 @@ export type SignalNode<T = any> = BaseDependency & {
 	status: typeof(CLEAN) | typeof(DIRTY),
 	currentValue: T,
 	pendingValue: T,
+	equals: Equals<T>?,
 }
 
 export type ComputedNode<T = any> = BaseSubscriber & BaseDependency & {
@@ -369,8 +370,9 @@ end
 
 local function updateSignal(signal: SignalNode): boolean
 	local pendingValue = signal.pendingValue
+	local equals = signal.equals
 	signal.status = CLEAN
-	if signal.currentValue ~= pendingValue then
+	if if equals then not equals(signal.currentValue, pendingValue) else signal.currentValue ~= pendingValue then
 		signal.currentValue = pendingValue
 		return true
 	else
@@ -536,6 +538,7 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (() -> T, (((T) -
 		subs = {},
 		currentValue = initialValue,
 		pendingValue = initialValue,
+		equals = equals,
 	}
 
 	if flags.frozen then
