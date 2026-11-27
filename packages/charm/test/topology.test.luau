@@ -477,7 +477,7 @@ test.describe("error handling", function()
 		assert(string.match(tostring(result), "fail"), "should throw fail")
 
 		a(2)
-		assert(c() == 2, "c should recover and return 2")
+		assert(c() == 2, `c should recover and return 2, got {c()}`)
 	end)
 end)
 

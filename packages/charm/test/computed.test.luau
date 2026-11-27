@@ -179,4 +179,40 @@ test("consecutive inner resets through computed chain", function()
 	assert(table.concat(calls) == "0102030", `bad runs after s(3), got {table.concat(calls)}`)
 end)
 
+test("should recover from error on init", function()
+	local a, setA = Charm.signal(1)
+	local shouldFail = true
+
+	local c = Charm.computed(function()
+		if shouldFail then
+			error("boom", 0)
+		end
+		return a() * 2
+	end)
+
+	assert(not pcall(c), "initial call should fail")
+	shouldFail = false
+	assert(c() == 2, "should succeed after error recovery")
+	setA(5)
+	assert(c() == 10, "should succeed after update")
+end)
+
+test("should recover from error on update", function()
+	local e, setE = Charm.signal(1)
+	local c3 = Charm.computed(function()
+		local v = e()
+		if v == 2 then
+			error("boom", 0)
+		end
+		return v * 10
+	end)
+
+	assert(c3() == 10, "initial call should succeed")
+	setE(2)
+	assert(not pcall(c3), "should fail after e updates to 2")
+	assert(not pcall(c3), "should fail after trying again with e still 2")
+	setE(3)
+	assert(c3() == 30, "should recover and return 30 after error")
+end)
+
 return {}

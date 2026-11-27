@@ -362,6 +362,7 @@ local function updateComputed(computed: ComputedNode): boolean
 		computed.value = newValue
 		return oldValue ~= newValue
 	else
+		computed.status = DIRTY
 		error(newValue, 0)
 	end
 end
@@ -994,13 +995,13 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, transform: (VI
 	getter = wrapUserSpace(getter)
 	transform = wrapUserSpace(transform)
 
-	local nextInput: { [KI]: VI } = {}
+	local input: { [KI]: VI } = {}
 	local keyMap: { [KI]: KO } = {}
 
 	return computed(function(lastOutput: { [KO]: VO }?): { [KO]: VO }
 		local nextOutput: { [KO]: VO } = lastOutput or {}
-		local prevInput = nextInput
-		nextInput = getter()
+		local prevInput = input
+		local nextInput = getter()
 
 		-- For keys that were removed from the input, remove the corresponding
 		-- keys from the output.
@@ -1048,6 +1049,8 @@ local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, transform: (VI
 				keyMap[keyIn] = nextKeyOut
 			end
 		end
+
+		input = nextInput
 
 		return nextOutput
 	end)

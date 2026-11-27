@@ -125,4 +125,24 @@ test("should remove old key if mapper returns a new key", function()
 	assert(state["2=1"], "should have mapped second element to key 2=1")
 end)
 
+test("should recover from failed transform function", function()
+	local items = Charm.atom({ 1, 2 })
+	local failOnce = true
+
+	local doubled = Charm.mapped(items, function(v: number, k: number)
+		if failOnce and k == 2 then
+			failOnce = false
+			error("transform boom", 0)
+		end
+		return v * 2
+	end)
+
+	assert(not pcall(doubled), "should fail on first call")
+	items({ 1, 2, 3 })
+	local r = doubled()
+	assert(r[1] == 2, `should have doubled 1, got {r[1]}`)
+	assert(r[2] == 4, `should have doubled 2, got {r[2]}`)
+	assert(r[3] == 6, `should have doubled 3, got {r[3]}`)
+end)
+
 return {}
