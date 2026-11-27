@@ -1,6 +1,7 @@
 local Charm = require("../src")
 local test = require("../../../tests/test")
 
+local atom = Charm.atom
 local computed = Charm.computed
 local effect = Charm.effect
 local effectScope = Charm.effectScope
@@ -595,6 +596,692 @@ test("should old inner effect dispose before outer effect re-runs", function()
 	table.clear(order)
 	setSrc(true)
 	assert(table.concat(order) == "innerouter", `bad rerun order: {table.concat(order)}`)
+end)
+
+test.describe("FIFO ordering", function()
+	test("should notify inner effects in the same order as non-inner effects", function()
+		local a = atom(0)
+		local b = atom(0)
+		local c = computed(function()
+			return a() - b()
+		end)
+		local order1 = {}
+		local order2 = {}
+		local order3 = {}
+
+		effect(function()
+			table.insert(order1, "effect1")
+			a()
+		end)
+		effect(function()
+			table.insert(order1, "effect2")
+			a()
+			b()
+		end)
+
+		effect(function()
+			c()
+			effect(function()
+				table.insert(order2, "effect1")
+				a()
+			end)
+			effect(function()
+				table.insert(order2, "effect2")
+				a()
+				b()
+			end)
+		end)
+
+		effectScope(function()
+			effect(function()
+				table.insert(order3, "effect1")
+				a()
+			end)
+			effect(function()
+				table.insert(order3, "effect2")
+				a()
+				b()
+			end)
+		end)
+
+		table.clear(order1)
+		table.clear(order2)
+		table.clear(order3)
+
+		startBatch()
+		b(1)
+		a(1)
+		endBatch()
+
+		assert(table.concat(order1, ", ") == "effect2, effect1", "wrong order 1")
+		assert(table.concat(order2, ", ") == "effect2, effect1", "wrong order 2")
+		assert(table.concat(order3, ", ") == "effect2, effect1", "wrong order 3")
+	end)
+
+	test("should duplicate subscribers do not affect the notify order", function()
+		local src1 = atom(0)
+		local src2 = atom(0)
+		local order: { string } = {}
+
+		effect(function()
+			table.insert(order, "a")
+			local currentSub = setActiveSub(nil)
+			local isOne = src2() == 1
+			setActiveSub(currentSub)
+			if isOne then
+				src1()
+			end
+			src2()
+			src1()
+		end)
+		effect(function()
+			table.insert(order, "b")
+			src1()
+		end)
+		src2(1) -- src1.subs: a -> b -> a
+
+		table.clear(order)
+		src1(src1() + 1)
+
+		assert(table.concat(order) == "ab", `wrong order: {table.concat(order)}`)
+	end)
+
+	test("should handle side effect with inner effects", function()
+		local a = atom(0)
+		local b = atom(0)
+		local order: { string } = {}
+
+		effect(function()
+			effect(function()
+				a()
+				table.insert(order, "a")
+			end)
+			effect(function()
+				b()
+				table.insert(order, "b")
+			end)
+			assert(table.concat(order) == "ab", `wrong order: {table.concat(order)}`)
+
+			table.clear(order)
+			b(1)
+			a(1)
+		end)
+
+		-- DEVIATION: This assertion was moved outside of the effect so that it
+		-- runs after the batch updates have been processed
+		assert(table.concat(order) == "ba", `wrong order: {table.concat(order)}`)
+	end)
+
+	test("should run cleanups in sequence", function()
+		local order = {}
+
+		local a = atom(false)
+		local stopEffect = effect(function()
+			a()
+			onCleanup(function()
+				table.insert(order, "a")
+			end)
+			onCleanup(function()
+				table.insert(order, "b")
+			end)
+		end)
+
+		assert(table.concat(order) == "", "should not cleanup immediately")
+
+		a(true)
+		assert(table.concat(order) == "ab", `bad update: {table.concat(order)}`)
+
+		table.clear(order)
+		stopEffect()
+		assert(table.concat(order) == "ab", `bad dispose: {table.concat(order)}`)
+
+		table.clear(order)
+		a(false)
+		assert(table.concat(order) == "", "should not cleanup after update")
+	end)
+
+	test("recursive effects should run and cleanup in order", function()
+		local a = atom(0)
+		local order: { string } = {}
+
+		effect(function()
+			local value = a()
+			table.insert(order, `+{value}`)
+			if value < 3 then
+				a(value + 1)
+			end
+			return function()
+				table.insert(order, `-{value}`)
+			end
+		end)
+		assert(table.concat(order) == "+0-0+1-1+2-2+3", `bad order: {table.concat(order)}`)
+
+		table.clear(order)
+		a(100)
+		assert(table.concat(order) == "-3+100", `bad order: {table.concat(order)}`)
+	end)
+
+	test("inner effects should dispose in order", function()
+		local src = atom(false)
+		local log: { string } = {}
+
+		local dispose = effect(function()
+			src()
+			effect(function()
+				return function()
+					table.insert(log, "inner1:cleanup")
+				end
+			end)
+			effect(function()
+				return function()
+					table.insert(log, "inner2:cleanup")
+				end
+			end)
+			effect(function()
+				return function()
+					table.insert(log, "inner3:cleanup")
+				end
+			end)
+		end)
+
+		src(true)
+		assert(
+			table.concat(log, ", ") == "inner1:cleanup, inner2:cleanup, inner3:cleanup",
+			`bad update order: {table.concat(log, ", ")}`
+		)
+
+		table.clear(log)
+		dispose()
+		assert(
+			table.concat(log, ", ") == "inner1:cleanup, inner2:cleanup, inner3:cleanup",
+			`bad dispose order: {table.concat(log, ", ")}`
+		)
+
+		table.clear(log)
+		src(false)
+		assert(table.concat(log, ", ") == "", "should not cleanup after dispose")
+	end)
+
+	test("inner effects should dispose before outer effect re-runs", function()
+		local src = atom(false)
+		local dispose: () -> ()
+		local log: { string } = {}
+
+		dispose = effect(function()
+			src()
+			table.insert(log, "outer:run")
+			effect(function()
+				return function()
+					table.insert(log, "inner1:cleanup")
+					dispose()
+				end
+			end)
+			effect(function()
+				return function()
+					table.insert(log, "inner2:cleanup")
+					dispose()
+				end
+			end)
+			effect(function()
+				return function()
+					table.insert(log, "inner3:cleanup")
+					dispose()
+				end
+			end)
+		end)
+
+		src(true)
+		assert(
+			table.concat(log, ", ") == "outer:run, inner1:cleanup, inner2:cleanup, inner3:cleanup",
+			`bad rerun order: {table.concat(log, ", ")}`
+		)
+
+		table.clear(log)
+		src(false)
+		assert(table.concat(log, ", ") == "", "should not cleanup after dispose")
+	end)
+
+	-- https://github.com/johnsoncodehk/reactive-framework-test-suite #241
+	test("three-level cleanup ordering: deepest first if cascaded", function()
+		local log: { string } = {}
+
+		local dispose = effect(function()
+			effect(function()
+				effect(function()
+					return function()
+						table.insert(log, "grandchild:cleanup")
+					end
+				end)
+				return function()
+					table.insert(log, "child:cleanup")
+				end
+			end)
+			return function()
+				table.insert(log, "outer:cleanup")
+			end
+		end)
+
+		dispose()
+		assert(
+			table.concat(log, ", ") == "grandchild:cleanup, child:cleanup, outer:cleanup",
+			`bad cleanup order: {table.concat(log, ", ")}`
+		)
+	end)
+
+	-- https://github.com/johnsoncodehk/reactive-framework-test-suite #243
+	test("cleanup ordering correct after prior inner-only re-run", function()
+		local a = atom(0)
+		local b = atom(0)
+		local log: { string } = {}
+
+		effect(function()
+			a()
+			table.insert(log, "outer:run")
+			effect(function()
+				b()
+				table.insert(log, "inner:run")
+				return function()
+					table.insert(log, "inner:cleanup")
+				end
+			end)
+			return function()
+				table.insert(log, "outer:cleanup")
+			end
+		end)
+
+		b(1) -- inner re-runs alone
+		table.clear(log)
+
+		a(1)
+		assert(
+			table.concat(log, ", ") == "inner:cleanup, outer:cleanup, outer:run, inner:run",
+			`bad cleanup order after inner-only re-run: {table.concat(log, ", ")}`
+		)
+	end)
+end)
+
+-- https://github.com/stackblitz/alien-signals/pull/110
+test.describe("checkDirty graph mutation", function()
+	test("should handle inner effect clearing outer computed's deps on rerun", function()
+		local src = atom(false)
+		local stopEffect: () -> ()
+		local c = computed(function()
+			effect(function()
+				return function()
+					stopEffect()
+				end
+			end)
+			effect(function() end)
+			return src()
+		end)
+		stopEffect = effect(function()
+			c()
+		end)
+		src(true)
+	end)
+
+	test("#109", function()
+		local s = atom(false)
+		local dispose: () -> ()
+		local a = computed(function()
+			if s() then
+				dispose()
+			end
+			return 0
+		end)
+		local b = computed(function()
+			return a()
+		end)
+		dispose = effect(function()
+			b()
+		end)
+		s(true)
+	end)
+
+	-- (1) Side-effect after the dispose-trigger inside the effect body
+	--     should still run, just like in any other JS function — disposing
+	--     swaps the .fn property but the closure already on the stack must
+	--     finish executing.
+	test("self-dispose inside inner effect: code after dispose() still runs", function()
+		local s = atom(0)
+		local dispose: () -> ()
+		local stages: { string } = {}
+
+		dispose = effect(function()
+			table.insert(stages, "start")
+			s()
+			if s() == 1 then
+				dispose()
+				table.insert(stages, "after-dispose")
+			end
+			table.insert(stages, "end")
+		end)
+
+		local function assertStages(expected: string)
+			local text = table.concat(stages, ", ")
+			assert(text == expected, `expected "{expected}", got "{text}"`)
+		end
+
+		assertStages("start, end")
+		s(1)
+		assertStages("start, end, start, after-dispose, end")
+	end)
+
+	-- (2) When dispose is triggered from *another* node's update (the
+	--     #109 path), the swapped fn replaces the user fn before run() calls
+	--     it — so the side-effect inside the user fn is never invoked.
+	--     This documents that this run is *skipped*, not just suppressed.
+	test("disposed-by-other-node effect: scheduled run is skipped entirely", function()
+		local s = atom(0)
+		local dispose: () -> ()
+		local bodyRuns = 0
+
+		local a = computed(function()
+			if s() == 1 then
+				dispose()
+			end
+			return s()
+		end)
+
+		dispose = effect(function()
+			a()
+			bodyRuns += 1
+		end)
+		effect(function()
+			a()
+		end)
+
+		assert(bodyRuns == 1, `should have run once initially, got {bodyRuns}`)
+		s(1)
+		-- The flush queued e1 because of the propagation; if e1 had been
+		-- disposed *between flushes*, this run wouldn't have been scheduled.
+		-- The fix-by-fn-swap turns the scheduled run into a no-op.
+		assert(bodyRuns == 1, `should not have run after dispose, got {bodyRuns}`)
+	end)
+
+	-- (3) After being disposed mid-flush, the effect's graph state should
+	--     be clean: no deps, not Watching, no subs — otherwise future
+	--     propagations would still walk through it.
+	test("disposed effect: graph state is fully cleaned up", function()
+		local s = atom(0)
+		local dispose: () -> ()
+		local e1Node: Charm.EffectNode?
+
+		local a = computed(function()
+			if s() == 1 then
+				dispose()
+			end
+			return s()
+		end)
+
+		dispose = effect(function()
+			e1Node = e1Node or Charm.getActiveSub() :: Charm.EffectNode?
+			a()
+		end)
+		effect(function()
+			a()
+		end)
+
+		s(1)
+
+		assert(e1Node ~= nil, "e1Node should have been set")
+		assert(next(e1Node.deps) == nil, "e1Node should have no deps")
+		assert(e1Node.status == 3 :: any, `e1Node should be disposed, got {e1Node.status}`)
+	end)
+
+	test("disposed effect should not be re-notified on later updates", function()
+		local s = atom(0)
+		local dispose1: () -> ()
+		local e1runs = 0
+
+		local a = computed(function()
+			if s() == 1 then
+				dispose1()
+			end
+			return s()
+		end)
+
+		dispose1 = effect(function()
+			a()
+			e1runs += 1
+		end)
+		effect(function()
+			a()
+		end)
+
+		assert(e1runs == 1, `should have run once initially, got {e1runs}`)
+		s(1)
+		assert(e1runs == 1, `should not have run after dispose, got {e1runs}`)
+
+		-- If e1 was actually disposed, further signal changes shouldn't
+		-- involve it at all. With the fn-swap fix, e1 stays subscribed to `a`
+		-- and gets notified each time, even though fn is now a no-op.
+		s(2)
+		s(3)
+		s(4)
+		assert(e1runs == 1, `should not have run after further updates, got {e1runs}`)
+	end)
+
+	-- Same shape as test #109, but the dispose target is an effectScope
+	-- instead of an effect. effectScopeOper has no defer branch in the current
+	-- fix, so unwatched() cascades immediately and the original crash should
+	-- still reproduce.
+	test("scope-variant: dispose effectScope during computed update", function()
+		local s = atom(false)
+		local disposeScope: () -> ()
+
+		local a = computed(function()
+			if s() then
+				disposeScope()
+			end
+			return 0
+		end)
+		local b = computed(function()
+			return a()
+		end)
+
+		disposeScope = effectScope(function()
+			effect(function()
+				b()
+			end)
+		end)
+
+		s(true)
+	end)
+
+	test("shallowPropagate walks stale link after sibling disposal", function()
+		local s = atom(0)
+		local dispose1: () -> ()
+		local e2Value = -1
+
+		local a = computed(function()
+			if s() == 1 then
+				dispose1()
+			end
+			return s()
+		end)
+
+		dispose1 = effect(function()
+			a()
+		end)
+		effect(function()
+			e2Value = a()
+		end)
+
+		assert(e2Value == 0, `should have initial value 0, got {e2Value}`)
+		s(1)
+		assert(e2Value == 1, `should have updated to 1, got {e2Value}`)
+	end)
+
+	test("shallowPropagate walks stale link with 3 subscribers", function()
+		local s = atom(0)
+		local dispose1: () -> ()
+		local e2Value = -1
+		local e3Value = -1
+
+		local a = computed(function()
+			if s() == 1 then
+				dispose1()
+			end
+			return s()
+		end)
+
+		dispose1 = effect(function()
+			a()
+		end)
+		effect(function()
+			e2Value = a()
+		end)
+		effect(function()
+			e3Value = a()
+		end)
+
+		assert(e2Value == 0, `e2Value should have initial value 0, got {e2Value}`)
+		assert(e3Value == 0, `e3Value should have initial value 0, got {e3Value}`)
+		s(1)
+		assert(e2Value == 1, `e2Value should have updated to 1, got {e2Value}`)
+		assert(e3Value == 1, `e3Value should have updated to 1, got {e3Value}`)
+	end)
+
+	test("stale-link: disposed effect still runs", function()
+		local s = atom(0)
+		local dispose1: () -> ()
+		local e1runs = 0
+
+		local a = computed(function()
+			if s() == 1 then
+				dispose1()
+			end
+			return s()
+		end)
+
+		dispose1 = effect(function()
+			a()
+			e1runs += 1
+		end)
+		effect(function()
+			a() -- second subscriber keeps 'a' alive
+		end)
+
+		assert(e1runs == 1, `should have run once initially, got {e1runs}`)
+		s(1)
+		assert(e1runs == 1, `should not have run after dispose, got {e1runs}`)
+	end)
+
+	test("variant - dep.subs undefined at line 190", function()
+		local s = atom(0)
+		local dispose: () -> ()
+		local a = computed(function()
+			s()
+			return 0
+		end)
+		local a2 = computed(function()
+			if s() == 1 then
+				dispose()
+			end
+			return s()
+		end)
+		local b = computed(function()
+			a()
+			a2()
+			return 0
+		end)
+		dispose = effect(function()
+			b()
+		end)
+		s(1)
+	end)
+end)
+
+test.describe("parent-child link integrity", function()
+	-- https://github.com/stackblitz/alien-signals/issues/115
+	test("outer keeps responding to own deps after inner re-runs", function()
+		local a = atom(0)
+		local b = atom(0)
+		local outerRuns = 0
+		local innerRuns = 0
+
+		effect(function()
+			a()
+			outerRuns += 1
+			effect(function()
+				b()
+				innerRuns += 1
+			end)
+		end)
+		assert(outerRuns == 1, "outer should have run once initially")
+		assert(innerRuns == 1, "inner should have run once initially")
+
+		-- Trigger inner via b — outer must NOT re-run (b is not its dep)
+		b(1)
+		assert(outerRuns == 1, "outer should not have re-run after b update")
+		assert(innerRuns >= 2, "inner should have re-run after b update")
+
+		-- Trigger outer via a — must re-run despite inner having re-run earlier
+		a(1)
+		assert(outerRuns == 2, "outer should have re-run after a update")
+	end)
+
+	test("outer responds after one of multiple sibling inners re-runs", function()
+		local a = atom(0)
+		local b1 = atom(0)
+		local b2 = atom(0)
+		local outerRuns = 0
+		local inner1Runs = 0
+		local inner2Runs = 0
+
+		effect(function()
+			a()
+			outerRuns += 1
+			effect(function()
+				b1()
+				inner1Runs += 1
+			end)
+			effect(function()
+				b2()
+				inner2Runs += 1
+			end)
+		end)
+		assert(outerRuns == 1, "outer should have run once initially")
+		assert(inner1Runs == 1, "inner1 should have run once initially")
+		assert(inner2Runs == 1, "inner2 should have run once initially")
+
+		-- Only inner1 re-runs
+		b1(1)
+		assert(outerRuns == 1, "outer should not have re-run after b1 update")
+		assert(inner1Runs >= 2, "inner1 should have re-run after b1 update")
+
+		-- Outer must still respond to its own dep
+		a(1)
+		assert(outerRuns == 2, "outer should have re-run after a update")
+	end)
+
+	test("outer responds after inner re-runs multiple times", function()
+		local a = atom(0)
+		local b = atom(0)
+		local outerRuns = 0
+		local innerRuns = 0
+
+		effect(function()
+			a()
+			outerRuns += 1
+			effect(function()
+				b()
+				innerRuns += 1
+			end)
+		end)
+		assert(outerRuns == 1, "outer should have run once initially")
+		assert(innerRuns == 1, "inner should have run once initially")
+
+		b(1)
+		b(2)
+		b(3)
+		assert(outerRuns == 1, "outer should not have re-run after b updates")
+		assert(innerRuns >= 2, "inner should have re-run after b updates")
+
+		a(1)
+		assert(outerRuns == 2, "outer should have re-run after a update")
+	end)
 end)
 
 return {}

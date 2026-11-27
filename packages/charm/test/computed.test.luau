@@ -153,4 +153,30 @@ test("should handle inner effect clearing outer computed's deps on rerun", funct
 	setSrc(true)
 end)
 
+test("consecutive inner resets through computed chain", function()
+	local s = atom(0)
+	local c = computed(function()
+		return s()
+	end)
+	local calls = {}
+
+	effect(function()
+		table.insert(calls, c())
+		if c() > 0 then
+			s(0)
+		end
+	end)
+
+	assert(table.concat(calls) == "0", "bad initial runs")
+	s(1)
+	assert(s() == 0, "bad s value")
+	assert(table.concat(calls) == "010", `bad runs after s(1), got {table.concat(calls)}`)
+	s(2)
+	assert(s() == 0, "bad s value")
+	assert(table.concat(calls) == "01020", `bad runs after s(2), got {table.concat(calls)}`)
+	s(3)
+	assert(s() == 0, "bad s value")
+	assert(table.concat(calls) == "0102030", `bad runs after s(3), got {table.concat(calls)}`)
+end)
+
 return {}
