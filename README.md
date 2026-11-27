@@ -286,6 +286,8 @@ setCounter(5)
 print(getMax()) -- 10
 ```
 
+Note that running side effects inside the `getter` function of `computed()` has undefined behavior and should be avoided.
+
 ---
 
 ### `effectScope(callback)`
@@ -570,6 +572,9 @@ trigger(array)
 print(length()) -- 1
 ```
 
+> [!WARNING]
+> `trigger()` does not cause `subscribe()` or `listen()` to re-run. These functions only call your listener when they receive a new value.
+
 You can also trigger multiple signals at once:
 
 ```luau
@@ -679,7 +684,7 @@ store.timerAtom(30)
 
 > [!WARNING]
 > On the server, make sure each key corresponds to the same signal across all players. In other words, if you're syncing a signal that is unique to a player, ensure that the key is also unique to that player.
-> 
+>
 > If two players subscribe to the same key, but were assigned different signals for that key, Charm will output a warning.
 
 #### Client setup
@@ -768,7 +773,7 @@ end)
 
 > [!NOTE]
 > On the server, make sure each key corresponds to the same signal across all players. In other words, if you're syncing a signal that is unique to a player, ensure that the key is also unique to that player.
-> 
+>
 > If two players subscribe to the same key, but were assigned different signals for that key, Charm will output a warning.
 
 ---
