@@ -1284,4 +1284,41 @@ test.describe("parent-child link integrity", function()
 	end)
 end)
 
+test("disposing nested effects should not affect parent effects deps", function()
+	local a, setA = Charm.signal(0)
+	local runs = 0
+	local disposeChild: () -> ()
+
+	Charm.effect(function()
+		disposeChild = Charm.effect(function() end)
+		a()
+		runs += 1
+	end)
+
+	setA(1)
+	assert(runs == 2, "parent effect should have run twice after first update")
+
+	disposeChild()
+	setA(2)
+	assert(runs == 3, "parent effect should keep reacting to a")
+end)
+
+test("disposing effect should not effect sibling effects deps", function()
+	local b, setB = Charm.signal(0)
+	local bRuns = 0
+	local stopA: () -> ()
+
+	Charm.effectScope(function()
+		stopA = Charm.effect(function() end)
+		Charm.effect(function()
+			b()
+			bRuns += 1
+		end)
+	end)
+
+	stopA()
+	setB(1)
+	assert(bRuns == 2, "sibling effect should have re-run after b update")
+end)
+
 return {}
