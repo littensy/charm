@@ -286,8 +286,8 @@ local function unlinkChildEffects(sub: Subscriber)
 end
 
 local function runCleanups(cleanups: { () -> () })
-	local failed = false
-	local errors: { string } = {}
+	local errors: { unknown } = {}
+	local errorCount = 0
 
 	for index, cleanup in cleanups do
 		cleanups[index] = nil
@@ -297,12 +297,19 @@ local function runCleanups(cleanups: { () -> () })
 		activeSub = prevSub
 
 		if not success then
-			failed = true
-			table.insert(errors, tostring(err))
+			errorCount += 1
+			errors[errorCount] = err
 		end
 	end
 
-	if failed then
+	-- Preserve the original error value when possible, otherwise create a
+	-- combined error message if multiple errors occurred
+	if errorCount == 1 then
+		error(errors[1], 0)
+	elseif errorCount > 1 then
+		for index = 1, errorCount do
+			errors[index] = tostring(errors[index])
+		end
 		error(`Errors occurred during effect cleanup:\n\n{table.concat(errors, "\n\n")}`, 0)
 	end
 end
@@ -498,7 +505,7 @@ local function flush()
 		for index = 1, errorCount do
 			errors[index] = tostring(errors[index])
 		end
-		error(`An error occurred during effect execution:\n\n{table.concat(errors, "\n\n")}`, 0)
+		error(`Errors occurred during effect execution:\n\n{table.concat(errors, "\n\n")}`, 0)
 	end
 end
 
