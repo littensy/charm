@@ -1,72 +1,60 @@
---[[
-	Reactive system adapted from alien-signals at
-	https://github.com/stackblitz/alien-signals/blob/master/src/system.ts
-]]
+local CLEAN: "CLEAN" = 0 :: any -- Default state, no changes detected
+local DIRTY: "DIRTY" = 1 :: any -- Value is outdated and needs recomputation
+local PENDING: "PENDING" = 2 :: any -- Might be dirty, pending verification
+local DISPOSED: "DISPOSED" = 3 :: any -- Should be cleaned up and ignored
 
-local system = require("@self/system")
+local SIGNAL: "SIGNAL" = 0 :: any
+local COMPUTED: "COMPUTED" = 1 :: any
+local EFFECT: "EFFECT" = 2 :: any
+local EFFECT_SCOPE: "EFFECT_SCOPE" = 3 :: any
 
-export type Link = system.Link
-export type ReactiveFlags = system.ReactiveFlags
-export type ReactiveNode = system.ReactiveNode
-
-local link = system.link
-local unlink = system.unlink
-local propagate = system.propagate
-local checkDirty = system.checkDirty
-local shallowPropagate = system.shallowPropagate
-local createReactiveSystem = system.createReactiveSystem
-
-export type Getter<T> = () -> T
-export type Setter<T> = (update: Update<T>) -> T
-export type Atom<T = any> = (...Update<T>) -> T
-export type Update<T> = ((current: T) -> T) | T
-export type Equals<T> = (current: T, incoming: T) -> boolean
-export type Cleanup = () -> ()
-
-type EffectScopeNode = ReactiveNode & {
-	cleanups: { Cleanup },
-}
-
-type EffectNode = ReactiveNode & {
-	fn: () -> ...Cleanup?,
-	cleanups: { Cleanup },
-}
-
-type ComputedNode<T = any> = ReactiveNode & {
-	value: T?,
-	getter: (previousValue: T?) -> T,
-}
-
-type SignalNode<T = any> = ReactiveNode & {
+export type SignalNode<T = any> = BaseDependency & {
+	read type: typeof(SIGNAL),
+	status: typeof(CLEAN) | typeof(DIRTY),
 	currentValue: T,
 	pendingValue: T,
 }
 
--- Bitmask flags for tracking the state of reactive nodes. Flags are combined
--- and checked using bitwise operations for efficiency.
-local NONE = 0b000000 -- Default state
-local MUTABLE = 0b000001 -- Can be written to (signal or computed)
-local WATCHING = 0b000010 -- Notified for changes in dependencies (effects)
-local RECURSED_CHECK = 0b000100 -- Being checked for circular dependencies
-local RECURSED = 0b001000 -- Has been visited in a recursion check
-local DIRTY = 0b010000 -- Value is outdated and needs recomputation
-local PENDING = 0b100000 -- Might be dirty, pending verification
+export type ComputedNode<T = any> = BaseSubscriber & BaseDependency & {
+	read type: typeof(COMPUTED),
+	status: typeof(CLEAN) | typeof(DIRTY) | typeof(PENDING),
+	read getter: (T?) -> T,
+	value: T?,
+}
 
--- Global version counter for dependency link deduplication. Incremented at the
--- start of each effect/computed run to ensure links created in the same cycle
--- are deduplicated.
-local cycle = 0
--- Effects runs are queued to prevent redundant executions when multiple
--- signals update in the same batch.
-local queued: { EffectNode } = {}
-local queuedLength = 0
-local notifyIndex = 0
--- Batch operations group multiple updates together, deferring effect runs
--- until the batch completes. Effects only run when the outermost batch ends.
-local batchDepth = 0
--- Tracks the currently active effect or computed signal during execution.
--- Dependencies accessed during this time will link to the active subscriber.
-local activeSub: ReactiveNode?
+export type EffectNode = BaseSubscriber & BaseDependency & {
+	read type: typeof(EFFECT),
+	status: typeof(CLEAN) | typeof(DIRTY) | typeof(PENDING) | typeof(DISPOSED),
+	read callback: () -> ...(() -> ())?,
+	read cleanups: { () -> () },
+	queued: boolean,
+	hasChildEffect: boolean?,
+}
+
+export type EffectScopeNode = BaseSubscriber & BaseDependency & {
+	read type: typeof(EFFECT_SCOPE),
+	status: typeof(CLEAN) | typeof(DIRTY) | typeof(PENDING) | typeof(DISPOSED),
+	read cleanups: { () -> () },
+}
+
+type BaseSubscriber = {
+	read deps: { Dependency },
+	staleDepCursor: number,
+}
+
+type BaseDependency = {
+	read subs: { Subscriber },
+}
+
+export type Subscriber = ComputedNode | EffectNode | EffectScopeNode
+export type Dependency = SignalNode | ComputedNode | EffectNode | EffectScopeNode
+export type ReactiveNode = SignalNode | ComputedNode | EffectNode | EffectScopeNode
+
+export type Getter<T> = () -> T
+export type Setter<T> = (update: Update<T>) -> T
+export type Update<T> = ((current: T) -> T) | T
+export type Atom<T = any> = (...Update<T>) -> T
+export type Equals<T> = (current: T, incoming: T) -> boolean
 
 local function isStudio(): boolean
 	return game ~= nil and game:GetService("RunService"):IsStudio()
@@ -92,33 +80,35 @@ local flags = {
 	trackInnerEffects = true,
 }
 
---[[
-	Wraps a user-created function to prevent yielding when in strict mode. To
-	shorten error stack traces, only functions created outside of this module
-	are wrapped.
-]]
-local function wrapUserSpace<Args..., Results...>(callback: (Args...) -> Results...): (Args...) -> Results...
-	if not flags.strict then
-		return callback
-	end
+local queue: { EffectNode } = {}
+local queueLength = 0
+local notifyIndex = 0
+local batchDepth = 0
+local activeSub: Subscriber?
 
-	-- If the sources match, the function was created in this module
-	if debug.info(1, "s") == debug.info(callback, "s") then
+-- Hoisted so unwatched() and unlink() can depend on each other
+local unwatched: (sub: Subscriber) -> ()
+
+-- Wraps a user-created function to prevent yielding when in strict mode.
+local function wrapUserSpace<Args..., Results...>(callback: (Args...) -> Results...): (Args...) -> Results...
+	-- If the debug sources match, the function was created in this module, and
+	-- can be expected to not yield. Also simplifies internal stack traces.
+	if not flags.strict or debug.info(1, "s") == debug.info(callback, "s") then
 		return callback
 	end
 
 	local handler = function(thread: thread, ok: boolean, ...: Results...): Results...
-		if not ok then
+		if coroutine.status(thread) == "suspended" then
+			error(debug.traceback(thread, "Attempted to yield in an effect or scope"), 0)
+		elseif ok then
+			return ...
+		else
 			local err = (...)
 			if type(err) == "string" then
 				error(debug.traceback(thread, err), 0)
 			else
 				error(tostring(err), 0)
 			end
-		elseif coroutine.status(thread) ~= "dead" then
-			error(debug.traceback(thread, "Attempted to yield in an effect or scope"), 0)
-		else
-			return ...
 		end
 	end
 
@@ -128,10 +118,8 @@ local function wrapUserSpace<Args..., Results...>(callback: (Args...) -> Results
 	end
 end
 
---[[
-	Recursively freezes a table and all nested tables to enforce immutability.
-	Tables with metatables are skipped, as they are assumed to be mutable.
-]]
+-- Recursively freezes a table and all nested tables to enforce immutability.
+-- Tables with metatables are skipped, as they are assumed to be mutable.
 local function deepFreeze(value: any)
 	if type(value) == "table" and not table.isfrozen(value) and getmetatable(value) == nil then
 		table.freeze(value)
@@ -141,43 +129,164 @@ local function deepFreeze(value: any)
 	end
 end
 
---[[
-	Returns the currently active subscriber (effect or computed node).
-]]
-local function getActiveSub(): ReactiveNode?
+local function getActiveSub(): Subscriber?
 	return activeSub
 end
 
---[[
-	Sets the currently active subscriber (effect or computed node) and returns
-	the previous subscriber.
-]]
-local function setActiveSub(sub: ReactiveNode?)
+local function setActiveSub(sub: Subscriber?): Subscriber?
 	local prevSub = activeSub
 	activeSub = sub
 	return prevSub
 end
 
---[[
-	Removes dependencies from the subscriber's dependency list. When called
-	after tracking is complete, this ensures that only currently tracked
-	dependencies remain linked.
-]]
-local function purgeDeps(sub: ReactiveNode)
-	local depsTail = sub.depsTail
-	local dep = if depsTail then depsTail.nextDep else sub.deps
-	while dep do
-		dep = unlink(dep, sub)
+local function queueEffect(effect: EffectNode)
+	if effect.queued then
+		return
+	end
+
+	local startIndex = queueLength + 1
+	local nextEffect = effect
+
+	repeat
+		nextEffect.queued = true
+		queueLength += 1
+		queue[queueLength] = nextEffect
+
+		-- Traverse up the parent chain to queue any parent effects as well
+		nextEffect = nextEffect.subs[1]
+	until not nextEffect or nextEffect.type ~= EFFECT or nextEffect.queued
+
+	local endIndex = queueLength
+
+	-- Reverse the order of the newly queued effects to ensure parent effects
+	-- are checked before child effects
+	while startIndex < endIndex do
+		queue[startIndex], queue[endIndex] = queue[endIndex], queue[startIndex]
+		startIndex += 1
+		endIndex -= 1
 	end
 end
 
---[[
-	Runs all cleanup functions registered with the effect node. Any errors
-	thrown during cleanup are caught and logged in a single error after all
-	cleanups are complete.
-]]
-local function runCleanups(cleanups: { Cleanup })
-	local hasErrors = false
+-- Marks immediate subscribers as dirty and queues effects. Used when a node
+-- has a valid update to propagate, so pending subscribers should be marked as
+-- dirty, or having an updated dependency.
+local function shallowPropagateDirty(dep: Dependency)
+	for _, sub in dep.subs do
+		if sub.status == PENDING then
+			sub.status = DIRTY
+			if sub.type == EFFECT then
+				queueEffect(sub)
+			end
+		end
+	end
+end
+
+-- Marks all subscribers as pending and queues effects. Used when a root node
+-- initiates an update that notifies multiple levels of subscribers that they
+-- might have become dirty.
+--
+-- While effects immediately check for updates on the next flush, computed
+-- nodes update lazily, so they are instead recursively marked as pending.
+local function propagatePending(dep: Dependency)
+	for _, sub in dep.subs do
+		if sub.status == CLEAN then
+			sub.status = PENDING
+			if sub.type == COMPUTED or sub.type == EFFECT_SCOPE then
+				propagatePending(sub)
+			elseif sub.type == EFFECT then
+				queueEffect(sub)
+			end
+		end
+	end
+end
+
+-- Links a dependency to a subscriber, so that the subscriber will be notified
+-- when the dependency updates. If the subscriber has stale dependencies from a
+-- previous run, it will attempt to reuse the existing dependency.
+local function link(dep: Dependency, sub: Subscriber)
+	local staleDepCursor = sub.staleDepCursor
+	local subDeps = sub.deps
+
+	-- If the next stale dependency is the same as the new dependency, we can
+	-- skip linking and mark it as used.
+	if subDeps[staleDepCursor] == dep then
+		sub.staleDepCursor = staleDepCursor + 1
+	else
+		table.insert(subDeps, dep)
+		table.insert(dep.subs, sub)
+	end
+end
+
+-- Unlinks a dependency from a subscriber. If the dependency has no more
+-- subscribers after unlinking, it will be unwatched to release its resources.
+local function unlink(dep: Dependency, sub: Subscriber, subDepIndex: number?)
+	local subDeps = sub.deps
+	local depSubs = dep.subs
+
+	table.remove(subDeps, subDepIndex or table.find(subDeps, dep) or 0)
+	table.remove(depSubs, table.find(depSubs, sub) or 0)
+
+	if not depSubs[1] then
+		unwatched(dep)
+	end
+end
+
+-- Removes any stale dependencies that were not reused during the current run.
+-- A dependency is stale if the link function did not mark it as used by
+-- excluding it from the stale dependency range.
+local function purgeStaleDeps(sub: Subscriber, lastStaleDep: number)
+	local staleDepCursor = sub.staleDepCursor
+
+	if staleDepCursor > lastStaleDep then
+		return
+	end
+
+	local deps = sub.deps
+	local staleDepCount = lastStaleDep - staleDepCursor + 1
+
+	-- Purge stale dependencies in reverse order to optimize table removals
+	for depIndex = lastStaleDep, staleDepCursor, -1 do
+		local dep = deps[depIndex]
+		if dep then
+			local depSubs = dep.subs
+			table.remove(depSubs, table.find(depSubs, sub) or 0)
+			if not depSubs[1] then
+				unwatched(dep)
+			end
+		end
+	end
+
+	-- Optimize table removal by shifting the remaining dependencies in a
+	-- batch, instead of removing each dependency one by one
+	table.move(deps, lastStaleDep + 1, #deps + staleDepCount, staleDepCursor)
+end
+
+local function purgeDeps(sub: Subscriber)
+	local deps = sub.deps
+	local dep = deps[1]
+	while dep do
+		unlink(dep, sub, 1)
+		dep = deps[1]
+	end
+	sub.staleDepCursor = 1
+end
+
+local function unlinkChildEffects(sub: Subscriber)
+	local deps = sub.deps
+	local dep = deps[1]
+	local index = 1
+	repeat
+		if dep.type == EFFECT or dep.type == EFFECT_SCOPE then
+			unlink(dep, sub, index)
+		else
+			index += 1
+		end
+		dep = deps[index]
+	until not dep
+end
+
+local function runCleanups(cleanups: { () -> () })
+	local failed = false
 	local errors: { string } = {}
 
 	for index, cleanup in cleanups do
@@ -188,129 +297,59 @@ local function runCleanups(cleanups: { Cleanup })
 		activeSub = prevSub
 
 		if not success then
-			hasErrors = true
+			failed = true
 			table.insert(errors, tostring(err))
 		end
 	end
 
-	if hasErrors then
+	if failed then
 		error(`Errors occurred during effect cleanup:\n\n{table.concat(errors, "\n\n")}`, 0)
 	end
 end
 
---[[
-	Checks if the effect node needs to run based on its flags and dependencies.
-	Effects run if they are marked dirty or pending with dirty dependencies.
-]]
-local function run(effect: EffectNode)
-	local effectFlags = effect.flags
+local function stopEffect(effect: EffectNode | EffectScopeNode)
+	effect.status = DISPOSED
 
-	if
-		bit32.btest(effectFlags, DIRTY)
-		or (bit32.btest(effectFlags, PENDING) and checkDirty(effect.deps :: Link, effect))
-	then
-		runCleanups(effect.cleanups)
+	if effect.type == EFFECT then
+		effect.queued = false
+	end
 
-		-- Cancel the run if the effect was disposed during cleanup
-		if effect.flags == NONE then
-			return
-		end
+	-- Unlink from dependencies and child effects
+	purgeDeps(effect)
 
-		cycle += 1
-		effect.depsTail = nil
-		effect.flags = WATCHING
+	-- Unlink from the parent node
+	if effect.subs[1] then
+		unlink(effect, effect.subs[1])
+	end
 
-		local prevSub = setActiveSub(effect)
-		local success, result = pcall(effect.fn)
-		activeSub = prevSub
+	runCleanups(effect.cleanups)
+end
 
-		purgeDeps(effect)
-
-		if success and result then
-			table.insert(effect.cleanups, wrapUserSpace(result))
-		elseif not success then
-			error(result, 0)
-		end
-
-		-- If the effect was disposed during execution but before a cleanup was
-		-- was registered, run the cleanups that would have been missed
-		if effect.flags == NONE then
-			runCleanups(effect.cleanups)
-		end
-	else
-		effect.flags = WATCHING
+function unwatched(node: Dependency)
+	if node.type == EFFECT or node.type == EFFECT_SCOPE then
+		-- If an effect loses its only subscriber, its parent effect re-ran or
+		-- got disposed, so this child effect should be disposed as well
+		stopEffect(node)
+	elseif node.type == COMPUTED then
+		-- Clearing a computed node's dependencies when it loses all of its
+		-- subscribers allows it to be garbage collected
+		node.status = DIRTY
+		purgeDeps(node)
 	end
 end
 
---[[
-	Processes the queued effect runs. Effects are run in the order they were
-	queued, ensuring that all updates are processed.
-]]
-local function flush()
-	-- Bail out early if a flush is already in progress to allow effects to
-	-- complete before the next effect runs
-	if batchDepth ~= 0 or notifyIndex ~= 0 then
-		return
-	end
-
-	local success, err = pcall(function()
-		while notifyIndex < queuedLength do
-			notifyIndex += 1
-			local effect = queued[notifyIndex] :: EffectNode
-			queued[notifyIndex] = nil
-			run(effect)
-		end
-	end)
-
-	-- Skip over any remaining queued effects that were not run due to an error
-	while notifyIndex < queuedLength do
-		notifyIndex += 1
-		local effect = queued[notifyIndex] :: EffectNode
-		queued[notifyIndex] = nil
-		effect.flags = bit32.bor(effect.flags, bit32.bor(WATCHING, RECURSED))
-	end
-
-	notifyIndex = 0
-	queuedLength = 0
-
-	if not success then
-		error(err, 0)
-	end
-end
-
---[[
-	Starts a batch operation, incrementing the batch depth counter. Effects
-	will not run until the outermost batch ends.
-]]
-local function startBatch()
-	batchDepth += 1
-end
-
---[[
-	Ends a batch operation, decrementing the batch depth counter. If this is
-	the outermost batch, queued effects are flushed and run.
-]]
-local function endBatch()
-	batchDepth -= 1
-	flush()
-end
-
---[[
-	Updates a computed signal by re-evaluating its getter function. Returns
-	whether the computed value changed.
-]]
 local function updateComputed(computed: ComputedNode): boolean
-	cycle += 1
-	computed.depsTail = nil
-	computed.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
+	local lastStaleDep = #computed.deps
+	local oldValue = computed.value
+
+	computed.status = CLEAN
+	computed.staleDepCursor = 1
 
 	local prevSub = setActiveSub(computed)
-	local oldValue = computed.value
 	local success, newValue = pcall(computed.getter, oldValue)
 	activeSub = prevSub
 
-	computed.flags = bit32.band(computed.flags, bit32.bnot(RECURSED_CHECK))
-	purgeDeps(computed)
+	purgeStaleDeps(computed, lastStaleDep)
 
 	if success then
 		computed.value = newValue
@@ -320,13 +359,9 @@ local function updateComputed(computed: ComputedNode): boolean
 	end
 end
 
---[[
-	Updates a signal by applying its pending value. Returns whether the
-	signal's value changed.
-]]
 local function updateSignal(signal: SignalNode): boolean
-	signal.flags = MUTABLE
 	local pendingValue = signal.pendingValue
+	signal.status = CLEAN
 	if signal.currentValue ~= pendingValue then
 		signal.currentValue = pendingValue
 		return true
@@ -335,88 +370,134 @@ local function updateSignal(signal: SignalNode): boolean
 	end
 end
 
---[[
-	Clears all dependencies and subscribers from the effect node. After calling
-	this, the node will no longer be subscribed to any dependencies and will be
-	inactive, with all cleanup functions run and resources released.
-]]
-local function stopEffect(effect: EffectScopeNode)
-	effect.depsTail = nil
-	effect.flags = NONE
-
-	purgeDeps(effect)
-
-	-- Unlink from the parent effect, if it exists
-	local sub = effect.subs
-	if sub then
-		unlink(sub, effect)
-	end
-
-	runCleanups(effect.cleanups)
-end
-
---[[
-	Updates a signal or computed value and returns whether the value changed.
-]]
-local function update(node: ReactiveNode): boolean
-	if node.depsTail then
-		return updateComputed(node :: ComputedNode)
+local function updateNode(node: SignalNode | ComputedNode | EffectScopeNode): boolean
+	if node.type == COMPUTED then
+		return updateComputed(node)
+	elseif node.type == SIGNAL then
+		return updateSignal(node)
 	else
-		return updateSignal(node :: SignalNode)
+		node.status = CLEAN
+		return true
 	end
 end
 
---[[
-	Queues an effect for execution, ensuring inner effects are notified in the
-	correct order.
-]]
-local function notify(effect: ReactiveNode)
-	local startIndex = queuedLength + 1
-
-	-- Collect inner effects in a chain
-	repeat
-		queuedLength += 1
-		queued[queuedLength] = effect :: EffectNode
-
-		-- Mark as not watching to prevent duplicates in the same flush
-		effect.flags = bit32.band(effect.flags, bit32.bnot(WATCHING))
-
-		-- Traverse to the parent effect, if it exists and is not queued, to
-		-- ensure it gets notified before the child effect
-		effect = (effect.subs and effect.subs.sub) :: EffectNode
-
-		if not effect or bit32.band(effect.flags, WATCHING) == 0 then
-			break
+-- Returns whether a pending node is actually dirty by checking its
+-- dependencies for updates. Used to avoid unnecessary updates when a node has
+-- been notified of a change that might not require an update.
+local function checkDirty(sub: Subscriber): boolean
+	for _, dep in sub.deps do
+		if sub.status == DIRTY then
+			-- The original node may have been indirectly marked dirty while
+			-- checking a dependency, so this is checked every iteration
+			return true
+		elseif dep.type == COMPUTED or dep.type == SIGNAL or dep.type == EFFECT_SCOPE then
+			if dep.status == DIRTY then
+				if updateNode(dep) then
+					shallowPropagateDirty(dep)
+					return true
+				end
+			elseif dep.status == PENDING then
+				if checkDirty(dep) then
+					if updateNode(dep) then
+						shallowPropagateDirty(dep)
+						return true
+					end
+				else
+					dep.status = CLEAN
+				end
+			end
 		end
-	until false
+	end
+	return false
+end
 
-	local endIndex = queuedLength
+local function run(effect: EffectNode)
+	if effect.status == DIRTY or (effect.status == PENDING and checkDirty(effect)) then
+		if effect.hasChildEffect then
+			unlinkChildEffects(effect)
+		end
 
-	-- Reverse the collected effects since they were collected from child to
-	-- parent, but should be notified from parent to child
-	while startIndex < endIndex do
-		queued[startIndex], queued[endIndex] = queued[endIndex], queued[startIndex]
-		startIndex += 1
-		endIndex -= 1
+		runCleanups(effect.cleanups)
+
+		-- Cancel the run if the effect was stopped during cleanup
+		if effect.status == DISPOSED then
+			return
+		end
+
+		local lastStaleDep = #effect.deps
+
+		effect.status = CLEAN
+		effect.queued = false
+		effect.staleDepCursor = 1
+
+		local prevSub = setActiveSub(effect)
+		local success, cleanup = pcall(effect.callback)
+		activeSub = prevSub
+
+		purgeStaleDeps(effect, lastStaleDep)
+
+		if success and type(cleanup) == "function" then
+			table.insert(effect.cleanups, wrapUserSpace(cleanup))
+		elseif not success then
+			effect.status = CLEAN
+			effect.queued = false
+			error(cleanup, 0)
+		end
+
+		-- If the effect was disposed during its execution, run any cleanups
+		-- that might have been missed
+		if effect.status == DISPOSED then
+			stopEffect(effect)
+		end
+	elseif effect.status ~= DISPOSED then
+		effect.status = CLEAN
+		effect.queued = false
 	end
 end
 
---[[
-	Called when a node is not being watched by any subscribers. Cleans up the
-	node's dependencies and performs the necessary cleanup operations:
-
-	- Computed signals: Unlink dependencies and mark as dirty for potential
-	future updates
-	- Effects/scopes: Perform full cleanup to free resources
-]]
-local function unwatched(node: ReactiveNode)
-	if bit32.band(node.flags, MUTABLE) == 0 then
-		stopEffect(node :: EffectScopeNode)
-	elseif node.depsTail then
-		node.depsTail = nil
-		node.flags = bit32.bor(MUTABLE, DIRTY)
-		purgeDeps(node)
+local function flush()
+	-- Bail out early if a flush is already in progress to allow effects to
+	-- complete before the next effect runs
+	if batchDepth ~= 0 or notifyIndex ~= 0 or queueLength == 0 then
+		return
 	end
+
+	local errors: { string } = {}
+	local failed = false
+
+	-- Run all queued effects, catching errors to ensure all effects have a
+	-- chance to run and clean up before the error is thrown
+	while notifyIndex < queueLength do
+		local success, err = pcall(function()
+			repeat
+				notifyIndex += 1
+				local effect = queue[notifyIndex]
+				queue[notifyIndex] = nil
+				run(effect)
+			until notifyIndex >= queueLength
+		end)
+
+		if not success then
+			failed = true
+			table.insert(errors, tostring(err))
+		end
+	end
+
+	notifyIndex = 0
+	queueLength = 0
+
+	if failed then
+		error(`An error occurred during effect execution:\n\n{table.concat(errors, "\n\n")}`, 0)
+	end
+end
+
+local function startBatch()
+	batchDepth += 1
+end
+
+local function endBatch()
+	batchDepth -= 1
+	flush()
 end
 
 --[[
@@ -429,51 +510,33 @@ end
 	@return Setter function to update the signal value
 	@see https://github.com/littensy/charm?tab=readme-ov-file#signalinitialValue-equals
 ]]
-local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Setter<T>)
-	local node: SignalNode = {
+local function signal<T>(initialValue: T, equals: Equals<T>?): (() -> T, (((T) -> T) | T) -> T)
+	local node: SignalNode<T> = {
+		type = SIGNAL,
+		status = CLEAN,
+		subs = {},
 		currentValue = initialValue,
 		pendingValue = initialValue,
-		flags = MUTABLE,
 	}
 
 	if flags.frozen then
 		deepFreeze(initialValue)
 	end
 
-	local function signalGetter(): T
-		-- Check if the signal has a pending update that needs to be applied
-		if bit32.btest(node.flags, DIRTY) then
-			if updateSignal(node) then
-				local subs = node.subs
-				if subs then
-					shallowPropagate(subs)
-				end
-			end
+	local get = function(...: Update<T>): T
+		if node.status == DIRTY and updateSignal(node) then
+			shallowPropagateDirty(node)
 		end
-
-		-- Register this signal as a dependency of the first subscriber in the
-		-- chain that is a computed signal or an effect
-		local sub = activeSub
-		while sub do
-			if bit32.btest(sub.flags, bit32.bor(MUTABLE, WATCHING)) then
-				link(node, sub, cycle)
-				break
-			end
-			local subs = sub.subs
-			sub = if subs then subs.sub else nil
+		if activeSub then
+			link(node, activeSub)
 		end
-
-		return node.currentValue
+		return node.pendingValue
 	end
 
-	local function signalSetter(update: Update<T>): T
-		local value: T
-
-		-- Determine the new value based on whether the update is a function or
-		-- a direct value
-		if type(update) == "function" then
+	local set = function(value: ((T) -> T) | T): T
+		if type(value) == "function" then
 			local prevSub = setActiveSub(nil)
-			local success, result = pcall(wrapUserSpace(update), node.pendingValue)
+			local success, result = pcall(wrapUserSpace(value), node.pendingValue)
 			activeSub = prevSub
 
 			if success then
@@ -481,49 +544,24 @@ local function signal<T>(initialValue: T, equals: Equals<T>?): (Getter<T>, Sette
 			else
 				error(result, 2)
 			end
-		else
-			value = update
 		end
 
-		-- Check if the new value is different from the pending value
 		if if equals then not equals(node.pendingValue, value :: T) else node.pendingValue ~= value then
 			if flags.frozen then
 				deepFreeze(value)
 			end
 
-			node.pendingValue = value
-			node.flags = bit32.bor(MUTABLE, DIRTY)
+			node.pendingValue = value :: T
+			node.status = DIRTY
 
-			local subs = node.subs
-			if subs then
-				propagate(subs)
-				flush()
-			end
+			propagatePending(node)
+			flush()
 		end
 
 		return node.pendingValue
 	end
 
-	return signalGetter, signalSetter
-end
-
---[[
-	Creates a signal and returns a function that can act as both the getter and
-	setter. Calling the atom with one argument sets its value, while calling it
-	with no arguments returns its current value.
-
-	@param initialValue Initial value for the atom
-	@param equals Optional comparator function to check for value changes
-	@see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
-]]
-local function atom<T>(initialValue: T, equals: Equals<T>?): Atom<T>
-	local get, set = signal(initialValue, equals)
-
-	local function atomOper(...)
-		return if select("#", ...) == 0 then get() else set((...))
-	end
-
-	return atomOper
+	return get, set
 end
 
 --[[
@@ -535,44 +573,38 @@ end
 	@return A function that returns the cached value
 	@see https://github.com/littensy/charm?tab=readme-ov-file#computedgetter
 ]]
-local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
-	local node: ComputedNode = {
-		flags = NONE,
+local function computed<T>(getter: (previousValue: T?) -> T): () -> T
+	local node: ComputedNode<T> = {
+		type = COMPUTED,
+		status = CLEAN,
+		deps = {},
+		subs = {},
+		staleDepCursor = 1,
 		getter = wrapUserSpace(getter),
 	}
 
-	local function computedOper(): T
-		local nodeFlags = node.flags
+	local initialized = false
 
-		if bit32.btest(nodeFlags, DIRTY) then
+	return function(): T
+		if node.status == DIRTY then
 			if updateComputed(node) then
-				local subs = node.subs
-				if subs then
-					shallowPropagate(subs)
-				end
+				shallowPropagateDirty(node)
 			end
-		elseif bit32.btest(nodeFlags, PENDING) then
-			if checkDirty(node.deps :: Link, node) then
+		elseif node.status == PENDING then
+			if checkDirty(node) then
 				if updateComputed(node) then
-					local subs = node.subs
-					if subs then
-						shallowPropagate(subs)
-					end
+					shallowPropagateDirty(node)
 				end
 			else
-				node.flags = bit32.band(nodeFlags, bit32.bnot(PENDING))
+				node.status = CLEAN
 			end
-		elseif nodeFlags == NONE then
-			-- First access should initialize the computed value
-			node.flags = bit32.bor(MUTABLE, RECURSED_CHECK)
-
+		elseif not initialized then
 			local prevSub = setActiveSub(node)
-			local success, result = pcall(node.getter)
+			local success, result = pcall(node.getter, nil)
 			activeSub = prevSub
 
-			node.flags = bit32.band(node.flags, bit32.bnot(RECURSED_CHECK))
-
 			if success then
+				initialized = true
 				node.value = result
 			else
 				error(result, 2)
@@ -580,13 +612,11 @@ local function computed<T>(getter: (previousValue: T?) -> T): Getter<T>
 		end
 
 		if activeSub then
-			link(node, activeSub, cycle)
+			link(node, activeSub)
 		end
 
-		return node.value
+		return node.value :: T
 	end
-
-	return computedOper
 end
 
 --[[
@@ -604,18 +634,25 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectcallback
 ]]
-local function effect(fn: () -> ...Cleanup?): Cleanup
+local function effect(callback: () -> ...(() -> ())?): () -> ()
 	local node: EffectNode = {
-		fn = wrapUserSpace(fn),
-		flags = WATCHING,
+		type = EFFECT,
+		status = CLEAN,
+		deps = {},
+		subs = {},
+		staleDepCursor = 1,
+		callback = wrapUserSpace(callback),
+		queued = false,
 		cleanups = {},
 	}
 
-	-- Inner effects are tracked as a dependency of the parent effect, so that
-	-- they can be automatically cleaned up when the parent effect re-runs, and
-	-- to ensure the correct execution order when nested effects are notified
-	if activeSub and (flags.trackInnerEffects or activeSub.flags == NONE) then
-		link(node, activeSub, 0)
+	-- Clean up the effect when the parent subscriber updates or gets disposed
+	-- by linking it as a dependency.
+	if activeSub and (flags.trackInnerEffects or activeSub.type ~= EFFECT) then
+		if activeSub.type == EFFECT then
+			activeSub.hasChildEffect = true
+		end
+		link(node, activeSub)
 	end
 
 	-- Start a batch so that the effect can register a cleanup function before
@@ -623,10 +660,10 @@ local function effect(fn: () -> ...Cleanup?): Cleanup
 	startBatch()
 
 	local prevSub = setActiveSub(node)
-	local success, result = pcall(node.fn)
+	local success, result = pcall(node.callback)
 	activeSub = prevSub
 
-	if success and result then
+	if success and type(result) == "function" then
 		table.insert(node.cleanups, wrapUserSpace(result))
 	elseif not success then
 		endBatch()
@@ -649,22 +686,30 @@ end
 	@return A cleanup function that stops all effects in the scope
 	@see https://github.com/littensy/charm?tab=readme-ov-file#effectscopecallback-detached
 ]]
-local function effectScope(fn: () -> ...Cleanup?, detached: boolean?): Cleanup
+local function effectScope(callback: () -> ...(() -> ())?, detached: boolean?): () -> ()
 	local node: EffectScopeNode = {
-		flags = NONE,
+		type = EFFECT_SCOPE,
+		status = CLEAN,
+		deps = {},
+		subs = {},
+		staleDepCursor = 1,
 		cleanups = {},
 	}
 
-	-- Inner effect scopes are tracked as a dependency of the parent effect
+	-- Clean up the effect scope when the parent subscriber updates or gets
+	-- disposed by linking it as a dependency.
 	if activeSub and not detached then
-		link(node, activeSub, 0)
+		if activeSub.type == EFFECT then
+			activeSub.hasChildEffect = true
+		end
+		link(node, activeSub)
 	end
 
 	local prevSub = setActiveSub(node)
-	local success, result = pcall(wrapUserSpace(fn))
+	local success, result = pcall(wrapUserSpace(callback))
 	activeSub = prevSub
 
-	if success and result then
+	if success and type(result) == "function" then
 		table.insert(node.cleanups, wrapUserSpace(result))
 	elseif not success then
 		error(result, 2)
@@ -682,48 +727,34 @@ end
 	@param fn A signal or function that accesses signals
 	@see https://github.com/littensy/charm?tab=readme-ov-file#triggercallback
 ]]
-local function trigger(fn: () -> ...any)
-	local sub: ReactiveNode = {
-		flags = WATCHING,
+local function trigger(callback: () -> ...any)
+	local sub: EffectScopeNode = {
+		type = EFFECT_SCOPE,
+		status = DISPOSED,
+		deps = {},
+		subs = {},
+		staleDepCursor = 1,
+		cleanups = {},
 	}
 
-	local prevSub = setActiveSub(sub)
-	local success, err = pcall(wrapUserSpace(fn))
-	activeSub = prevSub
-	sub.flags = NONE
+	startBatch()
 
-	local currentLink = sub.deps
-	while currentLink do
-		local dep = currentLink.dep
-		local subs = dep.subs
-		currentLink = unlink(currentLink, sub)
-		if subs then
-			propagate(subs)
-			shallowPropagate(subs)
-		end
+	local prevSub = setActiveSub(sub)
+	local success, err = pcall(wrapUserSpace(callback))
+	activeSub = prevSub
+
+	local dep = sub.deps[1]
+	while dep do
+		unlink(dep, sub, 1)
+		propagatePending(dep)
+		shallowPropagateDirty(dep)
+		dep = sub.deps[1]
 	end
 
-	flush()
+	endBatch()
 
 	if not success then
 		error(err, 2)
-	end
-end
-
---[[
-	Binds the cleanup function to the current active effect or effect scope. If
-	there is no active effect, a warning is logged, unless `failSilently` is
-	set to `true`.
-
-	@param fn Function to run during cleanup
-	@param failSilently If true, silences the warning when called outside an effect or scope
-	@see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
-]]
-local function onCleanup(fn: Cleanup, failSilently: boolean?)
-	if activeSub and (activeSub :: EffectNode).cleanups then
-		table.insert((activeSub :: EffectNode).cleanups, wrapUserSpace(fn))
-	elseif not failSilently then
-		warn(debug.traceback("onCleanup() can only be called inside an effect or a scope.", 2))
 	end
 end
 
@@ -740,10 +771,10 @@ end
 	@return Values returned by the function
 	@see https://github.com/littensy/charm?tab=readme-ov-file#untrackedcallback
 ]]
-local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: Args...): Results...
+local function untracked<Args..., Results...>(callback: (Args...) -> Results..., ...: Args...): Results...
 	if activeSub then
 		local prevSub = setActiveSub(nil)
-		local results: { any } = { pcall(wrapUserSpace(fn), ...) }
+		local results: { any } = { pcall(wrapUserSpace(callback), ...) }
 		activeSub = prevSub
 
 		if not results[1] then
@@ -752,7 +783,7 @@ local function untracked<Args..., Results...>(fn: (Args...) -> Results..., ...: 
 
 		return unpack(results, 2)
 	else
-		return fn(...)
+		return callback(...)
 	end
 end
 
@@ -778,13 +809,37 @@ local function batch<Args..., Results...>(fn: (Args...) -> Results..., ...: Args
 end
 
 --[[
-	Returns true if the given function is a signal getter, computed signal, or
-	atom function. Used for determining whether a function should be wrapped in
-	a computed signal so that it can be memoized in `listen()` and `subscribe()`.
+	Binds the cleanup function to the current active effect or effect scope. If
+	there is no active effect, a warning is logged, unless `failSilently` is
+	set to `true`.
+
+	@param fn Function to run during cleanup
+	@param failSilently If true, silences the warning when called outside an effect or scope
+	@see https://github.com/littensy/charm?tab=readme-ov-file#oncleanupcallback-failsilently
 ]]
-local function isSignal(fn: Getter<any>): boolean
-	local name = debug.info(fn, "n")
-	return name == "signalGetter" or name == "computedOper" or name == "atomOper"
+local function onCleanup(callback: () -> ())
+	if activeSub and (activeSub.type == EFFECT or activeSub.type == EFFECT_SCOPE) then
+		table.insert(activeSub.cleanups, wrapUserSpace(callback))
+	end
+end
+
+--[[
+	Creates a signal and returns a function that can act as both the getter and
+	setter. Calling the atom with one argument sets its value, while calling it
+	with no arguments returns its current value.
+
+	@param initialValue Initial value for the atom
+	@param equals Optional comparator function to check for value changes
+	@see https://github.com/littensy/charm?tab=readme-ov-file#atominitialValue-equals
+]]
+local function atom<T>(initialValue: T, equals: Equals<T>?): Atom<T>
+	local get, set = signal(initialValue, equals)
+
+	local function atomOper(...)
+		return if select("#", ...) == 0 then get() else set((...))
+	end
+
+	return atomOper
 end
 
 --[[
@@ -797,8 +852,12 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#listengetter-callback
 ]]
-local function listen<T>(getter: Getter<T>, callback: (state: T, lastState: T?) -> ()): Cleanup
-	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
+local function listen<T>(getter: () -> T, callback: (state: T, lastState: T?) -> ()): () -> ()
+	getter = wrapUserSpace(getter)
+
+	local tracked = computed(function()
+		return getter()
+	end)
 	local current: T
 
 	return effect(function()
@@ -818,8 +877,12 @@ end
 	@return A cleanup function that stops the effect
 	@see https://github.com/littensy/charm?tab=readme-ov-file#subscribegetter-callback
 ]]
-local function subscribe<T>(getter: Getter<T>, callback: (state: T, lastState: T) -> ()): Cleanup
-	local tracked: Getter<T> = if isSignal(getter) then getter else computed(getter :: (T?) -> T)
+local function subscribe<T>(getter: () -> T, callback: (state: T, lastState: T) -> ()): () -> ()
+	getter = wrapUserSpace(getter)
+
+	local tracked = computed(function()
+		return getter()
+	end)
 	local current: T
 	local firstRun = true
 
@@ -848,11 +911,11 @@ end
 	@return A cleanup function that disposes scopes for all keys
 	@see https://github.com/littensy/charm?tab=readme-ov-file#observegetter-callback
 ]]
-local function observe<K, V>(getter: Getter<{ [K]: V }>, callback: (item: V, key: K) -> ...Cleanup?): Cleanup
+local function observe<K, V>(getter: () -> { [K]: V }, callback: (item: V, key: K) -> ...(() -> ())?): () -> ()
 	getter = wrapUserSpace(getter)
 	callback = wrapUserSpace(callback)
 
-	local scopes: { [K]: Cleanup } = {}
+	local scopes: { [K]: () -> () } = {}
 	local stopObserving = false
 
 	local function updateScopes(data: { [K]: V })
@@ -909,7 +972,7 @@ end
 	@param transform Function that maps each entry from the source to a new entry in the mapped table
 	@see https://github.com/littensy/charm?tab=readme-ov-file#mappedgetter-transform
 ]]
-local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, transform: (VI, KI) -> (VO, KO)): Getter<{ [KO]: VO }>
+local function mapped<KI, VI, KO, VO>(getter: () -> { [KI]: VI }, transform: (VI, KI) -> (VO, KO)): () -> { [KO]: VO }
 	getter = wrapUserSpace(getter)
 	transform = wrapUserSpace(transform)
 
@@ -972,10 +1035,7 @@ local function mapped<KI, VI, KO, VO>(getter: Getter<{ [KI]: VI }>, transform: (
 	end)
 end
 
-createReactiveSystem(update, notify, unwatched)
-
 return {
-	ReactiveFlags = system.ReactiveFlags,
 	flags = flags,
 	atom = atom,
 	signal = signal,
@@ -989,9 +1049,9 @@ return {
 	listen = listen,
 	observe = observe,
 	mapped = mapped :: (<KI, VI, KO, VO>(
-		getter: Getter<{ [KI]: VI }>,
+		getter: () -> { [KI]: VI },
 		transform: (VI, KI) -> (VO, KO)
-	) -> Getter<{ [KO]: VO }>) & (<K, VI, VO>(getter: Getter<{ [K]: VI }>, transform: (VI, K) -> VO) -> Getter<{ [K]: VO }>),
+	) -> () -> { [KO]: VO }) & (<K, VI, VO>(getter: () -> { [K]: VI }, transform: (VI, K) -> VO) -> () -> { [K]: VO }),
 	onCleanup = onCleanup,
 	getActiveSub = getActiveSub,
 	setActiveSub = setActiveSub,

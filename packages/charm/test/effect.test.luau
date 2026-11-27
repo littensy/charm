@@ -271,7 +271,7 @@ test("should handle flags are indirectly updated during checkDirty", function()
 	assert(triggers == 2, "did not update indirectly")
 end)
 
-test("should not execute skipped effects from previous failed flush when updating unrelated signal", function()
+test("should run all queued effects even if one fails", function()
 	local a, setA = signal(0)
 	local b, setB = signal(0)
 	local c, setC = signal(0)
@@ -304,12 +304,19 @@ test("should not execute skipped effects from previous failed flush when updatin
 	effect3Executed = false
 	local success, err = pcall(setA, 2)
 	assert(not success and string.find(tostring(err), "Error in effect 2"), `bad error: {err}`)
+	assert(effect3Executed, "effect 3 should not have executed after failed flush")
 
-	assert(not effect3Executed, "effect 3 should not have executed after failed flush")
+	effect3Executed = false
 	setB(1)
 	assert(not effect3Executed, "effect 3 should not have executed after updating unrelated signal b")
+
+	effect3Executed = false
 	setC(1)
-	assert(effect3Executed, "effect 3 should have executed after updating signal c")
+	assert(not effect3Executed, "effect 3 should not have executed after updating signal c")
+
+	effect3Executed = false
+	setA(3)
+	assert(effect3Executed, "effect 3 should have executed after updating signal a")
 end)
 
 test("should allow finite recursion", function()
@@ -545,7 +552,7 @@ test("should handle inner effect clearing outer effect's deps on rerun", functio
 	setSrc(true)
 end)
 
-test.skip("should handle inner effect cleanup disposing outer effect", function()
+test("should handle inner effect cleanup disposing outer effect", function()
 	local order: { number } = {}
 
 	local src, setSrc = signal(false)
@@ -573,7 +580,7 @@ test.skip("should handle inner effect cleanup disposing outer effect", function(
 	assert(#order == 0, "should not cleanup after dispose")
 end)
 
-test.skip("should old inner effect dispose before outer effect re-runs", function()
+test("should old inner effect dispose before outer effect re-runs", function()
 	local order: { string } = {}
 	local src, setSrc = signal(false)
 	effect(function()

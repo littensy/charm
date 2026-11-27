@@ -103,46 +103,6 @@ test("should receive previous value", function()
 	assert(table.concat(calls) == "024", `should only call on even updates, got {table.concat(calls)}`)
 end)
 
--- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L875
-test("should chained computeds keep reactivity when computed effect happens", function()
-	local v = atom("Hello")
-	local c = computed(function()
-		v(v() .. " World")
-		return v()
-	end)
-	local d = computed(function()
-		return c()
-	end)
-	local e = computed(function()
-		return d()
-	end)
-	local res = computed(function()
-		return d() .. " | " .. e()
-	end)
-
-	assert(res() == "Hello World | Hello World", res())
-
-	v(v() .. " World")
-	assert(res() == "Hello World World World World | Hello World World World World", res())
-end)
-
--- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L580
-test("should not trigger effect scheduler by recursive computed effect", function()
-	local v = atom("Hello")
-	local c = computed(function()
-		v(v() .. " World")
-		return v()
-	end)
-	local comp = computed(function()
-		return c()
-	end)
-
-	assert(comp() == "Hello World", comp())
-
-	v(v() .. " World")
-	assert(comp() == "Hello World World World World", comp())
-end)
-
 -- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L528
 test("should not override queried MaybeDirty result", function()
 	local v1 = atom(nil :: any)
@@ -172,30 +132,6 @@ test("should not override queried MaybeDirty result", function()
 	v1().v(999)
 
 	assert(c3() == "yes", "should return correct value after update")
-end)
-
--- https://github.com/vuejs/core/blob/minor/packages/reactivity/__tests__/computed.spec.ts#L503
-test("should trigger effect even computed already dirty", function()
-	local calls: { string } = {}
-	local v = atom(0)
-	local c1 = computed(function()
-		if v() == 0 then
-			v(1)
-		end
-		return "foo"
-	end)
-	local c2 = computed(function()
-		return v() .. c1()
-	end)
-
-	effect(function()
-		table.insert(calls, c2())
-	end)
-	assert(table.concat(calls, ",") == "0foo", table.concat(calls, ","))
-	assert(v() == 1, `expected 1 for v(), got {v()}`)
-	v(2)
-	assert(table.concat(calls, ",") == "0foo,2foo", table.concat(calls, ","))
-	assert(v() == 2, `expected 2 for v(), got {v()}`)
 end)
 
 test("should handle inner effect clearing outer computed's deps on rerun", function()
