@@ -5,7 +5,7 @@ Charm.flags.strict = true
 Charm.flags.frozen = true
 
 local describeInRoblox = test.describeIf(function()
-	return not not game
+	return game ~= nil
 end)
 
 test.describe("charm", function()

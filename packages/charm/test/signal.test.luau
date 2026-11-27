@@ -64,4 +64,27 @@ test("should setter return latest value", function()
 	assert(src() == 2, `src() expected 2, got {src()}`)
 end)
 
+test("equality function should respect value unset in batch", function()
+	local function sameId(x, y)
+		return x.id == y.id
+	end
+
+	local a, setA = Charm.signal({ id = 1 }, sameId)
+	local runs = 0
+
+	Charm.effect(function()
+		a()
+		runs += 1
+	end)
+
+	setA({ id = 1 })
+	assert(runs == 1, `runs expected 1, got {runs}`)
+
+	Charm.batch(function()
+		setA({ id = 2 })
+		setA({ id = 1 })
+	end)
+	assert(runs == 1, `should not have run if id did not change, got {runs}`)
+end)
+
 return {}

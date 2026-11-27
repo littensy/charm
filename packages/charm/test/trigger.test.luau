@@ -83,7 +83,7 @@ test("should not notify the trigger function sub", function()
 	end)
 end)
 
-test("should trigger updates for subscribe", function()
+test("subscribe should not trigger updates for unchanged value", function()
 	local src = signal({} :: { number })
 	local triggers = 0
 
@@ -92,10 +92,10 @@ test("should trigger updates for subscribe", function()
 	end)
 
 	trigger(src)
-	assert(triggers == 1, "subscribe callback should run after trigger")
+	assert(triggers == 0, "subscribe callback should not run after trigger")
 end)
 
-test("should trigger updates for listen", function()
+test("listen should not trigger updates for unchanged value", function()
 	local src = signal({} :: { number })
 	local triggers = 0
 
@@ -105,7 +105,7 @@ test("should trigger updates for listen", function()
 	assert(triggers == 1, "listen callback should run once initially")
 
 	trigger(src)
-	assert(triggers == 2, "listen callback should run after trigger")
+	assert(triggers == 1, "listen callback should not run after trigger")
 end)
 
 return {}

@@ -8,8 +8,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: CompeyDev/setup-rokit@v0.1.2
+      - uses: actions/checkout@v7
+      - uses: CompeyDev/setup-rokit@v0.2.1
 
       - name: Setup Lute
         run: lute setup --with-luaurc
